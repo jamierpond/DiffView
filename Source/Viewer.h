@@ -252,6 +252,7 @@ private:
     bool searchForward = true;
     Pane searchPane = Pane::diff;
     int searchOriginCursor = 0;
+    std::string searchOriginPath; // the tree's: its rows move under a refresh
     int searchOriginTop = 0;
     std::optional<SearchHit> liveHit;
     std::string lastSearch;

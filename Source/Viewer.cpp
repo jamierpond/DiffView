@@ -292,7 +292,6 @@ void Viewer::apply(std::vector<FileDiff> diffs, const std::string& sha)
     {
         rebuildRows();
         tracker.markSeen(selectedPath);
-        rebuildTree();
     }
 
     redraw();
@@ -384,7 +383,7 @@ const FileDiff* Viewer::changedFile(const std::string& path) const
 std::vector<std::string> Viewer::fileOrder() const
 {
     if (!flatBySize)
-        return fileOrder();
+        return treeOrder(paths());
 
     // Biggest change first; unchanged files (all-files mode) last.
     auto list = paths();
@@ -405,12 +404,15 @@ std::vector<std::string> Viewer::fileOrder() const
     return list;
 }
 
+// The cursor keeps its row by path: a refresh never moves it, so it can't
+// undo a keypress. Only select() puts it on the selected file.
 void Viewer::rebuildTree()
 {
+    auto before = std::move(treeRows);
+    treeRows.clear();
+
     if (flatBySize)
     {
-        treeRows.clear();
-
         for (const auto& path: fileOrder())
             treeRows.push_back({path, path, 0, false, true});
     }
@@ -427,12 +429,7 @@ void Viewer::rebuildTree()
     if (hasGeneral || (loaded && selectedPath.empty()))
         treeRows.insert(treeRows.begin(), TreeRow {"General", "", 0, false, true});
 
-    for (std::size_t i = 0; i < treeRows.size(); ++i)
-        if (treeRows[i].path == selectedPath)
-            treeCursor = static_cast<int>(i);
-
-    treeCursor = std::clamp(
-        treeCursor, 0, std::max(0, static_cast<int>(treeRows.size()) - 1));
+    treeCursor = cursorAfterRebuild(before, treeCursor, treeRows, selectedPath);
 }
 
 void Viewer::rebuildRows()
@@ -471,6 +468,9 @@ void Viewer::select(const std::string& path)
 
     tracker.markSeen(path);
     rebuildTree();
+
+    if (auto row = rowOf(treeRows, path); row >= 0)
+        treeCursor = row;
 }
 
 Viewer::CursorKey Viewer::cursorKey() const

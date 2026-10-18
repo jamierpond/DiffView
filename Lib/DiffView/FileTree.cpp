@@ -90,6 +90,31 @@ std::vector<std::string> treeOrder(const std::vector<std::string>& files)
     return order;
 }
 
+int rowOf(const std::vector<TreeRow>& rows, const std::string& path)
+{
+    for (std::size_t i = 0; i < rows.size(); ++i)
+        if (rows[i].path == path)
+            return static_cast<int>(i);
+
+    return -1;
+}
+
+int cursorAfterRebuild(const std::vector<TreeRow>& before,
+                       int cursor,
+                       const std::vector<TreeRow>& after,
+                       const std::string& selected)
+{
+    if (cursor >= 0 && cursor < static_cast<int>(before.size()))
+        if (auto row = rowOf(after, before[static_cast<std::size_t>(cursor)].path);
+            row >= 0)
+            return row;
+
+    if (auto row = rowOf(after, selected); row >= 0)
+        return row;
+
+    return std::clamp(cursor, 0, std::max(0, static_cast<int>(after.size()) - 1));
+}
+
 std::vector<std::string> parentDirectories(const std::string& path)
 {
     auto parents = std::vector<std::string> {};

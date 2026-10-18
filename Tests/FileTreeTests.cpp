@@ -51,3 +51,34 @@ auto tParents = test("FileTree/parentDirectories") = []
     check(parents[0] == "a" && parents[1] == "a/b");
     check(parentDirectories("top.txt").empty());
 };
+
+auto tCursorKeepsRow =
+    test("FileTree/a rebuild keeps the cursor's row, not the selection's") = []
+{
+    // On the Lib directory with Lib/a.cpp still selected; a refresh adds a file.
+    auto before = buildTree(files, {});
+    auto cursor = rowOf(before, "Lib");
+    auto more = files;
+    more.push_back("Lib/0.cpp");
+    auto after = buildTree(more, {});
+
+    check(cursorAfterRebuild(before, cursor, after, "Lib/a.cpp")
+          == rowOf(after, "Lib"));
+
+    // A file added above shifts the cursor's file down: it follows by path.
+    cursor = rowOf(before, "Lib/b.cpp");
+    check(cursorAfterRebuild(before, cursor, after, "Lib/b.cpp")
+          == rowOf(after, "Lib/b.cpp"));
+    check(rowOf(after, "Lib/b.cpp") == cursor + 1);
+};
+
+auto tCursorRowGone = test("FileTree/a vanished cursor row falls back") = []
+{
+    auto before = buildTree(files, {});
+    auto after = buildTree({"Lib/a.cpp", "README.md"}, {});
+
+    check(cursorAfterRebuild(before, rowOf(before, "Source"), after, "README.md")
+          == rowOf(after, "README.md"));
+    check(cursorAfterRebuild(before, 7, after, "gone.cpp")
+          == static_cast<int>(after.size()) - 1);
+};

@@ -321,6 +321,10 @@ void Viewer::openPrompt(Prompt kind, bool forward)
     searchForward = forward;
     searchPane = focus;
     searchOriginCursor = focus == Pane::tree ? treeCursor : diffCursor;
+    searchOriginPath =
+        focus == Pane::tree && treeCursor < static_cast<int>(treeRows.size())
+            ? treeRows[static_cast<std::size_t>(treeCursor)].path
+            : std::string {};
     searchOriginTop = focus == Pane::tree ? treeTop : diffTop;
     liveHit.reset();
 }
@@ -334,7 +338,9 @@ bool Viewer::onPromptEvent(const std::string& key)
 
         if (searchPane == Pane::tree)
         {
-            treeCursor = searchOriginCursor;
+            if (auto row = rowOf(treeRows, searchOriginPath); row >= 0)
+                treeCursor = row;
+
             treeTop = searchOriginTop;
 
             if (treeCursor < static_cast<int>(treeRows.size())
@@ -455,9 +461,16 @@ void Viewer::updateIncrementalSearch()
     auto needle = promptLine.text();
 
     if (searchPane == Pane::tree)
+    {
+        if (auto row = rowOf(treeRows, searchOriginPath); row >= 0)
+            searchOriginCursor = row;
+
         treeCursor = searchOriginCursor;
+    }
     else
+    {
         diffCursor = searchOriginCursor;
+    }
 
     liveHit.reset();
 
