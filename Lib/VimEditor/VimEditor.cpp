@@ -1002,6 +1002,13 @@ Outcome Editor::feed(const std::string& key)
     if (rest.empty())
         return Outcome::none; // still typing the count
 
+    // vim's own shorthands: S is cc, Y is yy.
+    if (rest == "S" || rest == "Y")
+    {
+        rest = rest == "S" ? "cc" : "yy";
+        pending = pending.substr(0, index) + rest;
+    }
+
     auto done = [&] { pending.clear(); };
     const auto& current = buffer.line(cursorRow);
 
