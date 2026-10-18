@@ -52,6 +52,7 @@ add_executable(DiffView
         Source/Comments.cpp
         Source/Input.cpp
         Source/Main.cpp
+        Source/Monitor.cpp
         Source/Render.cpp
         Source/Viewer.cpp)
 

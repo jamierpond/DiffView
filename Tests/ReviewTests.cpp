@@ -122,3 +122,36 @@ auto tRoundId = test("Review/round ids are sortable timestamps") = []
     check(id[4] == '-' && id[7] == '-' && id[10] == '-');
     check(roundLabel("2026-10-16-180959") == "10-16 18:09");
 };
+
+auto tOpenCount = test("Review/open counts neither resolved nor withdrawn") = []
+{
+    auto resolved = comment(2, "b");
+    resolved.resolved = true;
+    auto withdrawn = comment(3, "c");
+    withdrawn.withdrawn = true;
+
+    check(openCount({comment(1, "a"), resolved, withdrawn, comment(4, "d")}) == 2);
+};
+
+auto tNewRounds =
+    test("Review/the monitor reports only unseen rounds, oldest first") = []
+{
+    auto seen = std::vector<std::string> {"2026-10-16-100000.md"};
+    auto current = std::vector<std::string> {
+        "2026-10-17-090000.md", "2026-10-16-100000.md", "2026-10-16-120000.md"};
+
+    auto fresh = newRounds(seen, current);
+
+    check(fresh.size() == 2);
+    check(fresh[0] == "2026-10-16-120000.md");
+    check(fresh[1] == "2026-10-17-090000.md");
+    check(newRounds(current, current).empty());
+};
+
+auto tRoundNotice =
+    test("Review/the monitor's line names the round and the file") = []
+{
+    check(roundNotice("2026-10-17-142300", 3, "/r/.diffview/latest.md")
+          == "dv: review round 2026-10-17-142300 submitted · 3 open · read "
+             "/r/.diffview/latest.md");
+};

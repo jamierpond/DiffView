@@ -83,6 +83,31 @@ int draftCount(const std::vector<Annotation>& annotations)
                                           { return a.draft; }));
 }
 
+int openCount(const std::vector<Annotation>& annotations)
+{
+    return static_cast<int>(std::count_if(annotations.begin(),
+                                          annotations.end(),
+                                          [](const Annotation& a)
+                                          { return !a.resolved && !a.withdrawn; }));
+}
+
+std::vector<std::string> newRounds(const std::vector<std::string>& seen,
+                                   std::vector<std::string> current)
+{
+    std::erase_if(
+        current,
+        [&](const std::string& name)
+        { return std::find(seen.begin(), seen.end(), name) != seen.end(); });
+    std::sort(current.begin(), current.end());
+    return current;
+}
+
+std::string roundNotice(const std::string& id, int open, const std::string& latest)
+{
+    return "dv: review round " + id + " submitted · " + std::to_string(open)
+           + " open · read " + latest;
+}
+
 ReviewFile draftFile(const std::vector<Annotation>& annotations,
                      const std::string& baseLabel,
                      const std::string& baseSha)

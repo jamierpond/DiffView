@@ -132,6 +132,15 @@ Tell an agent:
 > When you've dealt with one, change its `· open` to `· resolved` in that
 > file. Don't edit anything else under `.diffview/`.
 
+An agent that can watch a command's output (Claude Code's Monitor tool) can
+run `dv monitor [repo]` to hear when you submit. It needs no terminal, prints
+one line per round submitted after it starts, and runs until killed
+(`--once`: until the first round):
+
+```
+dv: review round 2026-10-17-142300 submitted · 3 open · read /abs/repo/.diffview/latest.md
+```
+
 `.diffview` has its own `.gitignore` (`*`), so none of it shows up in `git
 status`, the diff, or an agent's `git add -A`. Images pasted into comments
 live in `.diffview/images/`. Files from older versions (`annotations.md`,

@@ -39,6 +39,16 @@ Reviews mergeReviews(const std::vector<ReviewFile>& rounds, const ReviewFile& dr
 
 int draftCount(const std::vector<Annotation>& annotations);
 
+int openCount(const std::vector<Annotation>& annotations);
+
+// For `dv monitor`: the round files (names, any order) not seen before,
+// oldest first.
+std::vector<std::string> newRounds(const std::vector<std::string>& seen,
+                                   std::vector<std::string> current);
+
+// One line per submitted round, for an agent's monitor to wake on.
+std::string roundNotice(const std::string& id, int open, const std::string& latest);
+
 ReviewFile draftFile(const std::vector<Annotation>& annotations,
                      const std::string& baseLabel,
                      const std::string& baseSha);
