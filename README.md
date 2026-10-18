@@ -1,8 +1,8 @@
 <h1 align="center">DiffView</h1>
 
-<p align="center"><b>A live git diff in the terminal for watching coding agents work, and leaving them comments.</b></p>
+<p align="center"><b>Watch your coding agents work in a live terminal diff, and tell them what you think, line by line.</b></p>
 
-Point it at a repo an agent is editing. The left pane is a tree of every
+Point it at a repo an agent is editing (or just run `dv` inside it). The left pane is a tree of every
 changed file, the right pane the selected file's diff. It refreshes as files
 change. Files you haven't looked at since they last changed get a dot, and
 files touched in the last ten seconds are highlighted, so you can see where
