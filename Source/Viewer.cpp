@@ -271,6 +271,47 @@ void Viewer::followTranscript()
     isFollowingTranscript = true;
 }
 
+void Viewer::openAgentInput()
+{
+    isAgentPaneShown = true;
+    focus = Pane::agent;
+    isTypingToAgent = true;
+}
+
+bool Viewer::onAgentInputEvent(const std::string& key)
+{
+    if (key == "Esc" || key == "C-c")
+    {
+        isTypingToAgent = false;
+        agentInputLine.set({});
+        return true;
+    }
+
+    if (key == "Enter")
+    {
+        auto typed = trim(agentInputLine.text());
+        isTypingToAgent = false;
+        agentInputLine.set({});
+
+        if (!typed.empty())
+            sendTypedMessage(typed);
+
+        return true;
+    }
+
+    agentInputLine.feed(key);
+    return true;
+}
+
+// Through the same path as a round: it waits for a finishing responder, and
+// starts one (resuming its session) when none is running.
+void Viewer::sendTypedMessage(const std::string& text)
+{
+    typedAwaitingResponder.push_back(text);
+    followTranscript();
+    deliverNewRounds();
+}
+
 void Viewer::pollActivities(std::int64_t now)
 {
     if (now - lastActivityPoll >= activityPollMs)
@@ -349,7 +390,8 @@ void Viewer::deliverNewRounds()
     roundsAwaitingResponder.insert(
         roundsAwaitingResponder.end(), fresh.begin(), fresh.end());
 
-    if (roundsAwaitingResponder.empty() && !isWaitingForPreviousResponder)
+    if (roundsAwaitingResponder.empty() && typedAwaitingResponder.empty()
+        && !isWaitingForPreviousResponder)
         return;
 
     auto config = options.readResponderConfig();
@@ -357,7 +399,12 @@ void Viewer::deliverNewRounds()
     if (!config.isEnabled)
     {
         finishResponder();
+
+        if (!typedAwaitingResponder.empty())
+            say("@" + config.name + " is off (responder = off): nothing sent");
+
         roundsAwaitingResponder.clear();
+        typedAwaitingResponder.clear();
         isWaitingForPreviousResponder = false;
         return;
     }
@@ -393,6 +440,17 @@ void Viewer::deliverNewRounds()
                                             name);
         responder->send(
             {makeResponderMessage(notice, name), route.responderCommentThreads});
+    }
+
+    for (const auto& typed: std::exchange(typedAwaitingResponder, {}))
+    {
+        if (!claimResponder(config))
+        {
+            say("@" + config.name + " runs in another dv: type to it there");
+            continue;
+        }
+
+        responder->send(makeTypedResponderMessage(typed));
     }
 }
 

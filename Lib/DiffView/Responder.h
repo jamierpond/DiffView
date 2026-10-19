@@ -98,6 +98,12 @@ struct ResponderMessage
     std::vector<int> commentThreads;
 };
 
+// What someone typed into dv's agent pane: sent as typed, about no thread.
+ResponderMessage makeTypedResponderMessage(const std::string& text);
+
+// "#4 #5" for a round's threads, "typed" for a typed message.
+std::string describeMessageOrigin(const ResponderMessage& message);
+
 // dv's own agent: one CLI process, started on the first message, fed the
 // rest on its stdin one at a time, so it keeps its context. Its session id
 // is kept to resume on the next start. Restarted once after a crash; a

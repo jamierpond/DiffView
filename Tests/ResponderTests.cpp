@@ -498,3 +498,40 @@ auto tAgentProcessOutlivesItsOwner =
     check(WIFEXITED(status) && WEXITSTATUS(status) == 0);
 };
 #endif
+
+auto tResponderTypedMessage =
+    test("Responder/a typed message is sent as typed, about no thread") = []
+{
+    auto typed = makeTypedResponderMessage("what are you doing? \"now\"");
+
+    check(typed.text == "what are you doing? \"now\"");
+    check(typed.commentThreads.empty());
+    check(describeMessageOrigin(typed) == "typed");
+    check(describeMessageOrigin({"round", {4, 5}}) == "#4 #5");
+    check(readMessageText(frameUserMessage(typed.text)) == typed.text);
+};
+
+auto tResponderTypedMessageStarts =
+    test("Responder/a typed message starts the agent, or waits behind a turn") = []
+{
+    auto dir = makeEmptyDirectory("ResponderTypedMessage");
+    auto launcher = FakeLauncher {};
+    auto responder = Responder {makeSettings(dir), launcher.makeStart()};
+
+    responder.send(makeTypedResponderMessage("hello"));
+    check(launcher.started.size() == 1);
+
+    auto& process = *launcher.started.front();
+    check(readMessageText(process.written) == "hello");
+    check(responder.findActivities().empty());
+
+    responder.send(makeTypedResponderMessage("and then"));
+    check(process.written.find("and then") == std::string::npos);
+
+    writeOutput(dir, claudeInit + claudeResult);
+    responder.poll();
+    check(process.written.find("and then") != std::string::npos);
+
+    auto log = eacp::Files::readFile(dir / "dv.log");
+    check(log.find("dv: sending typed: hello") != std::string::npos);
+};

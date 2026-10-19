@@ -118,6 +118,9 @@ private:
     void cycleFocus();
     void scrollTranscript(int delta);
     void followTranscript();
+    void openAgentInput();
+    bool onAgentInputEvent(const std::string& key);
+    void sendTypedMessage(const std::string& text);
     void deliverNewRounds();
     bool isPreviousResponderFinishing(const ResponderConfig& config) const;
     bool claimResponder(const ResponderConfig& config);
@@ -225,6 +228,7 @@ private:
     ftxui::Element renderDiff(int width, int height);
     ftxui::Element renderAgentPane(int width, int height);
     ftxui::Element renderTranscriptRow(const TranscriptRow& row, int width);
+    ftxui::Element renderAgentInput(int width);
     ftxui::Element renderRow(const DiffRow& row, int index, int width);
     ftxui::Element renderCommentThreadRow(const DiffRow& row,
                                           const Annotation& note,
@@ -300,6 +304,9 @@ private:
     int transcriptTop = 0;
     int transcriptHeight = 20;
     bool isFollowingTranscript = true;
+    bool isTypingToAgent = false;
+    telescope::LineEdit agentInputLine;
+    std::vector<std::string> typedAwaitingResponder;
 
     // What the files said when last read or written, to tell our own writes
     // from a hand edit.

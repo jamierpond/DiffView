@@ -178,6 +178,19 @@ std::string makeResponderMessage(const std::string& notice,
            + ". dv sends you the next one itself: don't run dv monitor.";
 }
 
+ResponderMessage makeTypedResponderMessage(const std::string& text)
+{
+    return {text, {}};
+}
+
+std::string describeMessageOrigin(const ResponderMessage& message)
+{
+    if (message.commentThreads.empty())
+        return "typed";
+
+    return joinCommentThreads(message.commentThreads);
+}
+
 std::string frameUserMessage(const std::string& text)
 {
     using Miro::Json::Array;
@@ -249,7 +262,7 @@ void Responder::finish()
     {
         for (const auto& message: queue)
         {
-            log("dv: sending " + joinCommentThreads(message.commentThreads) + ": "
+            log("dv: sending " + describeMessageOrigin(message) + ": "
                 + message.text);
             process->writeInput(frameUserMessage(message.text));
         }
@@ -320,8 +333,7 @@ void Responder::sendNext()
     current = std::move(queue.front());
     queue.pop_front();
     doing = "starting";
-    log("dv: sending " + joinCommentThreads(current->commentThreads) + ": "
-        + current->text);
+    log("dv: sending " + describeMessageOrigin(*current) + ": " + current->text);
 
     if (!hasStdinSession(settings.cli))
     {

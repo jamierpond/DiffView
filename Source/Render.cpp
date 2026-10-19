@@ -143,6 +143,7 @@ const auto selectionBackground = Color::RGB(38, 58, 96);
 const auto claudeOrange = Color::RGB(215, 119, 87);
 constexpr auto agentPaneShareOfRows = 3;
 constexpr auto minimumAgentPaneRows = 6;
+constexpr auto agentInputRows = 1;
 constexpr auto minimumBrowserRows = 4;
 constexpr auto agentPaneBorderSize = 2;
 constexpr auto statusBarRows = 1;
@@ -284,28 +285,49 @@ Element Viewer::renderAgentPane(int width, int height)
         isTranscriptLayoutDirty = false;
     }
 
-    transcriptHeight = height;
+    transcriptHeight =
+        isTypingToAgent ? std::max(1, height - agentInputRows) : height;
     auto count = static_cast<int>(transcriptRows.size());
-    auto lastTop = std::max(0, count - height);
+    auto lastTop = std::max(0, count - transcriptHeight);
     transcriptTop =
         isFollowingTranscript ? lastTop : std::min(transcriptTop, lastTop);
 
     auto title =
-        " @" + transcriptAgentName + (isFollowingTranscript ? " " : " · G follows ");
+        " @" + transcriptAgentName + (isFollowingTranscript ? "" : " · G follows")
+        + (focus == Pane::agent && !isTypingToAgent ? " · i types to it " : " ");
     auto lines = Elements {};
 
     if (transcriptRows.empty())
         lines.push_back(text(" nothing from its agent yet · " + transcriptPath)
                         | dim);
 
-    auto end = std::min(count, transcriptTop + height);
+    auto end = std::min(count, transcriptTop + transcriptHeight);
 
     for (auto i = transcriptTop; i < end; ++i)
         lines.push_back(renderTranscriptRow(
             transcriptRows[static_cast<std::size_t>(i)], rowWidth));
 
+    if (isTypingToAgent)
+        lines.push_back(renderAgentInput(rowWidth));
+
     return window(text(title) | bold | (focus == Pane::agent ? inverted : dim),
                   vbox(std::move(lines)) | flex);
+}
+
+Element Viewer::renderAgentInput(int width)
+{
+    const auto& typed = agentInputLine.text();
+    auto at = agentInputLine.cursor();
+    auto atCursor = at < typed.size() ? typed.substr(at, 1) : std::string {" "};
+    auto afterCursor = at < typed.size() ? typed.substr(at + 1) : std::string {};
+
+    return hbox({text(std::string(agentPaneMargin, ' ')),
+                 hbox({text("> ") | dim,
+                       text(typed.substr(0, at)),
+                       text(atCursor) | inverted,
+                       text(afterCursor),
+                       filler()})
+                     | size(WIDTH, EQUAL, width) | bgcolor(userPromptBackground)});
 }
 
 Element Viewer::renderTranscriptRow(const TranscriptRow& row, int width)
@@ -963,6 +985,9 @@ Element Viewer::renderStatus()
         if (editing)
             return modeName(editor.mode());
 
+        if (isTypingToAgent)
+            return std::string {" INSERT "};
+
         if (visualAnchor)
             return std::string {" VISUAL "};
 
@@ -1032,6 +1057,8 @@ Element Viewer::renderStatus()
 
     if (editing)
         parts.push_back(text("Ctrl-S save · :wq · :q! ") | bold);
+    else if (isTypingToAgent)
+        parts.push_back(text("Enter send · Esc cancel ") | bold);
     else if (!pending.empty())
         parts.push_back(text(pending + " ") | bold);
     else if (!message.empty() && nowMs() - messageAt < 5000)
@@ -1246,6 +1273,8 @@ Element Viewer::renderHelp()
                    row("Ctrl-d Ctrl-u", "half page down / up"),
                    row("h l  Tab", "tree / diff / switch pane"),
                    row("A", "agent pane: focus it; again hides it, again shows"),
+                   row("i  Enter",
+                       "agent pane: type to @dv; Enter sends, Esc cancels"),
                    row("", "j k scroll it, G follows the tail again"),
                    row("Enter  l", "tree: toggle directory, open file"),
                    row("a  s", "all files / changed only, tree / by size"),
