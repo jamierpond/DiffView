@@ -3,6 +3,7 @@
 #include <Review.h>
 
 #include <algorithm>
+#include <array>
 #include <cerrno>
 #include <csignal>
 #include <cstdio>
@@ -15,19 +16,12 @@ namespace diffview
 {
 namespace
 {
-char registered[4096] = {};
-
-void onSignal(int signal)
-{
-    if (registered[0] != 0)
-        unlink(registered);
-
-    _exit(128 + signal);
-}
+auto registered = std::array<char, 4096> {};
 
 bool isAlive(pid_t pid)
 {
-    return pid > 0 && (kill(pid, 0) == 0 || errno == EPERM);
+    constexpr auto checkOnly = 0;
+    return pid > 0 && (kill(pid, checkOnly) == 0 || errno == EPERM);
 }
 } // namespace
 
@@ -43,7 +37,7 @@ void registerAgent(const std::string& repo, const std::string& name)
         std::ofstream {own} << "*\n";
 
     auto path = (dir / name).string();
-    std::snprintf(registered, sizeof(registered), "%s", path.c_str());
+    std::snprintf(registered.data(), registered.size(), "%s", path.c_str());
 
     std::ofstream {path} << "pid " << getpid() << "\nstarted "
                          << roundId(static_cast<std::int64_t>(std::time(nullptr))
@@ -51,13 +45,20 @@ void registerAgent(const std::string& repo, const std::string& name)
                          << "\n";
 
     for (auto signal: {SIGINT, SIGTERM, SIGHUP, SIGPIPE})
-        std::signal(signal, onSignal);
+        std::signal(signal,
+                    [](int caught)
+                    {
+                        if (registered[0] != 0)
+                            unlink(registered.data());
+
+                        _exit(128 + caught);
+                    });
 }
 
 void unregisterAgent()
 {
     if (registered[0] != 0)
-        unlink(registered);
+        unlink(registered.data());
 
     registered[0] = 0;
 }
