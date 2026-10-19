@@ -107,4 +107,41 @@ std::vector<DiffRow> buildRows(const FileDiff& file,
 
     return rows;
 }
+
+int findThreadOffset(const std::vector<DiffRow>& rows, int index)
+{
+    auto top = index;
+
+    while (top > 0
+           && rows[static_cast<std::size_t>(top)].kind != RowKind::annotationTop)
+        --top;
+
+    return index - top;
+}
+
+std::optional<int>
+    findThreadRow(const std::vector<DiffRow>& rows, int annotation, int offset)
+{
+    for (std::size_t i = 0; i < rows.size(); ++i)
+    {
+        if (rows[i].kind != RowKind::annotationTop
+            || rows[i].annotation != annotation)
+            continue;
+
+        auto row = static_cast<int>(i);
+
+        for (auto step = 0; step < offset; ++step)
+        {
+            if (rows[static_cast<std::size_t>(row)].kind
+                == RowKind::annotationBottom)
+                break;
+
+            ++row;
+        }
+
+        return row;
+    }
+
+    return std::nullopt;
+}
 } // namespace diffview

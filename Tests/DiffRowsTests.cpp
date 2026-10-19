@@ -100,3 +100,24 @@ auto tReplyRows = test("DiffRows/replies follow the comment inside its block") =
     check(rows[12].text == "ok" && rows[12].reply == 1);
     check(rows[13].kind == RowKind::annotationBottom);
 };
+
+auto tThreadCursor =
+    test("DiffRows/a row in a thread is found again after a rebuild") = []
+{
+    auto file = sample();
+    auto annotation = makeAnnotation(file, {0, 0}, 7, "why?");
+    annotation.replies = {{"dev", "2026-10-18 10:00", "because\nit is", false}};
+    auto rows = buildRows(file, {annotation}, 80);
+    auto secondReplyLine = 9;
+
+    check(rows[static_cast<std::size_t>(secondReplyLine)].text == "it is");
+
+    auto offset = findThreadOffset(rows, secondReplyLine);
+    annotation.replies.push_back({"you", "2026-10-18 10:05", "ok", false});
+    auto rebuilt = buildRows(file, {annotation}, 80);
+
+    check(findThreadRow(rebuilt, 7, offset) == secondReplyLine);
+    check(rebuilt[13].kind == RowKind::annotationBottom);
+    check(findThreadRow(rebuilt, 7, 99) == 13);
+    check(!findThreadRow(rebuilt, 8, 0));
+};

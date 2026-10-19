@@ -3,6 +3,7 @@
 #include "Annotations.h"
 #include "Diff.h"
 
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -43,4 +44,12 @@ struct DiffRow
 std::vector<DiffRow> buildRows(const FileDiff& file,
                                const std::vector<Annotation>& annotations,
                                int wrapWidth);
+// How far into its comment's block a row is, so a rebuild can put the cursor
+// back on the same line of the thread.
+int findThreadOffset(const std::vector<DiffRow>& rows, int index);
+
+// The row that far into the comment's block, clamped to the block; nullopt
+// when the comment isn't shown.
+std::optional<int>
+    findThreadRow(const std::vector<DiffRow>& rows, int annotation, int offset);
 } // namespace diffview

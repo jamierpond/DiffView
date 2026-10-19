@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cstdint>
 
 namespace diffview
 {
@@ -34,8 +35,19 @@ Color statusColor(FileStatus status)
     return Color::Yellow;
 }
 
-// "you" speaks in the comment box's yellow; each agent keeps one colour,
-// picked by its name, clear of the diff's green and red.
+// Not std::hash: an agent keeps its colour on every platform and build.
+std::uint32_t hashFnv1a(std::string_view text)
+{
+    constexpr auto offsetBasis = std::uint32_t {2166136261u};
+    constexpr auto prime = std::uint32_t {16777619u};
+    auto hash = offsetBasis;
+
+    for (auto c: text)
+        hash = (hash ^ static_cast<unsigned char>(c)) * prime;
+
+    return hash;
+}
+
 Color authorColor(const std::string& author)
 {
     if (author == reviewerName)
@@ -47,12 +59,7 @@ Color authorColor(const std::string& author)
                                                       Color::RGB(255, 175, 95),
                                                       Color::RGB(175, 135, 255),
                                                       Color::RGB(95, 215, 175)};
-    auto hash = std::uint32_t {2166136261u};
-
-    for (auto c: author)
-        hash = (hash ^ static_cast<unsigned char>(c)) * 16777619u;
-
-    return palette[hash % palette.size()];
+    return palette[hashFnv1a(author) % palette.size()];
 }
 
 std::string describePlace(const Annotation& note)

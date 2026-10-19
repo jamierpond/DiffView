@@ -487,6 +487,9 @@ Viewer::CursorKey Viewer::cursorKey() const
     key.annotation = row.annotation;
     key.hunk = row.hunk;
 
+    if (row.annotation != 0)
+        key.threadOffset = findThreadOffset(rows, diffCursor);
+
     if (row.kind == RowKind::line)
     {
         if (const auto* file = selectedFile();
@@ -513,6 +516,15 @@ void Viewer::restoreCursor(const CursorKey& key)
         return;
     }
 
+    if (key.annotation != 0)
+    {
+        if (auto row = findThreadRow(rows, key.annotation, key.threadOffset))
+        {
+            diffCursor = *row;
+            return;
+        }
+    }
+
     const auto* file = selectedFile();
     auto best = -1;
     auto bestScore = -1;
@@ -522,11 +534,8 @@ void Viewer::restoreCursor(const CursorKey& key)
         const auto& row = rows[static_cast<std::size_t>(i)];
         auto score = -1;
 
-        if (key.annotation != 0 && row.annotation == key.annotation
-            && row.kind == key.kind)
-            score = 1000;
-        else if (key.kind == RowKind::line && row.kind == RowKind::line
-                 && file != nullptr)
+        if (key.kind == RowKind::line && row.kind == RowKind::line
+            && file != nullptr)
         {
             const auto& line = file->hunks[static_cast<std::size_t>(row.hunk)]
                                    .lines[static_cast<std::size_t>(row.line)];

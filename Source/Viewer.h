@@ -84,6 +84,7 @@ private:
         int oldLine = 0;
         std::string text;
         int annotation = 0;
+        int threadOffset = 0;
         int hunk = -1;
     };
 
