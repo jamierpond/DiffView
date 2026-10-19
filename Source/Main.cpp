@@ -1,13 +1,18 @@
+#include "Agents.h"
 #include "Commands.h"
 #include "Monitor.h"
 #include "Viewer.h"
 
 #include <Review.h>
 #include <Store.h>
+#include <Wake.h>
+
+#include <eacp/Core/Utils/Files.h>
 
 #include <eacp/Core/App/App.h>
 
 #include <cstdio>
+#include <cstdlib>
 #include <filesystem>
 #include <iostream>
 #include <iterator>
@@ -60,8 +65,16 @@ constexpr auto usage =
     "unaddressed thread wakes every agent and belongs to the first to answer\n"
     "it. Another agent's thread is refused unless --force. Without --as you\n"
     "hear every round. The owner shows in the heading: `### a.cpp:12 · open ·\n"
-    "@name · #7`. Rounds are Markdown in .diffview/reviews/; latest.md is the\n"
-    "newest.\n";
+    "@name · #7`. A thread whose owner isn't listening is everyone's: any agent\n"
+    "may answer it and takes it over. Rounds are Markdown in .diffview/reviews/;\n"
+    "latest.md is the newest.\n"
+    "\n"
+    "Worktrees share one .diffview, in the main worktree (as they share .git);\n"
+    "every command sees the whole repo from any of them.\n"
+    "\n"
+    "Nobody listening: a send resumes the owner's last `dv monitor` session\n"
+    "with `claude -p --resume`. ~/.config/diffview/config or .diffview/config:\n"
+    "  wake = resume|fresh|off    wakeCommand = claude\n";
 
 const std::map<std::string, std::string>& commandHelp()
 {
@@ -214,6 +227,40 @@ std::optional<diffview::StoreLayout> openStore(const std::string& root)
     return store;
 }
 
+std::string readEnvironment(const char* name)
+{
+    const auto* value = std::getenv(name);
+
+    if (value == nullptr)
+        return {};
+
+    return value;
+}
+
+diffview::AgentSession readClaudeSession(const diffview::StoreLayout& store)
+{
+    auto session = diffview::AgentSession {};
+    session.sessionId = readEnvironment("CLAUDE_CODE_SESSION_ID");
+    session.claudePid = std::atoi(readEnvironment("CLAUDE_PID").c_str());
+    session.worktree = store.worktree.str();
+    return session;
+}
+
+// As git reads ~/.config/git/config, then the repo's: the repo's wins.
+diffview::WakeConfig readWakeConfig(const diffview::StoreLayout& store)
+{
+    auto configHome = readEnvironment("XDG_CONFIG_HOME");
+
+    if (configHome.empty())
+        configHome = readEnvironment("HOME") + "/.config";
+
+    auto user = eacp::Files::readFile(eacp::FilePath {configHome} / "diffview"
+                                      / diffview::configFileName);
+    auto repo = eacp::Files::readFile(store.directory / diffview::configFileName);
+
+    return diffview::parseWakeConfig(repo, diffview::parseWakeConfig(user, {}));
+}
+
 void printMergeNotes(const std::vector<std::string>& notes)
 {
     for (const auto& note: notes)
@@ -291,6 +338,7 @@ int runCommand(const std::string& command, int argc, char* argv[])
         auto options = diffview::MonitorOptions {};
         options.once = arguments.flags["--once"];
         options.agent = agent;
+        options.session = readClaudeSession(*store);
 
         if (arguments.values.contains("after"))
             options.after = arguments.values["after"];
@@ -396,5 +444,7 @@ int main(int argc, char* argv[])
     options.repo = *root;
     options.store = *store;
     options.mergeNotes = diffview::mergeWorktreeStores(*store);
+    options.wake = readWakeConfig(*store);
+    options.launchWake = diffview::launchDetached;
     return eacp::Apps::run<diffview::Viewer>(options);
 }

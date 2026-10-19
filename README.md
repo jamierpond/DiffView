@@ -85,6 +85,8 @@ no `S`: it becomes a one-thread round, `.diffview/reviews/<id>.md` headed
 `new`, and wakes the agent the thread belongs to (every agent, if nobody's).
 latest.md stays the last full round. New comments still wait for `S`.
 
+A reply on a resolved or withdrawn thread reopens it (`open, reopened`).
+
 A resolved thread whose newest reply is an agent's stays open in the diff
 until the cursor has been on it (`.diffview/seen` remembers), so an answer
 isn't folded away before you read it.
@@ -93,7 +95,29 @@ isn't folded away before you read it.
 after the status. An unaddressed thread is everyone's until an agent
 answers it, which claims it. An agent can't answer another's thread without
 `--force`. Agents waiting with `dv monitor --as <name>` show in the status
-bar (`◉ @name`).
+bar (`◉ @name`); a `--once` monitor still counts for ten minutes after it
+exits. A thread whose owner isn't listening is everyone's again: it wakes
+every listening agent, and whoever answers it takes it over.
+
+### Waking an agent nobody is listening for
+
+When you send a round or a reply and no agent is listening, dv starts the
+owner's Claude Code session again, detached, in this worktree: `claude -p
+--resume <session> "<the monitor line> Handle it with dv … as <name>, then
+exit."`, falling back to a fresh `claude -p` if the resume fails. The session
+is the one the agent last ran `dv monitor --as <name>` from
+(`.diffview/sessions/<name>`). A session that is still open isn't resumed
+(two writers on one transcript); a fresh one is started and the status bar
+says so. Output goes to `.diffview/wakes/` (a linked worktree's to
+`.diffview/worktrees/<name>/wakes/`). Unowned threads wake no one.
+
+Set it in `~/.config/diffview/config`, or per repo in `.diffview/config`
+(the repo's wins, as with git):
+
+```
+wake = resume          # resume | fresh | off
+wakeCommand = claude   # run by /bin/sh as `<wakeCommand> -p [--resume <id>] <prompt>`
+```
 
 ### The files are the store
 
@@ -195,8 +219,28 @@ Plain `dv monitor` still streams a line per round until killed.
 
 `.diffview` has its own `.gitignore` (`*`), so none of it shows up in `git
 status`, the diff, or an agent's `git add -A`. Images pasted into comments
-live in `.diffview/images/`. Files from older versions (`annotations.md`,
-`annotations.json`) are imported once and kept, renamed.
+live in `.diffview/images/`, linked relative to the main worktree.
+
+### Worktrees
+
+There is one `.diffview` per repo, laid out as git lays out `.git` for
+worktrees. It lives in the main worktree and holds what the repo shares:
+rounds, threads and their ids, the agents listening, `latest.md` (the
+newest full round from any worktree). A linked worktree's own state, its
+draft and what you've seen, is in `.diffview/worktrees/<name>/`, as git
+keeps its HEAD and index in `.git/worktrees/<name>/`; the main worktree's
+is in `.diffview/` itself. Each round says which worktree it was reviewed
+in.
+
+`dv comments`, `show`, `reply`, `resolve` and `monitor` work from any
+worktree and see the whole repo; threads from another worktree are labelled
+`[name]`. The UI anchors only its own worktree's comments (the lines are in
+that checkout) and lists the others in `Space pc`.
+
+A linked worktree's own `.diffview` from an older dv is merged into the
+shared one the first time dv runs in the repo, and removed. Ids another
+worktree already uses are renumbered, and the round says so ("Ids changed
+when the worktree stores were merged: #3 is now #41").
 
 ## Build
 

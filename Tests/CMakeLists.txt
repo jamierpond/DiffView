@@ -11,7 +11,8 @@ add_executable(DiffViewTests
         ReviewTests.cpp
         SearchTests.cpp
         StoreTests.cpp
-        TextTests.cpp)
+        TextTests.cpp
+        WakeTests.cpp)
 target_link_libraries(DiffViewTests PRIVATE NanoTest NanoTestMain DiffViewCore)
 target_compile_definitions(DiffViewTests PRIVATE
         DIFFVIEW_GOLDEN_DIR="${CMAKE_CURRENT_SOURCE_DIR}/Golden")

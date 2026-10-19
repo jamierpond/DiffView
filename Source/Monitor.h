@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Store.h>
+#include <Wake.h>
 
 #include <optional>
 #include <string>
@@ -14,6 +15,8 @@ struct MonitorOptions
     std::optional<std::string> after;
 
     std::string agent;
+
+    AgentSession session;
 };
 
 int runMonitor(const StoreLayout& store, const MonitorOptions& options);

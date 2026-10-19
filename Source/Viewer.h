@@ -9,6 +9,7 @@
 #include <Keymap.h>
 #include <Review.h>
 #include <Store.h>
+#include <Wake.h>
 #include <Telescope.h>
 #include <VimEditor.h>
 
@@ -19,6 +20,7 @@
 #include <ftxui/component/component.hpp>
 #include <ftxui/component/loop.hpp>
 
+#include <functional>
 #include <map>
 #include <memory>
 #include <optional>
@@ -37,6 +39,8 @@ struct Options
     std::string repo;
     StoreLayout store;
     std::vector<std::string> mergeNotes;
+    WakeConfig wake;
+    std::function<void(const WakeLaunch&)> launchWake = [](const WakeLaunch&) {};
     git::BaseSpec base;
 };
 
@@ -121,6 +125,7 @@ private:
     int annotationAtCursor() const;
     Annotation* annotation(int id);
     int findNextAnnotationId() const;
+    std::string wakeAgentsFor(const ReviewFile& round, const std::string& path);
     std::optional<Annotation> findAnnotationInAnyWorktree(int id) const;
     std::string describeCommentPlace(const Annotation& note) const;
     std::optional<LineRange> hunkRange(int row) const;

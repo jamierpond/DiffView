@@ -1,3 +1,4 @@
+#include "Agents.h"
 #include "Clipboard.h"
 #include "Viewer.h"
 
@@ -188,7 +189,7 @@ void Viewer::submitReview()
     saveStore();
     rebuildRows();
     say("Submitted " + std::to_string(round.comments.size()) + " comments → "
-        + (root / latestReviewFileName).str());
+        + wakeAgentsFor(round, (root / latestReviewFileName).str()));
 }
 
 void Viewer::sendReply(Annotation& note, const std::string& text)
@@ -208,7 +209,8 @@ void Viewer::sendReply(Annotation& note, const std::string& text)
     round.worktree = store.worktree.str();
 
     eacp::Files::createDirectories(root / reviewDirectory);
-    writeText(root / reviewDirectory / (id + ".md"), toMarkdown(round));
+    auto path = root / reviewDirectory / (id + ".md");
+    writeText(path, toMarkdown(round));
 
     note.replies.push_back({reviewerName, time, text, false});
     note.round = id;
@@ -228,9 +230,36 @@ void Viewer::sendReply(Annotation& note, const std::string& text)
     rounds.push_back(id);
     lastRoundsSignature = roundsSignature();
 
-    auto owner = findListeningOwner(note, listening);
-    auto to = owner.empty() ? std::string {"every agent"} : "@" + owner;
-    say("Sent reply on #" + std::to_string(note.id) + " → " + to);
+    say("Sent reply on #" + std::to_string(note.id) + " → "
+        + wakeAgentsFor(round, path.str()));
+}
+
+std::string Viewer::wakeAgentsFor(const ReviewFile& round, const std::string& path)
+{
+    listening = findListeningAgents(store.directory.str());
+    auto decisions = decideWakes(round,
+                                 listening,
+                                 readKnownSessions(store.directory.str()),
+                                 options.wake.mode);
+
+    for (const auto& decision: decisions)
+    {
+        auto isLaunch =
+            decision.kind != WakeKind::listening && decision.kind != WakeKind::off;
+
+        if (!isLaunch)
+            continue;
+
+        auto log = store.worktreeDirectory / wakeDirectory
+                   / (round.title + "-" + decision.agent + ".log");
+        auto prompt = makeWakePrompt(makeWakeNotice(round, decision.agent, path),
+                                     decision.agent);
+
+        options.launchWake(makeWakeLaunch(
+            decision, options.wake, prompt, store.worktree.str(), log.str()));
+    }
+
+    return describeWakes(decisions);
 }
 
 std::string Viewer::threadKey(const Annotation& note)

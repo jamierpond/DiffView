@@ -9,8 +9,11 @@
 #include <csignal>
 #include <cstdio>
 #include <ctime>
+#include <eacp/Core/Utils/Files.h>
+#include <fcntl.h>
 #include <filesystem>
 #include <fstream>
+#include <sys/wait.h>
 #include <unistd.h>
 
 namespace diffview
@@ -49,9 +52,15 @@ bool isListening(const std::filesystem::path& registration)
 }
 } // namespace
 
-void registerAgent(const std::string& store, const std::string& name)
+void registerAgent(const std::string& store,
+                   const std::string& name,
+                   const AgentSession& session)
 {
     createStoreDirectory(store);
+
+    if (!session.sessionId.empty())
+        writeText(eacp::FilePath {store} / sessionDirectory / name,
+                  formatAgentSession(session));
 
     auto dir = std::filesystem::path {store} / agentDirectory;
     auto error = std::error_code {};
@@ -111,5 +120,62 @@ std::vector<std::string> findListeningAgents(const std::string& store)
 
     std::sort(names.begin(), names.end());
     return names;
+}
+
+std::map<std::string, KnownSession> readKnownSessions(const std::string& store)
+{
+    auto sessions = std::map<std::string, KnownSession> {};
+
+    for (const auto& path:
+         eacp::Files::listFiles(eacp::FilePath {store} / sessionDirectory))
+    {
+        auto session = parseAgentSession(eacp::Files::readFile(path));
+        sessions[path.fileName()] = {session, isAlive(session.claudePid)};
+    }
+
+    return sessions;
+}
+
+// Double-forked into its own session, so it outlives the UI and leaves no
+// zombie; only async-signal-safe calls between fork and exec.
+void launchDetached(const WakeLaunch& launch)
+{
+    eacp::Files::createDirectories(
+        eacp::FilePath {launch.logPath}.parentDirectory());
+
+    auto arguments = std::vector<char*> {};
+
+    for (const auto& argument: launch.arguments)
+        arguments.push_back(const_cast<char*>(argument.c_str()));
+
+    arguments.push_back(nullptr);
+
+    auto child = fork();
+
+    if (child < 0)
+        return;
+
+    if (child > 0)
+    {
+        waitpid(child, nullptr, 0);
+        return;
+    }
+
+    setsid();
+
+    if (fork() != 0)
+        _exit(0);
+
+    auto input = open("/dev/null", O_RDONLY);
+    auto log = open(launch.logPath.c_str(), O_WRONLY | O_CREAT | O_APPEND, 0644);
+    dup2(input, STDIN_FILENO);
+    dup2(log, STDOUT_FILENO);
+    dup2(log, STDERR_FILENO);
+
+    if (chdir(launch.worktree.c_str()) != 0)
+        _exit(1);
+
+    execv(arguments[0], arguments.data());
+    _exit(127);
 }
 } // namespace diffview
