@@ -51,8 +51,10 @@ std::string describeSendRoute(const SendRoute& route, const std::string& respond
 std::string makeResponderMessage(const std::string& notice,
                                  const std::string& responder);
 
-// One stream-json user message: a JSON line.
-std::string frameUserMessage(const std::string& text);
+// One stream-json user message: a JSON line, its text then one base64 image
+// block per PNG.
+std::string frameUserMessage(const std::string& text,
+                             const std::vector<std::string>& pngImages);
 
 struct AgentLaunch
 {
@@ -98,9 +100,13 @@ struct ResponderMessage
 {
     std::string text;
     std::vector<int> commentThreads;
+    // The images it links, relative to the working directory; read and sent
+    // along when it goes.
+    std::vector<std::string> imagePaths;
 };
 
-// What someone typed into dv's agent pane: sent as typed, about no thread.
+// What someone typed into dv's agent pane: sent as typed, about no thread,
+// with the images it links.
 ResponderMessage makeTypedResponderMessage(const std::string& text);
 
 // "#4 #5" for a round's threads, "typed" for a typed message.
@@ -138,6 +144,7 @@ public:
 
 private:
     void sendNext();
+    void writeMessage(const ResponderMessage& message);
     bool start(const std::string& prompt);
     void readOutput();
     void readLine(std::string_view line);

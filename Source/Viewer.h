@@ -196,6 +196,11 @@ private:
     bool isCursorInCommentThread(int id) const;
     void moveCursorToEndOfCommentThread(int id);
     void pasteIntoEditor();
+    // An image is written as <stem>-<n>.png and linked; text goes in as it is.
+    // The image's path when there was one.
+    std::optional<std::string>
+        pasteFromClipboard(vim::Editor& target,
+                           const std::function<std::string()>& findImageStem);
     void editAtCursor();
     void deleteAtCursor();
     void toggleResolvedAtCursor();

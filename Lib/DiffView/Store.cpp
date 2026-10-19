@@ -616,6 +616,32 @@ void writeText(const eacp::FilePath& path, std::string_view text)
     eacp::Files::writeFileAtomically(path, bytes);
 }
 
+std::string writePastedImage(const eacp::FilePath& home,
+                             const std::string& stem,
+                             std::string_view png)
+{
+    auto dir = home / imageDirectory;
+    eacp::Files::createDirectories(dir);
+
+    auto name = std::string {};
+
+    for (auto n = 1;; ++n)
+    {
+        name = stem + "-" + std::to_string(n) + ".png";
+
+        if (!eacp::Files::exists(dir / name))
+            break;
+    }
+
+    writeText(dir / name, png);
+    return std::string {imageDirectory} + "/" + name;
+}
+
+std::string makeImageLink(const std::string& path)
+{
+    return "![image](" + path + ")";
+}
+
 std::string readFileFromByteOffset(const eacp::FilePath& path, std::uint64_t offset)
 {
     auto in = std::ifstream {path.str(), std::ios::binary};

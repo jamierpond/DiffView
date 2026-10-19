@@ -321,6 +321,20 @@ auto tTranscriptQueuedPrompt =
     check(transcript.getEntries().back().text == "hello how are you ?");
 };
 
+auto tTranscriptQueuedPromptWithImage =
+    test("Transcript/a queued prompt with a pasted image matches its replay") = []
+{
+    auto typed = std::string {"see ![image](.diffview/images/chat-1-1.png)"};
+    auto transcript = makeTranscript(prompt);
+    transcript.addQueuedPrompt(typed);
+
+    transcript.append(
+        R"json({"type":"user","message":{"role":"user","content":[{"type":"text","text":"see ![image](.diffview/images/chat-1-1.png)"},{"type":"image","source":{"type":"base64","media_type":"image/png","data":"iVBO"}}]}})json"
+        + std::string {"\n"});
+    check(transcript.getQueuedPrompts().empty());
+    check(transcript.getEntries().back().text == typed);
+};
+
 auto tTranscriptSubagentNested =
     test("Transcript/a subagent's run nests under its Agent call") = []
 {

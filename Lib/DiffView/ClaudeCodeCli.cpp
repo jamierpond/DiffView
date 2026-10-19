@@ -43,7 +43,7 @@ std::optional<std::string> summariseAssistant(const Value& event,
 }
 
 // With --replay-user-messages, a stdin message comes back as a user line when
-// it takes it, after any turn in flight.
+// it takes it, after any turn in flight. Its image blocks aren't in `sent`.
 bool isClaudeEchoOf(std::string_view line, const std::string& sent)
 {
     auto event = Miro::Json::getParsedValue(line);
@@ -53,7 +53,7 @@ bool isClaudeEchoOf(std::string_view line, const std::string& sent)
         return false;
 
     const auto& content = getField(getField(event, "message"), "content");
-    return trim(joinTextBlocks(content)) == trim(sent);
+    return trim(joinOnlyTextBlocks(content)) == trim(sent);
 }
 
 // --output-format stream-json --verbose: whole messages, one per line.

@@ -1,8 +1,10 @@
 #include "Responder.h"
+#include "Annotations.h"
 #include "Store.h"
 #include "StreamEvents.h"
 #include "Text.h"
 
+#include <eacp/Core/Utils/Base64.h>
 #include <eacp/Core/Utils/Files.h>
 
 #include <algorithm>
@@ -180,7 +182,7 @@ std::string makeResponderMessage(const std::string& notice,
 
 ResponderMessage makeTypedResponderMessage(const std::string& text)
 {
-    return {text, {}};
+    return {text, {}, imagesIn(text)};
 }
 
 std::string describeMessageOrigin(const ResponderMessage& message)
@@ -191,15 +193,27 @@ std::string describeMessageOrigin(const ResponderMessage& message)
     return joinCommentThreads(message.commentThreads);
 }
 
-std::string frameUserMessage(const std::string& text)
+std::string frameUserMessage(const std::string& text,
+                             const std::vector<std::string>& pngImages)
 {
     using Miro::Json::Array;
     using Miro::Json::Object;
     using Miro::Json::Value;
 
-    auto block = Object {{"type", Value {"text"}}, {"text", Value {text}}};
-    auto message = Object {{"role", Value {"user"}},
-                           {"content", Value {Array {Value {block}}}}};
+    auto content =
+        Array {Value {Object {{"type", Value {"text"}}, {"text", Value {text}}}}};
+
+    for (const auto& png: pngImages)
+    {
+        auto source = Object {{"type", Value {"base64"}},
+                              {"media_type", Value {"image/png"}},
+                              {"data", Value {eacp::Base64::encode(png)}}};
+        content.push_back(
+            Value {Object {{"type", Value {"image"}}, {"source", Value {source}}}});
+    }
+
+    auto message =
+        Object {{"role", Value {"user"}}, {"content", Value {std::move(content)}}};
     auto event = Object {{"type", Value {"user"}}, {"message", Value {message}}};
 
     return Miro::Json::print(Value {event}) + "\n";
@@ -265,7 +279,7 @@ void Responder::finish()
         {
             log("dv: sending " + describeMessageOrigin(message) + ": "
                 + message.text);
-            process->writeInput(frameUserMessage(message.text));
+            writeMessage(message);
         }
     }
 
@@ -359,7 +373,23 @@ void Responder::sendNext()
     if (!process && !start({}))
         return;
 
-    process->writeInput(frameUserMessage(current->text));
+    writeMessage(*current);
+}
+
+// An image deleted since it was pasted is left out; its link stays in the text.
+void Responder::writeMessage(const ResponderMessage& message)
+{
+    auto pngImages = std::vector<std::string> {};
+
+    for (const auto& path: message.imagePaths)
+    {
+        auto file = eacp::FilePath {settings.workingDirectory} / path;
+
+        if (eacp::Files::exists(file))
+            pngImages.push_back(eacp::Files::readFile(file));
+    }
+
+    process->writeInput(frameUserMessage(message.text, pngImages));
 }
 
 bool Responder::start(const std::string& prompt)

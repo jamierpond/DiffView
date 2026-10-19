@@ -15,6 +15,9 @@ std::string getString(const Miro::Json::Value& value, std::string_view key);
 // A message's text blocks, a line each; "[Image]" for an image.
 std::string joinTextBlocks(const Miro::Json::Value& content);
 
+// A message's text blocks, a line each; images left out.
+std::string joinOnlyTextBlocks(const Miro::Json::Value& content);
+
 // One short line: the first line of the text, cut with "…" if it runs on.
 std::string shortenSummary(std::string_view text);
 

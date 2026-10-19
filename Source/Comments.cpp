@@ -10,6 +10,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <ctime>
 
 namespace diffview
 {
@@ -663,39 +664,33 @@ void Viewer::moveCursorToEndOfCommentThread(int id)
 
 void Viewer::pasteIntoEditor()
 {
+    auto findCommentId = [&]
+    {
+        if (editingId != 0)
+            return editingId;
+        if (replyCommentId)
+            return *replyCommentId;
+        if (pendingAnnotation)
+            return pendingAnnotation->id;
+
+        return findNextAnnotationId();
+    };
+
+    if (auto path = pasteFromClipboard(
+            editor, [&] { return std::to_string(findCommentId()); }))
+        pastedImages.push_back(*path);
+}
+
+std::optional<std::string>
+    Viewer::pasteFromClipboard(vim::Editor& target,
+                               const std::function<std::string()>& findImageStem)
+{
     if (auto png = clipboard::imagePng())
     {
-        auto id = [&]
-        {
-            if (editingId != 0)
-                return editingId;
-            if (replyCommentId)
-                return *replyCommentId;
-            if (pendingAnnotation)
-                return pendingAnnotation->id;
-
-            return findNextAnnotationId();
-        }();
-        auto dir = store.home / imageDirectory;
-        eacp::Files::createDirectories(dir);
-
-        auto name = std::string {};
-
-        for (auto n = 1;; ++n)
-        {
-            name = std::to_string(id) + "-" + std::to_string(n) + ".png";
-
-            if (!eacp::Files::exists(dir / name))
-                break;
-        }
-
-        writeText(dir / name, *png);
-
-        auto path = std::string {imageDirectory} + "/" + name;
-        pastedImages.push_back(path);
-        editor.insertText("![image](" + path + ")");
+        auto path = writePastedImage(store.home, findImageStem(), *png);
+        target.insertText(makeImageLink(path));
         say("Pasted image " + path);
-        return;
+        return path;
     }
 
     auto text = eacp::Clipboard::getText();
@@ -703,10 +698,11 @@ void Viewer::pasteIntoEditor()
     if (text.empty())
     {
         say("Clipboard is empty");
-        return;
+        return std::nullopt;
     }
 
-    editor.insertText(text);
+    target.insertText(text);
+    return std::nullopt;
 }
 
 // The agent pane's input is a vim buffer like the reply editor's. Around it:
@@ -872,15 +868,8 @@ void Viewer::sendAgentInput()
 
 void Viewer::pasteIntoAgentInput()
 {
-    auto text = eacp::Clipboard::getText();
-
-    if (text.empty())
-    {
-        say("Clipboard is empty");
-        return;
-    }
-
-    agentInput.insertText(text);
+    pasteFromClipboard(agentInput,
+                       [] { return "chat-" + std::to_string(std::time(nullptr)); });
 }
 
 void Viewer::editAtCursor()

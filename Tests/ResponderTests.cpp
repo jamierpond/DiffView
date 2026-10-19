@@ -5,6 +5,7 @@
 
 #include <NanoTest/NanoTest.h>
 
+#include <eacp/Core/Utils/Base64.h>
 #include <eacp/Core/Utils/Files.h>
 
 #include <chrono>
@@ -35,7 +36,7 @@ const auto claudeResult =
 // What Claude Code writes back on taking a message, with --replay-user-messages.
 std::string makeEcho(const std::string& text)
 {
-    return frameUserMessage(text);
+    return frameUserMessage(text, {});
 }
 
 Annotation makeCommentThread(int id, const std::string& owner)
@@ -218,7 +219,7 @@ auto tFrameUserMessage =
     test("Responder/a message is one stream-json user line, text escaped") = []
 {
     auto text = makeResponderMessage("dv: reply 2026 on #4 · \"quoted\"", "dv");
-    auto line = frameUserMessage(text);
+    auto line = frameUserMessage(text, {});
 
     check(text
           == "dv: reply 2026 on #4 · \"quoted\"\n"
@@ -253,7 +254,7 @@ auto tResponderOneProcess =
     auto responder = Responder {makeSettings(dir), launcher.makeStart()};
 
     check(!responder.isRunning());
-    responder.send({"first", {4}});
+    responder.send({"first", {4}, {}});
     check(launcher.started.size() == 1);
 
     auto& process = *launcher.started.front();
@@ -265,7 +266,7 @@ auto tResponderOneProcess =
     check(responder.countQueuedMessages() == 0);
     responder.takeHasQueueChanged();
 
-    responder.send({"second", {5}});
+    responder.send({"second", {5}, {}});
     check(launcher.started.size() == 1);
     check(process.written.find("second") == std::string::npos);
     check(responder.countQueuedMessages() == 1);
@@ -296,8 +297,8 @@ auto tResponderResultBeforeEcho =
     auto launcher = FakeLauncher {};
     auto responder = Responder {makeSettings(dir), launcher.makeStart()};
 
-    responder.send({"first", {4}});
-    responder.send({"second", {5}});
+    responder.send({"first", {4}, {}});
+    responder.send({"second", {5}, {}});
     writeOutput(dir, claudeInit + claudeResult);
     responder.poll();
 
@@ -313,8 +314,8 @@ auto tResponderEchoThenResult =
     auto launcher = FakeLauncher {};
     auto responder = Responder {makeSettings(dir), launcher.makeStart()};
 
-    responder.send({"first", {4}});
-    responder.send({"second", {5}});
+    responder.send({"first", {4}, {}});
+    responder.send({"second", {5}, {}});
     writeOutput(dir, claudeInit + makeEcho("first"));
     responder.poll();
     check(responder.findActivities().front().commentThread == 4);
@@ -339,18 +340,18 @@ auto tResponderSpontaneousTurn =
     auto launcher = FakeLauncher {};
     auto responder = Responder {makeSettings(dir), launcher.makeStart()};
 
-    responder.send({"first", {4}});
+    responder.send({"first", {4}, {}});
     writeOutput(dir, claudeInit + makeEcho("first") + claudeResult);
     responder.poll();
     check(responder.findActivities().empty());
 
-    responder.send({"second", {5}});
+    responder.send({"second", {5}, {}});
     writeOutput(dir, subagentNotification + claudeResult);
     responder.poll();
     check(responder.findActivities().size() == 1);
     check(responder.findActivities().front().commentThread == 5);
 
-    responder.send({"third", {6}});
+    responder.send({"third", {6}, {}});
     check(launcher.started.front()->written.find("third") == std::string::npos);
 
     writeOutput(dir, makeEcho("second") + claudeResult);
@@ -367,7 +368,7 @@ auto tResponderResumes =
 
     {
         auto responder = Responder {makeSettings(dir), launcher.makeStart()};
-        responder.send({"first", {4}});
+        responder.send({"first", {4}, {}});
         writeOutput(dir, claudeInit + makeEcho("first") + claudeResult);
         responder.poll();
     }
@@ -376,7 +377,7 @@ auto tResponderResumes =
     check(eacp::Files::readFile(dir / "dv.session") == "session-1\n");
 
     auto responder = Responder {makeSettings(dir), launcher.makeStart()};
-    responder.send({"again", {4}});
+    responder.send({"again", {4}, {}});
     check(launcher.started.size() == 2);
     check(
         launcher.started.back()->launch.arguments
@@ -391,7 +392,7 @@ auto tResponderFailedResume =
     auto launcher = FakeLauncher {};
     auto responder = Responder {makeSettings(dir), launcher.makeStart()};
 
-    responder.send({"first", {4}});
+    responder.send({"first", {4}, {}});
     writeOutput(
         dir,
         R"({"type":"result","subtype":"error_during_execution","session_id":"gone"})"
@@ -414,7 +415,7 @@ auto tResponderCrashes = test(
     auto launcher = FakeLauncher {};
     auto responder = Responder {makeSettings(dir), launcher.makeStart()};
 
-    responder.send({"first", {4}});
+    responder.send({"first", {4}, {}});
     writeOutput(dir, claudeInit);
     launcher.started.front()->exitCode = crashExitCode;
     responder.poll();
@@ -435,7 +436,7 @@ auto tResponderCrashes = test(
     check(contains(responder.takeNotices(), *responder.getFailure()));
     check(responder.findActivities().empty());
 
-    responder.send({"ignored", {5}});
+    responder.send({"ignored", {5}, {}});
     check(launcher.started.size() == 2);
 };
 
@@ -446,7 +447,7 @@ auto tResponderIdleCrash =
     auto launcher = FakeLauncher {};
     auto responder = Responder {makeSettings(dir), launcher.makeStart()};
 
-    responder.send({"first", {4}});
+    responder.send({"first", {4}, {}});
     writeOutput(dir, claudeInit + makeEcho("first") + claudeResult);
     responder.poll();
     launcher.started.front()->exitCode = crashExitCode;
@@ -466,8 +467,8 @@ auto tResponderOneShot =
     auto launcher = FakeLauncher {};
     auto responder = Responder {makeSettings(dir, "gemini"), launcher.makeStart()};
 
-    responder.send({"first", {4}});
-    responder.send({"second", {5}});
+    responder.send({"first", {4}, {}});
+    responder.send({"second", {5}, {}});
     check(launcher.started.size() == 1);
     check(launcher.started.front()->launch.arguments.back() == "first");
     check(launcher.started.front()->written.empty());
@@ -486,7 +487,7 @@ auto tResponderLog =
     auto launcher = FakeLauncher {};
     auto responder = Responder {makeSettings(dir), launcher.makeStart()};
 
-    responder.send({"first", {4}});
+    responder.send({"first", {4}, {}});
     writeOutput(dir, claudeInit);
     responder.poll();
 
@@ -506,8 +507,8 @@ auto tResponderReadsOutputByOffset =
     auto launcher = FakeLauncher {};
     auto responder = Responder {makeSettings(dir), launcher.makeStart()};
 
-    responder.send({"first", {4}});
-    responder.send({"second", {5}});
+    responder.send({"first", {4}, {}});
+    responder.send({"second", {5}, {}});
     responder.poll();
     check(responder.findActivities().front().commentThread == 4);
 
@@ -529,8 +530,8 @@ auto tResponderFinishes =
     auto launcher = FakeLauncher {};
     auto responder = Responder {makeSettings(dir), launcher.makeStart()};
 
-    responder.send({"first", {4}});
-    responder.send({"second", {5}});
+    responder.send({"first", {4}, {}});
+    responder.send({"second", {5}, {}});
     responder.finish();
 
     auto& process = *launcher.started.front();
@@ -593,8 +594,8 @@ auto tResponderTypedMessage =
     check(typed.text == "what are you doing? \"now\"");
     check(typed.commentThreads.empty());
     check(describeMessageOrigin(typed) == "typed");
-    check(describeMessageOrigin({"round", {4, 5}}) == "#4 #5");
-    check(readMessageText(frameUserMessage(typed.text)) == typed.text);
+    check(describeMessageOrigin({"round", {4, 5}, {}}) == "#4 #5");
+    check(readMessageText(frameUserMessage(typed.text, {})) == typed.text);
 };
 
 auto tResponderTypedMessageStarts =
@@ -620,4 +621,53 @@ auto tResponderTypedMessageStarts =
 
     auto log = eacp::Files::readFile(dir / "dv.log");
     check(log.find("dv: sending typed: hello") != std::string::npos);
+};
+
+namespace
+{
+constexpr auto pastedPath = ".diffview/images/chat-1-1.png";
+constexpr auto pastedPng = "\x89PNG bytes";
+} // namespace
+
+auto tResponderImageBlocks =
+    test("Responder/a message's images follow its text as base64 PNG blocks") = []
+{
+    auto line = frameUserMessage("look", {pastedPng});
+    auto event = Miro::Json::getParsedValue(line);
+    const auto& content = getField(getField(event, "message"), "content");
+
+    check(content.isArray() && content.asArray().size() == 2);
+    check(readMessageText(line) == "look");
+
+    const auto& image = content.asArray().back();
+    const auto& source = getField(image, "source");
+    check(getString(image, "type") == "image");
+    check(getString(source, "type") == "base64");
+    check(getString(source, "media_type") == "image/png");
+    check(getString(source, "data") == eacp::Base64::encode(pastedPng));
+};
+
+auto tResponderTypedMessageImages = test(
+    "Responder/a typed message sends the images it links, read when it goes") = []
+{
+    auto dir = makeEmptyDirectory("ResponderTypedMessageImages");
+    auto settings = makeSettings(dir);
+    settings.workingDirectory = dir.str();
+    writeText(dir / pastedPath, pastedPng);
+    auto launcher = FakeLauncher {};
+    auto responder = Responder {settings, launcher.makeStart()};
+
+    auto typed = std::string {"see ![image]("} + pastedPath + ")";
+    auto message = makeTypedResponderMessage(typed);
+    check(message.imagePaths == std::vector<std::string> {pastedPath});
+
+    responder.send(message);
+
+    const auto& written = launcher.started.front()->written;
+    check(readMessageText(written) == typed);
+    check(written.find(eacp::Base64::encode(pastedPng)) != std::string::npos);
+
+    writeOutput(dir, claudeInit + makeEcho(typed) + claudeResult);
+    responder.poll();
+    check(responder.findActivities().empty());
 };

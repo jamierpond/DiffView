@@ -18,9 +18,8 @@ std::string makeRelative(const std::string& path, const std::string& worktree)
 
     return path;
 }
-} // namespace
 
-std::string joinTextBlocks(const Miro::Json::Value& content)
+std::string joinBlocks(const Miro::Json::Value& content, bool shouldMarkImages)
 {
     if (content.isString())
         return content.asString();
@@ -35,7 +34,7 @@ std::string joinTextBlocks(const Miro::Json::Value& content)
         auto type = getString(block, "type");
         auto said = type == "text" ? getString(block, "text") : std::string {};
 
-        if (type == "image")
+        if (type == "image" && shouldMarkImages)
             said = "[Image]";
 
         if (said.empty())
@@ -48,6 +47,17 @@ std::string joinTextBlocks(const Miro::Json::Value& content)
     }
 
     return joined;
+}
+} // namespace
+
+std::string joinTextBlocks(const Miro::Json::Value& content)
+{
+    return joinBlocks(content, true);
+}
+
+std::string joinOnlyTextBlocks(const Miro::Json::Value& content)
+{
+    return joinBlocks(content, false);
 }
 
 const Value& getField(const Value& value, std::string_view key)

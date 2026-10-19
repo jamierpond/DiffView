@@ -159,6 +159,34 @@ Element renderToolCallText(const std::string& call)
     return hbox({text(call.substr(0, open)) | bold, text(call.substr(open))});
 }
 
+// A pasted image's markdown link shows as "[image <path>]", dim.
+Element renderPromptText(const std::string& prompt)
+{
+    constexpr auto linkOpen = std::string_view {"![image]("};
+    constexpr auto linkClose = ')';
+    auto parts = Elements {};
+    auto start = std::size_t {0};
+
+    for (auto at = prompt.find(linkOpen); at != std::string::npos;
+         at = prompt.find(linkOpen, start))
+    {
+        auto pathStart = at + linkOpen.size();
+        auto close = prompt.find(linkClose, pathStart);
+
+        if (close == std::string::npos)
+            break;
+
+        parts.push_back(text(prompt.substr(start, at - start)));
+        parts.push_back(
+            text("[image " + prompt.substr(pathStart, close - pathStart) + "]")
+            | dim);
+        start = close + 1;
+    }
+
+    parts.push_back(text(prompt.substr(start)));
+    return hbox(std::move(parts));
+}
+
 Element cursorLine(Element line, bool focused)
 {
     return line | bgcolor(focused ? Color::RGB(58, 62, 84) : Color::RGB(40, 42, 54));
@@ -428,10 +456,10 @@ Element Viewer::renderTranscriptRow(const TranscriptRow& row, int width)
         case TranscriptRowStyle::blank:
             return text("");
         case TranscriptRowStyle::prompt:
-            return hbox({margin,
-                         hbox({text(lead) | dim, text(row.text), filler()})
-                             | size(WIDTH, EQUAL, width)
-                             | bgcolor(userPromptBackground)});
+            return hbox(
+                {margin,
+                 hbox({text(lead) | dim, renderPromptText(row.text), filler()})
+                     | size(WIDTH, EQUAL, width) | bgcolor(userPromptBackground)});
         case TranscriptRowStyle::text:
             return hbox({margin, text(lead), text(row.text)});
         case TranscriptRowStyle::thinking:
@@ -456,10 +484,10 @@ Element Viewer::renderTranscriptRow(const TranscriptRow& row, int width)
         case TranscriptRowStyle::failedResult:
             return hbox({margin, text(lead + row.text) | color(Color::Red)});
         case TranscriptRowStyle::queuedPrompt:
-            return hbox({margin,
-                         hbox({text(lead) | dim, text(row.text) | dim, filler()})
-                             | size(WIDTH, EQUAL, width)
-                             | bgcolor(userPromptBackground)});
+            return hbox(
+                {margin,
+                 hbox({text(lead) | dim, renderPromptText(row.text) | dim, filler()})
+                     | size(WIDTH, EQUAL, width) | bgcolor(userPromptBackground)});
         case TranscriptRowStyle::working:
             return hbox({margin, text(lead + row.text) | color(claudeOrange)});
     }

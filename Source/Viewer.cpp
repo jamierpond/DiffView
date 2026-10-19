@@ -452,7 +452,7 @@ void Viewer::deliverNewRounds()
                                             routeRound(round, name, everyone),
                                             name);
         responder->send(
-            {makeResponderMessage(notice, name), route.responderCommentThreads});
+            {makeResponderMessage(notice, name), route.responderCommentThreads, {}});
     }
 
     for (const auto& typed: std::exchange(typedAwaitingResponder, {}))

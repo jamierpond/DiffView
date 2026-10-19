@@ -34,6 +34,16 @@ constexpr auto maxKeptSubagentEntries = std::size_t {500};
 
 using ToolCallAction = std::function<void(TranscriptEntry&)>;
 
+// dv's typed messages carry their pasted images as markdown links in the text
+// and as image blocks; the links say it, so the blocks are left out.
+std::string readTypedPrompt(const Value& content)
+{
+    if (auto typed = trim(joinOnlyTextBlocks(content)); !typed.empty())
+        return typed;
+
+    return trim(joinTextBlocks(content));
+}
+
 TranscriptEntry makeEntry(TranscriptEntryKind kind, std::string text = {})
 {
     auto entry = TranscriptEntry {};
@@ -626,7 +636,7 @@ void Transcript::readLine(std::string_view line)
 
     if (type == "user")
     {
-        auto prompt = trim(joinTextBlocks(content));
+        auto prompt = readTypedPrompt(content);
 
         if (prompt.empty())
             return;

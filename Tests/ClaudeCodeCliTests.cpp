@@ -146,4 +146,7 @@ auto tClaudeCodeEcho =
         R"({"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"t1","content":"hi"}]}})",
         "hi"));
     check(!cli.isEchoOf(R"({"type":"result"})", ""));
+    check(cli.isEchoOf(
+        R"json({"type":"user","message":{"content":[{"type":"text","text":"see ![image](.diffview/images/chat-1-1.png)"},{"type":"image","source":{"type":"base64","media_type":"image/png","data":"iVBO"}}]}})json",
+        "see ![image](.diffview/images/chat-1-1.png)"));
 };

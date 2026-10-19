@@ -56,6 +56,14 @@ ReviewFile readReviewOrEmpty(const eacp::FilePath& path);
 
 void writeText(const eacp::FilePath& path, std::string_view text);
 
+// Writes pasted PNG bytes into home's image directory as <stem>-<n>.png, the
+// first n not taken, and returns the path a comment links it by.
+std::string writePastedImage(const eacp::FilePath& home,
+                             const std::string& stem,
+                             std::string_view png);
+
+std::string makeImageLink(const std::string& path);
+
 // eacp's Files only reads whole files.
 std::string readFileFromByteOffset(const eacp::FilePath& path, std::uint64_t offset);
 
