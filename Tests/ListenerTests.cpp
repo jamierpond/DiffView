@@ -56,6 +56,30 @@ auto tRegistrationReadsBack = test("Listener/a registration reads back") = []
     check(parseListenerRegistration("pid 7\nstarted x\nresponder\n").isResponder);
 };
 
+auto tRegistrationInboxReadsBack =
+    test("Listener/a registration's inbox socket and token read back") = []
+{
+    auto registration = makeBusyAgent();
+    registration.inbox = {"/tmp/run dir/cc-socks/42.sock", "08897a020b8f"};
+    auto text = formatListenerRegistration(registration);
+    auto parsed = parseListenerRegistration(text);
+
+    check(text.find("inbox /tmp/run dir/cc-socks/42.sock\n") != std::string::npos);
+    check(text.find("inbox-token 08897a020b8f\n") != std::string::npos);
+    check(parsed.inbox.socketPath == "/tmp/run dir/cc-socks/42.sock");
+    check(parsed.inbox.token == "08897a020b8f");
+    check(parsed.agentPid == agentPid && parsed.isBusy);
+};
+
+auto tRegistrationWithoutInbox =
+    test("Listener/a registration without an inbox writes no inbox lines") = []
+{
+    auto text = formatListenerRegistration(makeBusyAgent());
+
+    check(text.find("inbox") == std::string::npos);
+    check(!hasInboxSocket(parseListenerRegistration(text).inbox));
+};
+
 auto tMonitorListens = test("Listener/a running monitor listens") = []
 {
     auto registration = makeBusyAgent();

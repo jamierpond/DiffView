@@ -11,6 +11,9 @@ using Miro::Json::Value;
 
 constexpr auto agentToolName = "Agent";
 constexpr auto preToolUseEvent = "PreToolUse";
+constexpr auto sessionStartEvent = "SessionStart";
+constexpr auto inboundSettingKey = "crossSessionInbound";
+constexpr auto acceptInbound = "accept";
 
 std::string quoteForShell(const std::string& text)
 {
@@ -25,6 +28,12 @@ std::string quoteForShell(const std::string& text)
     }
 
     return quoted + "'";
+}
+
+Value makeCommandHook(const std::string& command)
+{
+    return Value {
+        Object {{"type", Value {"command"}}, {"command", Value {command}}}};
 }
 } // namespace
 
@@ -49,15 +58,22 @@ std::optional<std::string> makeBackgroundAgentHookAnswer(std::string_view payloa
         Value {Object {{"hookSpecificOutput", Value {output}}}});
 }
 
-std::string makeBackgroundAgentHookSettings(const std::string& dvExecutable)
+std::string makeResponderSettings(const std::string& dvExecutable,
+                                  const std::string& responderName)
 {
-    auto command = quoteForShell(dvExecutable) + " hook "
-                   + std::string {backgroundAgentHookName};
-    auto hook = Object {{"type", Value {"command"}}, {"command", Value {command}}};
-    auto matcher = Object {{"matcher", Value {agentToolName}},
-                           {"hooks", Value {Array {Value {hook}}}}};
-    auto hooks = Object {{preToolUseEvent, Value {Array {Value {matcher}}}}};
+    auto dv = quoteForShell(dvExecutable) + " hook ";
+    auto backgroundAgent = dv + std::string {backgroundAgentHookName};
+    auto registerInbox = dv + std::string {registerInboxHookName} + " --as "
+                         + quoteForShell(responderName);
+    auto agentMatcher =
+        Object {{"matcher", Value {agentToolName}},
+                {"hooks", Value {Array {makeCommandHook(backgroundAgent)}}}};
+    auto sessionStart =
+        Object {{"hooks", Value {Array {makeCommandHook(registerInbox)}}}};
+    auto hooks = Object {{preToolUseEvent, Value {Array {Value {agentMatcher}}}},
+                         {sessionStartEvent, Value {Array {Value {sessionStart}}}}};
 
-    return Miro::Json::print(Value {Object {{"hooks", Value {hooks}}}});
+    return Miro::Json::print(Value {Object {
+        {inboundSettingKey, Value {acceptInbound}}, {"hooks", Value {hooks}}}});
 }
 } // namespace diffview

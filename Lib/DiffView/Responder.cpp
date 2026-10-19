@@ -173,6 +173,49 @@ std::string describeSendRoute(const SendRoute& route, const std::string& respond
     return text;
 }
 
+TypedMessageRoute routeTypedMessage(const std::string& typed,
+                                    const std::string& responder,
+                                    const std::vector<ListeningAgent>& listening)
+{
+    auto route = TypedMessageRoute {};
+
+    if (!typed.starts_with("@"))
+        return route;
+
+    auto nameEnd = typed.find_first_of(" \t\n");
+
+    if (nameEnd == std::string::npos)
+        return route;
+
+    auto name = typed.substr(1, nameEnd - 1);
+
+    if (!isAgentName(name) || name == responder)
+        return route;
+
+    route.agent = name;
+    route.text = trim(typed.substr(nameEnd));
+    auto found = std::find_if(listening.begin(),
+                              listening.end(),
+                              [&](const ListeningAgent& agent)
+                              { return agent.name == name; });
+
+    if (found == listening.end())
+    {
+        route.destination = TypedMessageDestination::unknownAgent;
+        return route;
+    }
+
+    if (!hasInboxSocket(found->inbox))
+    {
+        route.destination = TypedMessageDestination::agentWithoutInbox;
+        return route;
+    }
+
+    route.destination = TypedMessageDestination::agentInbox;
+    route.inbox = found->inbox;
+    return route;
+}
+
 std::string makeResponderMessage(const std::string& notice,
                                  const std::string& responder)
 {
@@ -247,7 +290,8 @@ void Responder::poll()
     if (!process)
         return;
 
-    readOutput();
+    if (readOutput() && !queue.empty())
+        postQueuedMessagesMidTurn();
 
     auto exitCode = process->findExitCode();
 
@@ -354,8 +398,14 @@ bool Responder::takeHasQueueChanged()
 
 void Responder::sendNext()
 {
-    if (failure || isInputClosed || current || queue.empty())
+    if (failure || isInputClosed || queue.empty())
         return;
+
+    if (current)
+    {
+        postQueuedMessagesMidTurn();
+        return;
+    }
 
     current = std::move(queue.front());
     queue.pop_front();
@@ -392,10 +442,48 @@ void Responder::writeMessage(const ResponderMessage& message)
     process->writeInput(frameUserMessage(message.text, pngImages));
 }
 
+// Only into a turn on the message in flight, so a posted message never starts
+// one ahead of it. Posted, it joins that turn: its threads are the turn's.
+void Responder::postQueuedMessagesMidTurn()
+{
+    if (!process || !current || !hasAgentEchoedCurrentMessage
+        || !hasStdinSession(settings.cli))
+        return;
+
+    auto inbox = settings.findInbox(process->getProcessId());
+
+    if (!inbox)
+        return;
+
+    while (!queue.empty())
+    {
+        const auto& message = queue.front();
+
+        // An inbox takes plain text only: images go on stdin, in order.
+        if (!message.imagePaths.empty())
+            return;
+
+        if (!settings.postToInbox(*inbox, message.text))
+        {
+            log("dv: couldn't post to its inbox " + inbox->socketPath
+                + "; the rest wait for its stdin");
+            return;
+        }
+
+        log("dv: posted mid-turn to its inbox " + describeMessageOrigin(message)
+            + ": " + message.text);
+        current->commentThreads.insert(current->commentThreads.end(),
+                                       message.commentThreads.begin(),
+                                       message.commentThreads.end());
+        queue.pop_front();
+        hasQueueChanged = true;
+    }
+}
+
 bool Responder::start(const std::string& prompt)
 {
-    auto arguments =
-        makeAgentArguments(settings.cli, settings.dvExecutable, sessionId, prompt);
+    auto arguments = makeAgentArguments(
+        settings.cli, settings.dvExecutable, settings.name, sessionId, prompt);
     isResuming = !sessionId.empty() && canResume(settings.cli);
     hasReportedActivity = false;
     partialLine.clear();
@@ -422,12 +510,12 @@ bool Responder::start(const std::string& prompt)
     return true;
 }
 
-void Responder::readOutput()
+bool Responder::readOutput()
 {
     auto text = readFileFromByteOffset(settings.outputPath, outputOffset);
 
     if (text.empty())
-        return;
+        return false;
 
     outputOffset += text.size();
     partialLine += text;
@@ -441,6 +529,7 @@ void Responder::readOutput()
     }
 
     partialLine.erase(0, start);
+    return true;
 }
 
 // Only a turn that took the message in flight answers it: one the CLI started

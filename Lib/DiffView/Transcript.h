@@ -39,8 +39,9 @@ struct TranscriptEntry
 };
 
 // What Claude Code's `--output-format stream-json --verbose` says, read as it
-// is written: the user's prompts (with --replay-user-messages), its text,
-// thinking, tool calls with their results, and each turn's result.
+// is written: the user's prompts (with --replay-user-messages) and messages
+// posted to its inbox, its text, thinking, tool calls with their results, and
+// each turn's result.
 // A subagent's messages (with --forward-subagent-text, its text and thinking
 // too) nest under the call that started it.
 class Transcript
@@ -55,6 +56,10 @@ public:
     // takes it, after any turn in flight.
     void addQueuedPrompt(const std::string& text);
 
+    // Sent to another agent's session, whose stream isn't this one: shown
+    // as a prompt at once.
+    void addSentPrompt(const std::string& text);
+
     const std::vector<TranscriptEntry>& getEntries() const;
     const std::vector<std::string>& getQueuedPrompts() const;
     bool isTurnOpen() const;
@@ -62,6 +67,7 @@ public:
 
 private:
     void readLine(std::string_view line);
+    void readPrompt(const std::string& prompt);
 
     std::string worktree;
     std::string partialLine;

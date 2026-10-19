@@ -105,6 +105,7 @@ bool hasStdinSession(const AgentCli& cli)
 
 std::vector<std::string> makeAgentArguments(const AgentCli& cli,
                                             const std::string& dvExecutable,
+                                            const std::string& responderName,
                                             const std::string& sessionId,
                                             const std::string& prompt)
 {
@@ -119,7 +120,8 @@ std::vector<std::string> makeAgentArguments(const AgentCli& cli,
         append({cli.resumeFlag, sessionId});
 
     if (!cli.settingsFlag.empty())
-        append({cli.settingsFlag, makeBackgroundAgentHookSettings(dvExecutable)});
+        append(
+            {cli.settingsFlag, makeResponderSettings(dvExecutable, responderName)});
 
     if (!cli.systemPromptFlag.empty())
         append({cli.systemPromptFlag, std::string {responderStandingOrders}});

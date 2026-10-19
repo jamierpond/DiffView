@@ -35,8 +35,8 @@ struct AgentCli
     std::string promptFlag;
     // Followed by the session id; empty when the CLI can't resume one by id.
     std::string resumeFlag;
-    // Followed by settings JSON whose hook backgrounds every subagent; empty
-    // when the CLI has no such hooks.
+    // Followed by makeResponderSettings' JSON; empty when the CLI has no such
+    // hooks.
     std::string settingsFlag;
     // Followed by responderStandingOrders; empty when the CLI can't take them.
     std::string systemPromptFlag;
@@ -74,9 +74,10 @@ bool hasStdinSession(const AgentCli& cli);
 
 // The command line starting the CLI headless: a stdin session, or one run on
 // `prompt` for a CLI without one; resuming `sessionId` when there is one. Its
-// subagent hook runs `dvExecutable`.
+// hooks run `dvExecutable`, registering its inbox as `responderName`.
 std::vector<std::string> makeAgentArguments(const AgentCli& cli,
                                             const std::string& dvExecutable,
+                                            const std::string& responderName,
                                             const std::string& sessionId,
                                             const std::string& prompt);
 } // namespace diffview

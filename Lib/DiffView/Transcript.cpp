@@ -586,6 +586,11 @@ void Transcript::addQueuedPrompt(const std::string& text)
     queuedPrompts.push_back(trim(text));
 }
 
+void Transcript::addSentPrompt(const std::string& text)
+{
+    addEntry(entries, makeEntry(TranscriptEntryKind::prompt, trim(text)));
+}
+
 const std::vector<std::string>& Transcript::getQueuedPrompts() const
 {
     return queuedPrompts;
@@ -606,9 +611,29 @@ bool Transcript::hasRunningSubagent() const
     return hasRunningSubagentIn(entries);
 }
 
+void Transcript::readPrompt(const std::string& prompt)
+{
+    if (prompt.empty())
+        return;
+
+    auto queued = std::find(queuedPrompts.begin(), queuedPrompts.end(), prompt);
+
+    if (queued != queuedPrompts.end())
+        queuedPrompts.erase(queued);
+
+    addEntry(entries, makeEntry(TranscriptEntryKind::prompt, prompt));
+    turnOpen = true;
+}
+
 void Transcript::readLine(std::string_view line)
 {
     auto event = Miro::Json::getParsedValue(line);
+
+    if (isPeerMessage(event))
+    {
+        readPrompt(trim(extractPeerMessageText(event)));
+        return;
+    }
 
     if (isSynthetic(event))
         return;
@@ -636,18 +661,7 @@ void Transcript::readLine(std::string_view line)
 
     if (type == "user")
     {
-        auto prompt = readTypedPrompt(content);
-
-        if (prompt.empty())
-            return;
-
-        auto queued = std::find(queuedPrompts.begin(), queuedPrompts.end(), prompt);
-
-        if (queued != queuedPrompts.end())
-            queuedPrompts.erase(queued);
-
-        addEntry(entries, makeEntry(TranscriptEntryKind::prompt, prompt));
-        turnOpen = true;
+        readPrompt(readTypedPrompt(content));
         return;
     }
 

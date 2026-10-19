@@ -21,7 +21,7 @@ int runMonitor(const StoreLayout& store, const MonitorOptions& options)
         seen = keepRoundsUpTo(seen, *options.after);
 
     if (!options.agent.empty())
-        registerAgent(root.str(), options.agent, options.agentPid);
+        registerAgent(root.str(), options.agent, options.agentPid, options.inbox);
 
     auto listening = std::vector<std::string> {};
 

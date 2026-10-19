@@ -1,5 +1,7 @@
 #pragma once
 
+#include "Inbox.h"
+
 #include <functional>
 #include <optional>
 #include <string>
@@ -11,7 +13,8 @@ namespace diffview
 // busy acting on what woke it, and still counts as listening while its CLI
 // process lives. The responder lists the UI's pid, marked as the responder,
 // and its CLI's: after the UI quits, the CLI finishes on its own and still
-// holds the responder until it ends.
+// holds the responder until it ends. An agent CLI with an inbox socket lists
+// it: dv posts to it rather than waiting on the agent.
 struct ListenerRegistration
 {
     int monitorPid = 0;
@@ -19,6 +22,8 @@ struct ListenerRegistration
     std::string started;
     bool isBusy = false;
     bool isResponder = false;
+    // The agent CLI process's, at agentPid.
+    InboxAddress inbox;
 };
 
 std::string formatListenerRegistration(const ListenerRegistration& registration);

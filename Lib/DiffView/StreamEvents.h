@@ -18,6 +18,14 @@ std::string joinTextBlocks(const Miro::Json::Value& content);
 // A message's text blocks, a line each; images left out.
 std::string joinOnlyTextBlocks(const Miro::Json::Value& content);
 
+// A user line Claude Code wrote for a message that came in on its inbox
+// socket, from another session or from dv.
+bool isPeerMessage(const Miro::Json::Value& event);
+
+// The text that was posted: one that started a turn comes wrapped in Claude
+// Code's note that another session sent it; one read mid-turn comes as is.
+std::string extractPeerMessageText(const Miro::Json::Value& event);
+
 // One short line: the first line of the text, cut with "…" if it runs on.
 std::string shortenSummary(std::string_view text);
 

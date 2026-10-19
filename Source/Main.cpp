@@ -6,6 +6,7 @@
 #include "Viewer.h"
 
 #include <Hooks.h>
+#include <Inbox.h>
 #include <Review.h>
 #include <Store.h>
 #include <Responder.h>
@@ -168,7 +169,12 @@ const std::map<std::string, std::string>& commandHelp()
          "JSON on stdin and runs every Agent call in the background, so the\n"
          "responder stays free to answer. dv passes it to the CLI itself.\n"
          "\n"
-         "usage: dv hook background-agent < payload.json\n"},
+         "register-inbox is its SessionStart hook: it records the session's\n"
+         "inbox socket (CLAUDE_CODE_MESSAGING_SOCKET) in the responder's\n"
+         "registration, so dv posts to it mid-turn.\n"
+         "\n"
+         "usage: dv hook background-agent < payload.json\n"
+         "       dv hook register-inbox --as <name> < payload.json\n"},
         {"help",
          "usage: dv help [<command>]\n"
          "\n"
@@ -273,6 +279,13 @@ std::string readEnvironment(const std::string& name)
     return value;
 }
 
+// What Claude Code gives its hooks and Bash commands.
+diffview::InboxAddress readInboxFromEnvironment()
+{
+    return {readEnvironment("CLAUDE_CODE_MESSAGING_SOCKET"),
+            readEnvironment("CLAUDE_CODE_MESSAGING_TOKEN")};
+}
+
 // As git reads ~/.config/git/config, then the repo's: the repo's wins.
 diffview::ResponderConfig readResponderConfig(const diffview::StoreLayout& store)
 {
@@ -327,11 +340,16 @@ int runCommand(const std::string& command, int argc, char* argv[])
 
     auto& positional = arguments.positional;
 
-    if (command == "hook")
+    auto isRegisterInboxHook =
+        command == "hook" && positional.size() == 1
+        && positional.front() == diffview::registerInboxHookName;
+
+    if (command == "hook" && !isRegisterInboxHook)
     {
         if (positional.size() != 1
             || positional.front() != diffview::backgroundAgentHookName)
-            return usageError("which hook? background-agent is the one", command);
+            return usageError("which hook? background-agent or register-inbox",
+                              command);
 
         return diffview::runBackgroundAgentHook(readStdin());
     }
@@ -368,6 +386,20 @@ int runCommand(const std::string& command, int argc, char* argv[])
 
     printMergeNotes(diffview::mergeWorktreeStores(*store));
 
+    if (isRegisterInboxHook)
+    {
+        if (agent.empty())
+            return usageError("whose inbox? give --as <name>", command);
+
+        readStdin();
+        return diffview::runRegisterInboxHook(
+            *store,
+            agent,
+            diffview::findAgentCliAncestor(static_cast<int>(getppid()),
+                                           diffview::readProcessInfo),
+            readInboxFromEnvironment());
+    }
+
     if (command == "monitor")
     {
         if (!positional.empty())
@@ -389,6 +421,7 @@ int runCommand(const std::string& command, int argc, char* argv[])
         options.agent = agent;
         options.agentPid = diffview::findAgentCliAncestor(
             static_cast<int>(getppid()), diffview::readProcessInfo);
+        options.inbox = readInboxFromEnvironment();
 
         if (arguments.values.contains("after"))
             options.after = arguments.values["after"];
@@ -507,6 +540,7 @@ int main(int argc, char* argv[])
     options.readResponderConfig = [store = *store]
     { return readResponderConfig(store); };
     options.startAgentProcess = diffview::startPipedAgentProcess;
+    options.postToInbox = diffview::postToInbox;
 
     // A write to a responder that just died must not take dv with it.
     std::signal(SIGPIPE, SIG_IGN);

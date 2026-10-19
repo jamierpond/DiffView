@@ -284,4 +284,24 @@ int runBackgroundAgentHook(const std::string& payload)
 
     return 0;
 }
+
+int runRegisterInboxHook(const StoreLayout& store,
+                         const std::string& agent,
+                         std::optional<int> agentPid,
+                         const InboxAddress& inbox)
+{
+    if (!hasInboxSocket(inbox))
+    {
+        std::fputs("dv: no CLAUDE_CODE_MESSAGING_SOCKET: messages wait for stdin\n",
+                   stderr);
+        return 0;
+    }
+
+    if (!recordAgentInbox(store.directory.str(), agent, agentPid, inbox))
+        std::fprintf(stderr,
+                     "dv: @%s isn't registered: its inbox isn't kept\n",
+                     agent.c_str());
+
+    return 0;
+}
 } // namespace diffview

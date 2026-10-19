@@ -44,12 +44,14 @@ std::optional<std::string> summariseAssistant(const Value& event,
 
 // With --replay-user-messages, a stdin message comes back as a user line when
 // it takes it, after any turn in flight. Its image blocks aren't in `sent`.
+// A message posted to its inbox comes back too, but it is never the one on
+// stdin.
 bool isClaudeEchoOf(std::string_view line, const std::string& sent)
 {
     auto event = Miro::Json::getParsedValue(line);
 
     if (getString(event, "type") != "user"
-        || !getString(event, "parent_tool_use_id").empty())
+        || !getString(event, "parent_tool_use_id").empty() || isPeerMessage(event))
         return false;
 
     const auto& content = getField(getField(event, "message"), "content");

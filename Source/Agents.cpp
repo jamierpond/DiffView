@@ -67,13 +67,15 @@ auto registeredAgent = ListenerRegistration {};
 
 void registerAgent(const std::string& store,
                    const std::string& name,
-                   std::optional<int> agentPid)
+                   std::optional<int> agentPid,
+                   const InboxAddress& inbox)
 {
     createStoreDirectory(store);
     auto path = makeRegistrationPath(store, name).string();
     std::snprintf(registered.data(), registered.size(), "%s", path.c_str());
     registeredAgent = makeRegistration();
     registeredAgent.agentPid = agentPid.value_or(0);
+    registeredAgent.inbox = inbox;
     writeRegistration(path, registeredAgent);
 
     for (auto signal: {SIGINT, SIGTERM, SIGHUP, SIGPIPE})
@@ -110,10 +112,17 @@ void registerResponder(const std::string& store,
                        std::optional<int> agentPid)
 {
     createStoreDirectory(store);
+    auto path = makeRegistrationPath(store, name);
     auto registration = makeRegistration();
     registration.isResponder = true;
     registration.agentPid = agentPid.value_or(0);
-    writeRegistration(makeRegistrationPath(store, name), registration);
+    auto previous = readRegistration(path);
+
+    // Its session-start hook can beat this to the file.
+    if (agentPid && previous.agentPid == *agentPid)
+        registration.inbox = previous.inbox;
+
+    writeRegistration(path, registration);
 }
 
 void unregisterResponder(const std::string& store, const std::string& name)
@@ -122,6 +131,40 @@ void unregisterResponder(const std::string& store, const std::string& name)
 
     if (readListenerProcessId(path) == static_cast<int>(getpid()))
         unlink(path.c_str());
+}
+
+bool recordAgentInbox(const std::string& store,
+                      const std::string& name,
+                      std::optional<int> agentPid,
+                      const InboxAddress& inbox)
+{
+    auto path = std::filesystem::path {store} / agentDirectory / name;
+    auto lock = StoreLock {eacp::FilePath {store}};
+
+    if (!eacp::Files::exists(eacp::FilePath {path.string()}))
+        return false;
+
+    auto registration = readRegistration(path);
+
+    if (agentPid)
+        registration.agentPid = *agentPid;
+
+    registration.inbox = inbox;
+    writeRegistration(path, registration);
+    return true;
+}
+
+std::optional<InboxAddress> findAgentProcessInbox(const std::string& store,
+                                                  const std::string& name,
+                                                  int agentPid)
+{
+    auto registration =
+        readRegistration(std::filesystem::path {store} / agentDirectory / name);
+
+    if (registration.agentPid != agentPid || !hasInboxSocket(registration.inbox))
+        return std::nullopt;
+
+    return registration.inbox;
 }
 
 bool isRunningResponder(const std::string& store, const std::string& name)
@@ -154,6 +197,20 @@ std::vector<std::string> findListeningAgents(const std::string& store)
 
     std::sort(names.begin(), names.end());
     return names;
+}
+
+std::vector<ListeningAgent> listListeningAgentsWithInboxes(const std::string& store)
+{
+    auto agents = std::vector<ListeningAgent> {};
+
+    for (auto& name: findListeningAgents(store))
+    {
+        auto registration =
+            readRegistration(std::filesystem::path {store} / agentDirectory / name);
+        agents.push_back({std::move(name), registration.inbox});
+    }
+
+    return agents;
 }
 
 std::optional<int> findListenerProcessId(const std::string& store,

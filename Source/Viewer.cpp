@@ -310,13 +310,57 @@ void Viewer::toggleSubagentBlockInView()
     say("No subagent here");
 }
 
-// Through the same path as a round: it waits for a finishing responder, and
-// starts one (resuming its session) when none is running.
+// To the responder through the same path as a round: it waits for a
+// finishing responder, and starts one (resuming its session) when none is
+// running. "@name " sends it to that agent's inbox instead.
 void Viewer::sendTypedMessage(const std::string& text)
 {
-    typedAwaitingResponder.push_back(text);
+    auto responderName =
+        responder ? responder->getName() : options.readResponderConfig().name;
+    auto route = routeTypedMessage(
+        text, responderName, listListeningAgentsWithInboxes(store.directory.str()));
+
+    switch (route.destination)
+    {
+        case TypedMessageDestination::responder:
+            typedAwaitingResponder.push_back(text);
+            followTranscript();
+            deliverNewRounds();
+            return;
+
+        case TypedMessageDestination::agentInbox:
+            postTypedMessageToAgent(route, text);
+            return;
+
+        case TypedMessageDestination::agentWithoutInbox:
+            say("@" + route.agent
+                + " has no inbox socket (its dv monitor predates it, or its CLI "
+                  "isn't Claude Code): nothing sent");
+            return;
+
+        case TypedMessageDestination::unknownAgent:
+            say("No agent @" + route.agent + " is listening: nothing sent");
+            return;
+    }
+}
+
+void Viewer::postTypedMessageToAgent(const TypedMessageRoute& route,
+                                     const std::string& text)
+{
+    if (!options.postToInbox(route.inbox, route.text))
+    {
+        say("Couldn't reach @" + route.agent + "'s inbox " + route.inbox.socketPath
+            + ": nothing sent");
+        return;
+    }
+
+    if (!transcript)
+        readTranscriptTail();
+
+    transcript->addSentPrompt(text);
+    isTranscriptLayoutDirty = true;
     followTranscript();
-    deliverNewRounds();
+    say("Sent to @" + route.agent + "'s session inbox");
 }
 
 void Viewer::pollActivities(std::int64_t now)
@@ -508,13 +552,17 @@ bool Viewer::claimResponder(const ResponderConfig& config)
         return process;
     };
     responder.emplace(
-        ResponderSettings {config.name,
-                           getAgentCli(config.agentCli),
-                           store.home.str(),
-                           files / (config.name + ".log"),
-                           files / (config.name + responderOutputExtension),
-                           files / (config.name + ".session"),
-                           findDvExecutable()},
+        ResponderSettings {
+            config.name,
+            getAgentCli(config.agentCli),
+            store.home.str(),
+            files / (config.name + ".log"),
+            files / (config.name + responderOutputExtension),
+            files / (config.name + ".session"),
+            findDvExecutable(),
+            [this, name = config.name](int agentPid)
+            { return findAgentProcessInbox(store.directory.str(), name, agentPid); },
+            options.postToInbox},
         startAndRegister);
     listening = findListeningAgents(directory.str());
     return true;

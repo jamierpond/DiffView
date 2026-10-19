@@ -335,6 +335,39 @@ auto tTranscriptQueuedPromptWithImage =
     check(transcript.getEntries().back().text == typed);
 };
 
+// As Claude Code 2.1.303 wrote them: posted to an idle session, and mid-turn.
+auto tTranscriptPeerPrompt =
+    test("Transcript/a message posted to its inbox is a prompt, unwrapped") = []
+{
+    auto startedTurn = std::string {
+        R"({"type":"user","message":{"role":"user","content":"Another Claude session sent a message:\nReply with PINEAPPLE.\n\nThis came from another Claude session \u2014 not typed by your user."},"parent_tool_use_id":null,"isReplay":true,"isSynthetic":true,"origin":{"kind":"peer","from":"unknown","verifiedPeerPid":43892}})"
+        "\n"};
+    auto midTurn = std::string {
+        R"({"type":"user","message":{"role":"user","content":"Also say MANGO."},"parent_tool_use_id":null,"isReplay":true,"isSynthetic":true,"origin":{"kind":"peer","from":"unknown","verifiedPeerPid":46462}})"
+        "\n"};
+    auto transcript = makeTranscript({});
+    transcript.addQueuedPrompt("Also say MANGO.");
+    transcript.append(startedTurn + toolCall + midTurn);
+    const auto& entries = transcript.getEntries();
+
+    check(entries.size() == 3);
+    check(entries[0].kind == TranscriptEntryKind::prompt
+          && entries[0].text == "Reply with PINEAPPLE.");
+    check(entries[2].kind == TranscriptEntryKind::prompt
+          && entries[2].text == "Also say MANGO.");
+    check(transcript.getQueuedPrompts().empty());
+};
+
+auto tTranscriptSentPrompt =
+    test("Transcript/a prompt sent to another agent shows at once") = []
+{
+    auto transcript = makeTranscript(prompt);
+    transcript.addSentPrompt("@ops rebase on main ");
+
+    check(transcript.getEntries().back().kind == TranscriptEntryKind::prompt);
+    check(transcript.getEntries().back().text == "@ops rebase on main");
+};
+
 auto tTranscriptSubagentNested =
     test("Transcript/a subagent's run nests under its Agent call") = []
 {

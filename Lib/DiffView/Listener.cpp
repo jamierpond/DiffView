@@ -12,6 +12,15 @@ constexpr auto agentPidKey = std::string_view {"agent-pid"};
 constexpr auto startedKey = std::string_view {"started"};
 constexpr auto busyWord = std::string_view {"busy"};
 constexpr auto responderWord = std::string_view {"responder"};
+constexpr auto inboxKey = std::string_view {"inbox"};
+constexpr auto inboxTokenKey = std::string_view {"inbox-token"};
+
+std::string readRestOfLine(std::istringstream& in)
+{
+    auto rest = std::string {};
+    std::getline(in >> std::ws, rest);
+    return rest;
+}
 } // namespace
 
 std::string formatListenerRegistration(const ListenerRegistration& registration)
@@ -30,6 +39,12 @@ std::string formatListenerRegistration(const ListenerRegistration& registration)
 
     if (registration.isResponder)
         text += std::string {responderWord} + "\n";
+
+    if (hasInboxSocket(registration.inbox))
+        text += std::string {inboxKey} + " " + registration.inbox.socketPath + "\n";
+
+    if (!registration.inbox.token.empty())
+        text += std::string {inboxTokenKey} + " " + registration.inbox.token + "\n";
 
     return text;
 }
@@ -54,6 +69,10 @@ ListenerRegistration parseListenerRegistration(const std::string& text)
             registration.isBusy = true;
         else if (key == responderWord)
             registration.isResponder = true;
+        else if (key == inboxKey)
+            registration.inbox.socketPath = readRestOfLine(in);
+        else if (key == inboxTokenKey)
+            registration.inbox.token = readRestOfLine(in);
     }
 
     return registration;

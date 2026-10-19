@@ -1,7 +1,9 @@
 #pragma once
 
+#include <Inbox.h>
 #include <Store.h>
 
+#include <optional>
 #include <string>
 
 namespace diffview
@@ -41,4 +43,11 @@ int runShow(const StoreLayout& store, int id);
 
 // Claude Code runs it before each Agent call: the payload is the hook's stdin.
 int runBackgroundAgentHook(const std::string& payload);
+
+// Claude Code runs it as the responder's session starts. It never fails the
+// start: what goes wrong goes to stderr.
+int runRegisterInboxHook(const StoreLayout& store,
+                         const std::string& agent,
+                         std::optional<int> agentPid,
+                         const InboxAddress& inbox);
 } // namespace diffview

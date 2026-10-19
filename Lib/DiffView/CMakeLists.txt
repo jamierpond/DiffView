@@ -10,6 +10,7 @@ add_library(DiffViewCore STATIC
         GeminiCli.cpp
         Git.cpp
         Hooks.cpp
+        Inbox.cpp
         Keymap.cpp
         Listener.cpp
         Responder.cpp
@@ -22,9 +23,9 @@ add_library(DiffViewCore STATIC
         Transcript.cpp)
 
 if (APPLE)
-    target_sources(DiffViewCore PRIVATE AgentProcess-macOS.mm)
+    target_sources(DiffViewCore PRIVATE AgentProcess-macOS.mm Inbox-macOS.mm)
 elseif (WIN32)
-    target_sources(DiffViewCore PRIVATE AgentProcess-Windows.cpp)
+    target_sources(DiffViewCore PRIVATE AgentProcess-Windows.cpp Inbox-Windows.cpp)
 endif ()
 
 target_include_directories(DiffViewCore PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})

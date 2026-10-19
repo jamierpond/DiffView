@@ -260,7 +260,7 @@ auto tResponderOneProcess =
     auto& process = *launcher.started.front();
     check(process.launch.workingDirectory == "/r/main");
     check(process.launch.arguments
-          == makeAgentArguments(getAgentCli("claude"), dvExecutable, {}, {}));
+          == makeAgentArguments(getAgentCli("claude"), dvExecutable, "dv", {}, {}));
     check(readMessageText(process.written) == "first");
 
     check(responder.countQueuedMessages() == 0);
@@ -379,9 +379,9 @@ auto tResponderResumes =
     auto responder = Responder {makeSettings(dir), launcher.makeStart()};
     responder.send({"again", {4}, {}});
     check(launcher.started.size() == 2);
-    check(
-        launcher.started.back()->launch.arguments
-        == makeAgentArguments(getAgentCli("claude"), dvExecutable, "session-1", {}));
+    check(launcher.started.back()->launch.arguments
+          == makeAgentArguments(
+              getAgentCli("claude"), dvExecutable, "dv", "session-1", {}));
 };
 
 auto tResponderFailedResume =
@@ -402,7 +402,7 @@ auto tResponderFailedResume =
 
     check(launcher.started.size() == 2);
     check(launcher.started.back()->launch.arguments
-          == makeAgentArguments(getAgentCli("claude"), dvExecutable, {}, {}));
+          == makeAgentArguments(getAgentCli("claude"), dvExecutable, "dv", {}, {}));
     check(readMessageText(launcher.started.back()->written) == "first");
     check(!eacp::Files::exists(dir / "dv.session"));
     check(responder.takeNotices().empty() && !responder.getFailure());
@@ -455,9 +455,9 @@ auto tResponderIdleCrash =
 
     check(launcher.started.size() == 2 && responder.isRunning());
     check(launcher.started.back()->written.empty());
-    check(
-        launcher.started.back()->launch.arguments
-        == makeAgentArguments(getAgentCli("claude"), dvExecutable, "session-1", {}));
+    check(launcher.started.back()->launch.arguments
+          == makeAgentArguments(
+              getAgentCli("claude"), dvExecutable, "dv", "session-1", {}));
 };
 
 auto tResponderOneShot =
@@ -670,4 +670,165 @@ auto tResponderTypedMessageImages = test(
     writeOutput(dir, claudeInit + makeEcho(typed) + claudeResult);
     responder.poll();
     check(responder.findActivities().empty());
+};
+
+namespace
+{
+const auto responderInbox = InboxAddress {"/tmp/cc-socks/1000.sock", "token"};
+
+struct FakeInbox
+{
+    std::vector<std::string> posted;
+    bool isListening = true;
+};
+
+ResponderSettings makeSettingsWithInbox(const eacp::FilePath& dir, FakeInbox& inbox)
+{
+    auto settings = makeSettings(dir);
+    settings.findInbox = [](int agentPid) -> std::optional<InboxAddress>
+    {
+        if (agentPid != firstFakePid)
+            return std::nullopt;
+
+        return responderInbox;
+    };
+    settings.postToInbox =
+        [&inbox](const InboxAddress& address, const std::string& text)
+    {
+        if (!inbox.isListening || address.socketPath != responderInbox.socketPath)
+            return false;
+
+        inbox.posted.push_back(text);
+        return true;
+    };
+    return settings;
+}
+} // namespace
+
+auto tResponderPostsMidTurn =
+    test("Responder/mid-turn a message goes to its inbox, not behind the turn") = []
+{
+    auto dir = makeEmptyDirectory("ResponderPostsMidTurn");
+    auto launcher = FakeLauncher {};
+    auto inbox = FakeInbox {};
+    auto responder =
+        Responder {makeSettingsWithInbox(dir, inbox), launcher.makeStart()};
+
+    responder.send({"first", {4}});
+    responder.send({"second", {5}});
+    check(inbox.posted.empty());
+    check(responder.countQueuedMessages() == 1);
+
+    writeOutput(dir, claudeInit + makeEcho("first"));
+    responder.poll();
+    check(inbox.posted == std::vector<std::string> {"second"});
+    check(responder.countQueuedMessages() == 0);
+    check(responder.findActivities().size() == 2);
+
+    responder.send(makeTypedResponderMessage("third"));
+    check(inbox.posted.back() == "third");
+
+    auto& process = *launcher.started.front();
+    check(process.written.find("second") == std::string::npos);
+    check(process.written.find("third") == std::string::npos);
+
+    writeOutput(dir, claudeResult);
+    responder.poll();
+    check(responder.findActivities().empty());
+
+    auto log = eacp::Files::readFile(dir / "dv.log");
+    check(log.find("dv: posted mid-turn to its inbox #5: second")
+          != std::string::npos);
+};
+
+auto tResponderIdleUsesStdin =
+    test("Responder/with no turn in flight a message still goes to stdin") = []
+{
+    auto dir = makeEmptyDirectory("ResponderIdleUsesStdin");
+    auto launcher = FakeLauncher {};
+    auto inbox = FakeInbox {};
+    auto responder =
+        Responder {makeSettingsWithInbox(dir, inbox), launcher.makeStart()};
+
+    responder.send({"first", {4}});
+    writeOutput(dir, claudeInit + makeEcho("first") + claudeResult);
+    responder.poll();
+    responder.send({"second", {5}});
+
+    check(inbox.posted.empty());
+    check(launcher.started.front()->written.find("second") != std::string::npos);
+};
+
+auto tResponderInboxFallsBackToStdin =
+    test("Responder/without a reachable inbox a message waits for stdin") = []
+{
+    auto dir = makeEmptyDirectory("ResponderInboxFallsBack");
+    auto launcher = FakeLauncher {};
+    auto inbox = FakeInbox {};
+    inbox.isListening = false;
+    auto responder =
+        Responder {makeSettingsWithInbox(dir, inbox), launcher.makeStart()};
+
+    responder.send({"first", {4}});
+    writeOutput(dir, claudeInit + makeEcho("first"));
+    responder.poll();
+    responder.send({"second", {5}});
+    check(responder.countQueuedMessages() == 1);
+
+    writeOutput(dir, claudeResult);
+    responder.poll();
+    check(responder.countQueuedMessages() == 0);
+    check(launcher.started.front()->written.find("second") != std::string::npos);
+};
+
+auto tResponderPostedEchoIsNotStdins =
+    test("Responder/a posted message's echo doesn't stand for the stdin one") = []
+{
+    auto dir = makeEmptyDirectory("ResponderPostedEcho");
+    auto launcher = FakeLauncher {};
+    auto responder = Responder {makeSettings(dir), launcher.makeStart()};
+    const auto peerEcho = std::string {
+        R"({"type":"user","message":{"role":"user","content":"first"},"isSynthetic":true,"origin":{"kind":"peer","from":"unknown"}})"};
+
+    responder.send({"first", {4}});
+    responder.send({"second", {5}});
+    writeOutput(dir, claudeInit + peerEcho + "\n" + claudeResult);
+    responder.poll();
+    check(responder.findActivities().front().commentThread == 4);
+};
+
+auto tRouteTypedToResponder =
+    test("Responder/a typed message without @name, or @ the responder, is its") = []
+{
+    auto listening = std::vector<ListeningAgent> {{"ops", responderInbox}};
+
+    check(routeTypedMessage("fix it", "dv", listening).destination
+          == TypedMessageDestination::responder);
+    check(routeTypedMessage("@dv fix it", "dv", listening).destination
+          == TypedMessageDestination::responder);
+    check(routeTypedMessage("@ops", "dv", listening).destination
+          == TypedMessageDestination::responder);
+    check(routeTypedMessage("email@ops fix", "dv", listening).destination
+          == TypedMessageDestination::responder);
+};
+
+auto tRouteTypedToAgent =
+    test("Responder/a typed @name goes to that listening agent's inbox") = []
+{
+    auto listening =
+        std::vector<ListeningAgent> {{"ops", responderInbox}, {"quiet", {}}};
+    auto toOps =
+        routeTypedMessage("@ops rebase on main\nthen test", "dv", listening);
+
+    check(toOps.destination == TypedMessageDestination::agentInbox);
+    check(toOps.agent == "ops");
+    check(toOps.text == "rebase on main\nthen test");
+    check(toOps.inbox.socketPath == responderInbox.socketPath);
+
+    auto toQuiet = routeTypedMessage("@quiet hi", "dv", listening);
+    check(toQuiet.destination == TypedMessageDestination::agentWithoutInbox);
+
+    auto toNobody = routeTypedMessage("@ghost hi", "dv", listening);
+    check(toNobody.destination == TypedMessageDestination::unknownAgent);
+    check(toNobody.agent == "ghost");
 };

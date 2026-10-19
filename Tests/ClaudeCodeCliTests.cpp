@@ -10,6 +10,7 @@ namespace
 {
 constexpr auto worktree = "/r/main";
 constexpr auto dvExecutable = "/bin/dv";
+constexpr auto responderName = "dv";
 
 std::string makeToolUse(const std::string& name, const std::string& input)
 {
@@ -40,19 +41,22 @@ auto tClaudeCodeCommand =
                               "--replay-user-messages"};
     auto responderArguments =
         Arguments {"--settings",
-                   makeBackgroundAgentHookSettings(dvExecutable),
+                   makeResponderSettings(dvExecutable, responderName),
                    "--append-system-prompt",
                    std::string {responderStandingOrders}};
     auto fresh = session;
     fresh.insert(fresh.end(), responderArguments.begin(), responderArguments.end());
 
     check(hasStdinSession(cli) && canResume(cli));
-    check(makeAgentArguments(cli, dvExecutable, {}, "ignored") == fresh);
+    check(makeAgentArguments(cli, dvExecutable, responderName, {}, "ignored")
+          == fresh);
 
     session.insert(session.end(), {"--resume", "session-1"});
     session.insert(
         session.end(), responderArguments.begin(), responderArguments.end());
-    check(makeAgentArguments(cli, dvExecutable, "session-1", "ignored") == session);
+    check(
+        makeAgentArguments(cli, dvExecutable, responderName, "session-1", "ignored")
+        == session);
 };
 
 auto tClaudeCodeStandingOrders = test(
@@ -149,4 +153,7 @@ auto tClaudeCodeEcho =
     check(cli.isEchoOf(
         R"json({"type":"user","message":{"content":[{"type":"text","text":"see ![image](.diffview/images/chat-1-1.png)"},{"type":"image","source":{"type":"base64","media_type":"image/png","data":"iVBO"}}]}})json",
         "see ![image](.diffview/images/chat-1-1.png)"));
+    check(!cli.isEchoOf(
+        R"({"type":"user","message":{"content":"hi"},"isSynthetic":true,"origin":{"kind":"peer"}})",
+        "hi"));
 };

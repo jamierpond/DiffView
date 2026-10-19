@@ -8,6 +8,11 @@ namespace
 using Miro::Json::Value;
 
 constexpr auto maxSummaryLength = 60;
+constexpr auto peerOriginKind = "peer";
+constexpr auto peerMessageLead =
+    std::string_view {"Another Claude session sent a message"};
+constexpr auto peerMessageTrailer =
+    std::string_view {"\n\nThis came from another Claude session"};
 
 std::string makeRelative(const std::string& path, const std::string& worktree)
 {
@@ -58,6 +63,33 @@ std::string joinTextBlocks(const Miro::Json::Value& content)
 std::string joinOnlyTextBlocks(const Miro::Json::Value& content)
 {
     return joinBlocks(content, false);
+}
+
+bool isPeerMessage(const Value& event)
+{
+    return getString(event, "type") == "user"
+           && getString(getField(event, "origin"), "kind") == peerOriginKind;
+}
+
+std::string extractPeerMessageText(const Value& event)
+{
+    auto text = joinTextBlocks(getField(getField(event, "message"), "content"));
+
+    if (!text.starts_with(peerMessageLead))
+        return text;
+
+    auto bodyStart = text.find('\n');
+
+    if (bodyStart == std::string::npos)
+        return text;
+
+    auto body = text.substr(bodyStart + 1);
+    auto trailer = body.rfind(peerMessageTrailer);
+
+    if (trailer != std::string::npos)
+        body.erase(trailer);
+
+    return body;
 }
 
 const Value& getField(const Value& value, std::string_view key)

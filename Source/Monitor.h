@@ -1,5 +1,6 @@
 #pragma once
 
+#include <Inbox.h>
 #include <Store.h>
 
 #include <optional>
@@ -17,6 +18,9 @@ struct MonitorOptions
 
     // The agent CLI process it runs under.
     std::optional<int> agentPid;
+
+    // That process's, when it has one.
+    InboxAddress inbox;
 };
 
 int runMonitor(const StoreLayout& store, const MonitorOptions& options);

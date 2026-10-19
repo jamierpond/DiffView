@@ -2,6 +2,7 @@
 
 #include "Activity.h"
 #include "AgentCli.h"
+#include "Inbox.h"
 #include "Review.h"
 
 #include <eacp/Core/Utils/FilePath.h>
@@ -47,6 +48,35 @@ SendRoute routeSend(const ReviewFile& round,
                     const std::string& responder);
 
 std::string describeSendRoute(const SendRoute& route, const std::string& responder);
+
+struct ListeningAgent
+{
+    std::string name;
+    InboxAddress inbox;
+};
+
+enum class TypedMessageDestination
+{
+    responder,
+    agentInbox,
+    agentWithoutInbox,
+    unknownAgent
+};
+
+struct TypedMessageRoute
+{
+    TypedMessageDestination destination = TypedMessageDestination::responder;
+    std::string agent;
+    InboxAddress inbox;
+    // What the agent is sent: the typed message without its "@name ".
+    std::string text;
+};
+
+// A typed message starting "@name " goes, without that prefix, to that
+// listening agent's inbox; one without the prefix, or naming the responder, to the responder.
+TypedMessageRoute routeTypedMessage(const std::string& typed,
+                                    const std::string& responder,
+                                    const std::vector<ListeningAgent>& listening);
 
 std::string makeResponderMessage(const std::string& notice,
                                  const std::string& responder);
@@ -94,6 +124,11 @@ struct ResponderSettings
     eacp::FilePath sessionPath;
     // What the CLI's hooks run to reach dv.
     std::string dvExecutable;
+    // The inbox its CLI process registered from its session-start hook.
+    std::function<std::optional<InboxAddress>(int agentPid)> findInbox = [](int)
+    { return std::optional<InboxAddress> {}; };
+    PostToInbox postToInbox = [](const InboxAddress&, const std::string&)
+    { return false; };
 };
 
 struct ResponderMessage
@@ -113,7 +148,9 @@ ResponderMessage makeTypedResponderMessage(const std::string& text);
 std::string describeMessageOrigin(const ResponderMessage& message);
 
 // dv's own agent: one CLI process, started on the first message, fed the
-// rest on its stdin one at a time, so it keeps its context. Its session id
+// rest on its stdin one at a time, so it keeps its context. Mid-turn, once
+// its inbox is known, the rest are posted there instead: it reads them
+// between tool calls rather than after the turn. Its session id
 // is kept to resume on the next start. Restarted once after a crash; a
 // second crash stops it. It is never killed: finish() hands it the rest and
 // closes its stdin, and it ends on its own, with or without dv.
@@ -145,8 +182,10 @@ public:
 private:
     void sendNext();
     void writeMessage(const ResponderMessage& message);
+    void postQueuedMessagesMidTurn();
     bool start(const std::string& prompt);
-    void readOutput();
+    // Whether there was any.
+    bool readOutput();
     void readLine(std::string_view line);
     void finishTurn();
     void handleExit(int exitCode);

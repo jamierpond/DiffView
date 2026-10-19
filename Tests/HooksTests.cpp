@@ -59,13 +59,13 @@ auto tHookIgnoresOtherTools =
     check(!makeBackgroundAgentHookAnswer(""));
 };
 
-auto tHookSettings =
-    test("Hooks/the settings run dv's hook before each Agent call") = []
+auto tResponderSettings =
+    test("Hooks/the responder's settings accept messages and run dv's hooks") = []
 {
     check(
-        makeBackgroundAgentHookSettings("/Users/me/.local/bin/dv")
-        == R"({"hooks":{"PreToolUse":[{"hooks":[{"command":"'/Users/me/.local/bin/dv' hook background-agent","type":"command"}],"matcher":"Agent"}]}})");
-    check(makeBackgroundAgentHookSettings("/a b/it's dv")
+        makeResponderSettings("/Users/me/.local/bin/dv", "dv")
+        == R"({"crossSessionInbound":"accept","hooks":{"PreToolUse":[{"hooks":[{"command":"'/Users/me/.local/bin/dv' hook background-agent","type":"command"}],"matcher":"Agent"}],"SessionStart":[{"hooks":[{"command":"'/Users/me/.local/bin/dv' hook register-inbox --as 'dv'","type":"command"}]}]}})");
+    check(makeResponderSettings("/a b/it's dv", "dv")
               .find(R"('/a b/it'\\''s dv' hook background-agent)")
           != std::string::npos);
 };

@@ -46,6 +46,8 @@ struct Options
     { return ResponderConfig {}; };
     StartAgentProcess startAgentProcess = [](const AgentLaunch&)
     { return std::unique_ptr<AgentProcess> {}; };
+    PostToInbox postToInbox = [](const InboxAddress&, const std::string&)
+    { return false; };
     git::BaseSpec base;
 };
 
@@ -123,6 +125,8 @@ private:
     void sendAgentInput();
     void pasteIntoAgentInput();
     void sendTypedMessage(const std::string& text);
+    void postTypedMessageToAgent(const TypedMessageRoute& route,
+                                 const std::string& text);
     void deliverNewRounds();
     bool isPreviousResponderFinishing(const ResponderConfig& config) const;
     bool claimResponder(const ResponderConfig& config);
