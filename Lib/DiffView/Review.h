@@ -42,6 +42,8 @@ struct Reviews
 
 Reviews mergeReviews(const std::vector<ReviewFile>& rounds, const ReviewFile& draft);
 
+std::optional<std::size_t> findPendingReply(const Annotation& comment);
+
 int draftCount(const std::vector<Annotation>& annotations);
 
 int openCount(const std::vector<Annotation>& annotations);

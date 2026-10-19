@@ -223,7 +223,9 @@ int runComments(const ListOptions& options)
             continue;
 
         auto lines = splitLines(comment.text);
-        auto about = lines.empty() ? std::string {} : lines.front();
+        auto pieces = wrap(lines.empty() ? std::string {} : lines.front(), 72);
+        auto about = trim(pieces.front())
+                     + (pieces.size() > 1 || lines.size() > 1 ? "…" : "");
 
         if (!comment.replies.empty())
             about += " · " + std::to_string(comment.replies.size())

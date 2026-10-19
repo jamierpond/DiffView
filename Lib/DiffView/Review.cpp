@@ -147,6 +147,15 @@ Reviews mergeReviews(const std::vector<ReviewFile>& rounds, const ReviewFile& dr
     return reviews;
 }
 
+std::optional<std::size_t> findPendingReply(const Annotation& comment)
+{
+    for (std::size_t i = 0; i < comment.replies.size(); ++i)
+        if (comment.replies[i].fresh && comment.replies[i].author == reviewerName)
+            return i;
+
+    return std::nullopt;
+}
+
 int draftCount(const std::vector<Annotation>& annotations)
 {
     return static_cast<int>(std::count_if(annotations.begin(),

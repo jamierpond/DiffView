@@ -300,8 +300,8 @@ Element Viewer::renderDiff(int width, int height)
     else if (replyCommentId)
     {
         if (auto* note = annotation(*replyCommentId))
-            if (auto* pending = pendingReply(*note))
-                hiddenReply = static_cast<int>(pending - note->replies.data());
+            if (auto pending = findPendingReply(*note))
+                hiddenReply = static_cast<int>(*pending);
 
         for (auto i = 0; i < count; ++i)
             if (rows[static_cast<std::size_t>(i)].annotation == replyCommentId

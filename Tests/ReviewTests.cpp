@@ -323,3 +323,16 @@ auto tResolutionsCarryReplies =
     check(updated && updated->comments[0].replies.size() == 1);
     check(!resolutionsFrom(round, round));
 };
+
+auto tPendingReply =
+    test("Review/the reviewer's unsent reply is the pending one") = []
+{
+    auto note = comment(1, "q");
+    check(!findPendingReply(note));
+
+    note.replies = {said("dev", "t1", "a"), said("you", "t2", "sent")};
+    check(!findPendingReply(note));
+
+    note.replies.push_back({"you", "t3", "draft", true});
+    check(findPendingReply(note) == std::size_t {2});
+};

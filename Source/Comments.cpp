@@ -434,16 +434,16 @@ bool Viewer::commitEditor()
             return false;
 
         removeUnlinked(pastedImages);
-        auto* pending = pendingReply(*note);
+        auto pending = findPendingReply(*note);
 
-        if (pending != nullptr && text.empty())
+        if (pending && text.empty())
         {
-            std::erase_if(note->replies,
-                          [&](const Reply& r) { return &r == pending; });
+            note->replies.erase(note->replies.begin()
+                                + static_cast<std::ptrdiff_t>(*pending));
             note->draft = !replyMadeDraft;
         }
-        else if (pending != nullptr)
-            pending->text = text;
+        else if (pending)
+            note->replies[*pending].text = text;
         else if (!text.empty())
         {
             note->replies.push_back(
@@ -622,15 +622,6 @@ void Viewer::toggleResolvedAtCursor()
     rebuildRows();
 }
 
-Reply* Viewer::pendingReply(Annotation& note)
-{
-    for (auto& reply: note.replies)
-        if (reply.fresh && reply.author == reviewerName)
-            return &reply;
-
-    return nullptr;
-}
-
 void Viewer::replyAtCursor()
 {
     auto id = annotationAtCursor();
@@ -642,14 +633,13 @@ void Viewer::replyAtCursor()
         return;
     }
 
-    auto* pending = pendingReply(*note);
-    replyMadeDraft = pending == nullptr && !note->draft;
+    auto pending = findPendingReply(*note);
+    replyMadeDraft = !pending && !note->draft;
     replyCommentId = id;
     editingId = 0;
     pendingAnnotation.reset();
-    openEditor((pending != nullptr ? "Edit reply · #" : "Reply · #")
-                   + std::to_string(id),
-               pending != nullptr ? pending->text : std::string {});
+    openEditor((pending ? "Edit reply · #" : "Reply · #") + std::to_string(id),
+               pending ? note->replies[*pending].text : std::string {});
 }
 
 bool Viewer::completeMention()

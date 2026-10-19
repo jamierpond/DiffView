@@ -152,7 +152,6 @@ private:
     void deleteAtCursor();
     void toggleResolvedAtCursor();
     void replyAtCursor();
-    Reply* pendingReply(Annotation& note);
     bool completeMention();
     void clearResolved();
     void removeImages(const Annotation& annotation);
