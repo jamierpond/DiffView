@@ -705,6 +705,8 @@ Element Viewer::renderRow(const DiffRow& row, int index, int width)
         case RowKind::annotationText:
         case RowKind::replyHeader:
         case RowKind::annotationBottom:
+        case RowKind::collapsedThread:
+        case RowKind::earlierReplies:
             if (auto* note = annotation(row.annotation))
                 element = renderThreadRow(row, *note, index, body(row.text));
             else
@@ -761,6 +763,17 @@ Element Viewer::renderThreadRow(const DiffRow& row,
     {
         case RowKind::annotationTop:
             return text("          " + describeThread(note) + " ") | color(accent);
+
+        case RowKind::collapsedThread:
+        {
+            auto owner = findOwner(note);
+            auto voice =
+                authorColor(owner.empty() ? std::string {reviewerName} : owner);
+            return text("          ▸ " + row.text) | color(voice) | dim;
+        }
+
+        case RowKind::earlierReplies:
+            return hbox({frame, text(row.text) | dim});
 
         case RowKind::replyHeader:
         {
@@ -1054,6 +1067,9 @@ Element Viewer::renderHelp()
                    row("R  Enter", "reply on a thread (Enter once it has replies);"),
                    row("", "saving sends it, no S"),
                    row("X  :resolved", "show / hide resolved comments"),
+                   row("za  zc zo", "fold a thread to one line / fold / show all"),
+                   row("zM  zR", "fold every thread / unfold every thread"),
+                   row("", "Enter opens a folded thread, or its earlier replies"),
                    row("S  :submit", "submit the draft as a review round"),
                    separator(),
                    row("e  o", "edit in $EDITOR / open with the OS"),

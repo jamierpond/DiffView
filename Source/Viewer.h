@@ -152,6 +152,11 @@ private:
     bool hasUnseenAgentReply(const Annotation& note) const;
     void pinUnseenThreads();
     void markSeen(const Annotation& note);
+    void loadThreadFolds();
+    void setThreadView(int id, ThreadView view);
+    void setEveryThreadView(ThreadView view);
+    void toggleFoldAtCursor();
+    bool isCursorOn(RowKind kind) const;
     void annotateAtCursor(bool wholeHunk);
     void commentOnFile();
     void commentGeneral();
@@ -248,6 +253,7 @@ private:
 
     std::set<std::string> seenThreads;
     std::set<int> pinnedThreads;
+    ThreadFolds threadFolds;
 
     std::set<std::string> collapsed;
     std::vector<TreeRow> treeRows;

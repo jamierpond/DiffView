@@ -668,7 +668,7 @@ std::optional<LineRange> Viewer::hunkRange(int rowIndex) const
 
 std::vector<DiffRow> Viewer::rowsFor(const FileDiff& file) const
 {
-    auto built = buildRows(file, shownAnnotations(), wrapWidth);
+    auto built = buildRows(file, shownAnnotations(), threadFolds, wrapWidth);
 
     auto hidden = std::count_if(annotations.begin(),
                                 annotations.end(),
@@ -823,7 +823,7 @@ void Viewer::stepAnnotation(int direction, int count)
         {
             const auto& row = rows[static_cast<std::size_t>(i)];
 
-            if (row.kind == RowKind::annotationTop
+            if (isThreadStart(row)
                 && (direction > 0
                     || rows[static_cast<std::size_t>(diffCursor)].annotation
                            != row.annotation))
@@ -861,7 +861,7 @@ void Viewer::stepAnnotation(int direction, int count)
             auto target = -1;
 
             for (auto i = 0; i < static_cast<int>(rows.size()); ++i)
-                if (rows[static_cast<std::size_t>(i)].kind == RowKind::annotationTop)
+                if (isThreadStart(rows[static_cast<std::size_t>(i)]))
                 {
                     target = i;
 
@@ -915,7 +915,7 @@ void Viewer::jumpToAnnotation(int id)
     focus = Pane::diff;
 
     for (std::size_t i = 0; i < rows.size(); ++i)
-        if (rows[i].kind == RowKind::annotationTop && rows[i].annotation == id)
+        if (isThreadStart(rows[i]) && rows[i].annotation == id)
         {
             diffCursor = static_cast<int>(i);
             break;

@@ -85,6 +85,15 @@ no `S`: it becomes a one-thread round, `.diffview/reviews/<id>.md` headed
 `new`, and wakes the agent the thread belongs to (every agent, if nobody's).
 latest.md stays the last full round. New comments still wait for `S`.
 
+A long thread shows its comment and only its last 5 replies, under a dim
+`⋯ 36 earlier replies · Enter to show all` row; Enter there, or `zo`, shows
+them all. `za` folds a thread to one line, `▸ #48 · you: huh? you should… ·
+3 replies` in its owner's colour, and back; `zc` folds it, `zM` folds every
+thread and `zR` unfolds them all. A folded thread still shows `· 1 new` for
+agents' replies since it was folded. Enter on it unfolds it. Folding isn't
+resolving: it is this worktree's view only, kept beside the seen state
+(`.diffview/folds`).
+
 A resolved thread whose newest reply is an agent's stays open in the diff
 until the cursor has been on it (`.diffview/seen` remembers), so an answer
 isn't folded away before you read it.
