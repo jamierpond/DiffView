@@ -272,7 +272,7 @@ void Responder::finish()
     queue.clear();
     hasQueueChanged = true;
     current.reset();
-    isCurrentPickedUp = false;
+    hasAgentEchoedCurrentMessage = false;
     doing.clear();
 
     if (!process)
@@ -345,7 +345,7 @@ void Responder::sendNext()
 
     current = std::move(queue.front());
     queue.pop_front();
-    isCurrentPickedUp = false;
+    hasAgentEchoedCurrentMessage = false;
     hasQueueChanged = true;
     doing = "starting";
     log("dv: sending " + describeMessageOrigin(*current) + ": " + current->text);
@@ -430,20 +430,21 @@ void Responder::readLine(std::string_view line)
         hasReportedActivity = true;
     }
 
-    if (current && !isCurrentPickedUp && settings.cli.isEchoOf(line, current->text))
+    if (current && !hasAgentEchoedCurrentMessage
+        && settings.cli.isEchoOf(line, current->text))
     {
-        isCurrentPickedUp = true;
+        hasAgentEchoedCurrentMessage = true;
         return;
     }
 
-    if (isCurrentPickedUp && settings.cli.isEndOfTurn(line))
+    if (hasAgentEchoedCurrentMessage && settings.cli.isEndOfTurn(line))
         finishTurn();
 }
 
 void Responder::finishTurn()
 {
     current.reset();
-    isCurrentPickedUp = false;
+    hasAgentEchoedCurrentMessage = false;
     doing.clear();
     sendNext();
 }
@@ -467,7 +468,7 @@ void Responder::handleExit(int exitCode)
     }
 
     current.reset();
-    isCurrentPickedUp = false;
+    hasAgentEchoedCurrentMessage = false;
     doing.clear();
 
     if (isResuming && !hasReportedActivity)

@@ -154,7 +154,7 @@ private:
     bool hasQueueChanged = false;
     std::optional<ResponderMessage> current;
     // Its echo came back: the next end of a turn is its answer's.
-    bool isCurrentPickedUp = false;
+    bool hasAgentEchoedCurrentMessage = false;
     std::string sessionId;
     bool isResuming = false;
     bool hasReportedActivity = false;
