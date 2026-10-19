@@ -14,7 +14,6 @@ std::vector<std::string> splitLines(std::string_view text);
 std::vector<std::string> splitNul(std::string_view text);
 
 std::string trim(std::string_view text);
-std::string toLower(std::string_view text);
 
 // Control bytes become '?' so file content can never drive the terminal.
 std::string displayable(std::string_view line, int tabWidth = 4);

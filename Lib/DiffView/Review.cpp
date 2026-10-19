@@ -195,14 +195,6 @@ int draftCount(const std::vector<Annotation>& annotations)
                                           { return a.draft; }));
 }
 
-int openCount(const std::vector<Annotation>& annotations)
-{
-    return static_cast<int>(std::count_if(annotations.begin(),
-                                          annotations.end(),
-                                          [](const Annotation& a)
-                                          { return !a.resolved && !a.withdrawn; }));
-}
-
 std::vector<std::string> newRounds(const std::vector<std::string>& seen,
                                    std::vector<std::string> current)
 {

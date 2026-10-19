@@ -52,7 +52,6 @@ public:
     void setQuery(std::string query);
     void setFuzzy(bool fuzzy);
 
-    const std::string& query() const;
     const std::vector<Item>& items() const;
 
     const std::vector<int>& visible() const;

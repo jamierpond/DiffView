@@ -700,14 +700,6 @@ std::vector<Annotation> Viewer::shownAnnotations() const
     return shown;
 }
 
-int Viewer::openCount() const
-{
-    return static_cast<int>(std::count_if(annotations.begin(),
-                                          annotations.end(),
-                                          [](const Annotation& a)
-                                          { return !a.resolved; }));
-}
-
 void Viewer::moveCursor(int delta)
 {
     focus = Pane::diff;

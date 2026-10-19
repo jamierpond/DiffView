@@ -125,16 +125,6 @@ auto tRoundId = test("Review/round ids are sortable timestamps") = []
     check(roundLabel("2026-10-16-180959") == "10-16 18:09");
 };
 
-auto tOpenCount = test("Review/open counts neither resolved nor withdrawn") = []
-{
-    auto resolved = comment(2, "b");
-    resolved.resolved = true;
-    auto withdrawn = comment(3, "c");
-    withdrawn.withdrawn = true;
-
-    check(openCount({comment(1, "a"), resolved, withdrawn, comment(4, "d")}) == 2);
-};
-
 auto tNewRounds =
     test("Review/the monitor reports only unseen rounds, oldest first") = []
 {

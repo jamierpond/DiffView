@@ -84,16 +84,6 @@ std::string trim(std::string_view text)
     return std::string {text};
 }
 
-std::string toLower(std::string_view text)
-{
-    auto lower = std::string {text};
-
-    for (auto& c: lower)
-        c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-
-    return lower;
-}
-
 std::string displayable(std::string_view line, int tabWidth)
 {
     auto out = std::string {};

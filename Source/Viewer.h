@@ -124,7 +124,6 @@ private:
     std::optional<Annotation> findAnnotationInAnyWorktree(int id) const;
     std::string describeCommentPlace(const Annotation& note) const;
     std::optional<LineRange> hunkRange(int row) const;
-    int openCount() const;
     std::vector<Annotation> shownAnnotations() const;
     std::vector<DiffRow> rowsFor(const FileDiff& file) const;
     void jumpToFlat(const std::string& path, int flat);

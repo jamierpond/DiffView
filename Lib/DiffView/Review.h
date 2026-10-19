@@ -55,8 +55,6 @@ std::optional<std::size_t> findPendingReply(const Annotation& comment);
 
 int draftCount(const std::vector<Annotation>& annotations);
 
-int openCount(const std::vector<Annotation>& annotations);
-
 // For `dv monitor`: the round ids (any order) not seen before,
 // oldest first.
 std::vector<std::string> newRounds(const std::vector<std::string>& seen,

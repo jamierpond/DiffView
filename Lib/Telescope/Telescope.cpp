@@ -250,11 +250,6 @@ void Picker::setFuzzy(bool fuzzyToUse)
     refilter();
 }
 
-const std::string& Picker::query() const
-{
-    return text;
-}
-
 const std::vector<Item>& Picker::items() const
 {
     return all;

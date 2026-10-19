@@ -86,14 +86,6 @@ void markAgentStopped()
     registered[0] = 0;
 }
 
-void unregisterAgent()
-{
-    if (registered[0] != 0)
-        unlink(registered.data());
-
-    registered[0] = 0;
-}
-
 std::vector<std::string> findListeningAgents(const std::string& store)
 {
     auto names = std::vector<std::string> {};
