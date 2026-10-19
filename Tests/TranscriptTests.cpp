@@ -182,3 +182,42 @@ auto tTranscriptLayoutWidth =
     check(textRows == 3);
     check(rows[2].text.ends_with("…"));
 };
+
+auto tTranscriptReplayedPrompt = test(
+    "Transcript/a replayed typed message is a prompt, its text blocks joined") = []
+{
+    auto replayed = std::string {
+        R"({"type":"user","message":{"role":"user","content":[{"text":"hello how are you ?","type":"text"}]},"session_id":"79275283-a313-4d81-9330-913343680bfc","parent_tool_use_id":null,"uuid":"d0d4bb37-4f41-4586-9953-ae384d231b5f","timestamp":"2026-10-19T07:31:53.416Z","isReplay":true})"
+        "\n"};
+    auto twoBlocks = std::string {
+        R"({"type":"user","message":{"role":"user","content":[{"text":"one","type":"text"},{"text":"two","type":"text"}]}})"
+        "\n"};
+    auto transcript = makeTranscript(replayed + twoBlocks + toolCall + toolResult);
+    const auto& entries = transcript.getEntries();
+
+    check(entries.size() == 3);
+    check(entries[0].kind == TranscriptEntryKind::prompt);
+    check(entries[0].text == "hello how are you ?");
+    check(entries[1].kind == TranscriptEntryKind::prompt
+          && entries[1].text == "one\ntwo");
+    check(entries[2].kind == TranscriptEntryKind::toolCall && entries[2].outcome);
+};
+
+auto tTranscriptQueuedPrompt =
+    test("Transcript/a sent prompt shows queued until the CLI replays it") = []
+{
+    auto transcript = makeTranscript(prompt + toolCall);
+    transcript.addQueuedPrompt("hello how are you ?");
+
+    auto rows = layoutTranscript(transcript, wideWidth);
+    check(rows.back().style == TranscriptRowStyle::queuedPrompt);
+    check(rows.back().text == "hello how are you ?");
+
+    transcript.append(
+        result
+        + R"({"type":"user","message":{"role":"user","content":[{"text":"hello how are you ?","type":"text"}]},"isReplay":true})"
+        + "\n");
+    check(transcript.getQueuedPrompts().empty());
+    check(transcript.getEntries().back().kind == TranscriptEntryKind::prompt);
+    check(transcript.getEntries().back().text == "hello how are you ?");
+};

@@ -116,8 +116,8 @@ bool Viewer::onEvent(const ftxui::Event& event)
     if (prompt != Prompt::none)
         return onPromptEvent(key);
 
-    if (isTypingToAgent)
-        return onAgentInputEvent(key);
+    if (focus == Pane::agent && isAgentPaneShown)
+        return onAgentInputEvent(event);
 
     if (key == "C-c")
     {
@@ -195,15 +195,9 @@ void Viewer::run(const Command& command)
         case Action::toggleAgentPane:
             toggleAgentPane();
             break;
-        case Action::typeToAgent:
-            if (focus == Pane::agent)
-                openAgentInput();
-            break;
         case Action::open:
-            if (focus == Pane::agent)
-                openAgentInput();
-            else if (focus == Pane::tree
-                     && treeCursor < static_cast<int>(treeRows.size()))
+            if (focus == Pane::tree
+                && treeCursor < static_cast<int>(treeRows.size()))
             {
                 const auto& row = treeRows[static_cast<std::size_t>(treeCursor)];
 

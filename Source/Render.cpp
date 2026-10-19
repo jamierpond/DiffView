@@ -143,7 +143,7 @@ const auto selectionBackground = Color::RGB(38, 58, 96);
 const auto claudeOrange = Color::RGB(215, 119, 87);
 constexpr auto agentPaneShareOfRows = 3;
 constexpr auto minimumAgentPaneRows = 6;
-constexpr auto agentInputRows = 1;
+constexpr auto agentInputMaxRows = 3;
 constexpr auto minimumBrowserRows = 4;
 constexpr auto agentPaneBorderSize = 2;
 constexpr auto statusBarRows = 1;
@@ -203,6 +203,79 @@ Element withMatch(const std::string& text, std::size_t start, std::size_t length
                  ftxui::text(text.substr(start, length)) | bgcolor(Color::Yellow)
                      | color(Color::Black),
                  ftxui::text(text.substr(start + length))});
+}
+
+Elements renderEditorRows(vim::Editor& editor, int width)
+{
+    editor.setWrapWidth(std::max(1, width - 2));
+
+    const auto& lines = editor.lines();
+    auto visual = editor.visualRows();
+    auto cursorRow = editor.cursorVisualRow();
+    auto cursorColumn = editor.cursorVisualColumn();
+    auto body = Elements {};
+
+    for (auto r = 0; r < static_cast<int>(visual.size()); ++r)
+    {
+        const auto& piece = visual[static_cast<std::size_t>(r)];
+        auto textOfRow = lines[static_cast<std::size_t>(piece.line)].substr(
+            static_cast<std::size_t>(piece.start),
+            static_cast<std::size_t>(piece.end - piece.start));
+        textOfRow = displayable(textOfRow);
+
+        if (auto match = editor.searchMatch(); match && match->row == piece.line
+                                               && match->column >= piece.start
+                                               && match->column < piece.end)
+        {
+            body.push_back(
+                withMatch(textOfRow,
+                          static_cast<std::size_t>(match->column - piece.start),
+                          static_cast<std::size_t>(match->length))
+                | ftxui::focus);
+            continue;
+        }
+
+        if (r != cursorRow || editor.mode() == vim::Mode::command)
+        {
+            body.push_back(text(textOfRow));
+            continue;
+        }
+
+        auto bytes = std::size_t {0};
+
+        for (auto column = 0; column < cursorColumn && bytes < textOfRow.size();
+             ++column)
+        {
+            ++bytes;
+
+            while (bytes < textOfRow.size()
+                   && (static_cast<unsigned char>(textOfRow[bytes]) & 0xC0) == 0x80)
+                ++bytes;
+        }
+
+        auto next = bytes;
+
+        if (next < textOfRow.size())
+        {
+            ++next;
+
+            while (next < textOfRow.size()
+                   && (static_cast<unsigned char>(textOfRow[next]) & 0xC0) == 0x80)
+                ++next;
+        }
+
+        auto under = next > bytes ? textOfRow.substr(bytes, next - bytes) : " ";
+        auto cursor = text(under) | inverted;
+
+        if (editor.mode() == vim::Mode::insert)
+            cursor = cursor | underlined;
+
+        body.push_back(hbox({text(textOfRow.substr(0, bytes)),
+                             cursor | ftxui::focus,
+                             text(textOfRow.substr(next))}));
+    }
+
+    return body;
 }
 
 std::string modeName(vim::Mode mode)
@@ -285,8 +358,8 @@ Element Viewer::renderAgentPane(int width, int height)
         isTranscriptLayoutDirty = false;
     }
 
-    transcriptHeight =
-        isTypingToAgent ? std::max(1, height - agentInputRows) : height;
+    auto inputRows = renderAgentInput(rowWidth);
+    transcriptHeight = std::max(1, height - static_cast<int>(inputRows.size()));
     auto count = static_cast<int>(transcriptRows.size());
     auto lastTop = std::max(0, count - transcriptHeight);
     transcriptTop =
@@ -294,7 +367,7 @@ Element Viewer::renderAgentPane(int width, int height)
 
     auto title =
         " @" + transcriptAgentName + (isFollowingTranscript ? "" : " · G follows")
-        + (focus == Pane::agent && !isTypingToAgent ? " · i types to it " : " ");
+        + (focus == Pane::agent ? " · Esc Esc / Tab leaves, A hides " : " ");
     auto lines = Elements {};
 
     if (transcriptRows.empty())
@@ -307,27 +380,38 @@ Element Viewer::renderAgentPane(int width, int height)
         lines.push_back(renderTranscriptRow(
             transcriptRows[static_cast<std::size_t>(i)], rowWidth));
 
-    if (isTypingToAgent)
-        lines.push_back(renderAgentInput(rowWidth));
+    lines.push_back(filler());
+    lines.insert(lines.end(), inputRows.begin(), inputRows.end());
 
     return window(text(title) | bold | (focus == Pane::agent ? inverted : dim),
                   vbox(std::move(lines)) | flex);
 }
 
-Element Viewer::renderAgentInput(int width)
+Elements Viewer::renderAgentInput(int width)
 {
-    const auto& typed = agentInputLine.text();
-    auto at = agentInputLine.cursor();
-    auto atCursor = at < typed.size() ? typed.substr(at, 1) : std::string {" "};
-    auto afterCursor = at < typed.size() ? typed.substr(at + 1) : std::string {};
+    auto editorRows = renderEditorRows(agentInput, width);
+    auto count = static_cast<int>(editorRows.size());
+    auto shownCount = std::min(count, agentInputMaxRows);
+    auto first = std::clamp(
+        agentInput.cursorVisualRow() - shownCount + 1, 0, count - shownCount);
+    auto margin = text(std::string(agentPaneMargin, ' '));
+    auto isFocused = focus == Pane::agent;
+    auto rows = Elements {};
 
-    return hbox({text(std::string(agentPaneMargin, ' ')),
-                 hbox({text("> ") | dim,
-                       text(typed.substr(0, at)),
-                       text(atCursor) | inverted,
-                       text(afterCursor),
-                       filler()})
-                     | size(WIDTH, EQUAL, width) | bgcolor(userPromptBackground)});
+    for (auto i = first; i < first + shownCount; ++i)
+    {
+        auto lead = text(i == 0 ? "> " : "  ") | dim;
+        auto band = hbox({lead, editorRows[static_cast<std::size_t>(i)], filler()})
+                    | size(WIDTH, EQUAL, width) | bgcolor(userPromptBackground);
+        rows.push_back(hbox({margin, isFocused ? band : band | dim}));
+    }
+
+    if (agentInput.promptChar() != 0)
+        rows.push_back(hbox({margin,
+                             text(std::string(1, agentInput.promptChar())
+                                  + agentInput.commandLine() + "█")}));
+
+    return rows;
 }
 
 Element Viewer::renderTranscriptRow(const TranscriptRow& row, int width)
@@ -365,6 +449,11 @@ Element Viewer::renderTranscriptRow(const TranscriptRow& row, int width)
             return hbox({margin, text(lead + row.text) | dim});
         case TranscriptRowStyle::failedResult:
             return hbox({margin, text(lead + row.text) | color(Color::Red)});
+        case TranscriptRowStyle::queuedPrompt:
+            return hbox({margin,
+                         hbox({text(lead) | dim, text(row.text) | dim, filler()})
+                             | size(WIDTH, EQUAL, width)
+                             | bgcolor(userPromptBackground)});
         case TranscriptRowStyle::working:
             return hbox({margin, text(lead + row.text) | color(claudeOrange)});
     }
@@ -678,73 +767,7 @@ int Viewer::editorHeight(int width)
 
 Element Viewer::renderEditor(int width, int boxHeight)
 {
-    editor.setWrapWidth(std::max(1, width - 2));
-
-    const auto& lines = editor.lines();
-    auto visual = editor.visualRows();
-    auto cursorRow = editor.cursorVisualRow();
-    auto cursorColumn = editor.cursorVisualColumn();
-    auto body = Elements {};
-
-    for (auto r = 0; r < static_cast<int>(visual.size()); ++r)
-    {
-        const auto& piece = visual[static_cast<std::size_t>(r)];
-        auto textOfRow = lines[static_cast<std::size_t>(piece.line)].substr(
-            static_cast<std::size_t>(piece.start),
-            static_cast<std::size_t>(piece.end - piece.start));
-        textOfRow = displayable(textOfRow);
-
-        if (auto match = editor.searchMatch(); match && match->row == piece.line
-                                               && match->column >= piece.start
-                                               && match->column < piece.end)
-        {
-            body.push_back(
-                withMatch(textOfRow,
-                          static_cast<std::size_t>(match->column - piece.start),
-                          static_cast<std::size_t>(match->length))
-                | ftxui::focus);
-            continue;
-        }
-
-        if (r != cursorRow || editor.mode() == vim::Mode::command)
-        {
-            body.push_back(text(textOfRow));
-            continue;
-        }
-
-        auto bytes = std::size_t {0};
-
-        for (auto column = 0; column < cursorColumn && bytes < textOfRow.size();
-             ++column)
-        {
-            ++bytes;
-
-            while (bytes < textOfRow.size()
-                   && (static_cast<unsigned char>(textOfRow[bytes]) & 0xC0) == 0x80)
-                ++bytes;
-        }
-
-        auto next = bytes;
-
-        if (next < textOfRow.size())
-        {
-            ++next;
-
-            while (next < textOfRow.size()
-                   && (static_cast<unsigned char>(textOfRow[next]) & 0xC0) == 0x80)
-                ++next;
-        }
-
-        auto under = next > bytes ? textOfRow.substr(bytes, next - bytes) : " ";
-        auto cursor = text(under) | inverted;
-
-        if (editor.mode() == vim::Mode::insert)
-            cursor = cursor | underlined;
-
-        body.push_back(hbox({text(textOfRow.substr(0, bytes)),
-                             cursor | ftxui::focus,
-                             text(textOfRow.substr(next))}));
-    }
+    auto body = renderEditorRows(editor, width);
 
     auto footer = Element {};
 
@@ -985,8 +1008,8 @@ Element Viewer::renderStatus()
         if (editing)
             return modeName(editor.mode());
 
-        if (isTypingToAgent)
-            return std::string {" INSERT "};
+        if (focus == Pane::agent && isAgentPaneShown)
+            return modeName(agentInput.mode());
 
         if (visualAnchor)
             return std::string {" VISUAL "};
@@ -1057,8 +1080,11 @@ Element Viewer::renderStatus()
 
     if (editing)
         parts.push_back(text("Ctrl-S save · :wq · :q! ") | bold);
-    else if (isTypingToAgent)
-        parts.push_back(text("Enter send · Esc cancel ") | bold);
+    else if (focus == Pane::agent && isAgentPaneShown)
+        parts.push_back(text(agentInput.mode() == vim::Mode::insert
+                                 ? "Enter send · Esc normal · Tab next pane "
+                                 : "Enter send · i insert · Esc leaves ")
+                        | bold);
     else if (!pending.empty())
         parts.push_back(text(pending + " ") | bold);
     else if (!message.empty() && nowMs() - messageAt < 5000)
@@ -1272,10 +1298,10 @@ Element Viewer::renderHelp()
                    row("j k  gg G", "move, top / bottom (counts: 5j)"),
                    row("Ctrl-d Ctrl-u", "half page down / up"),
                    row("h l  Tab", "tree / diff / switch pane"),
-                   row("A", "agent pane: focus it; again hides it, again shows"),
-                   row("i  Enter",
-                       "agent pane: type to @dv; Enter sends, Esc cancels"),
-                   row("", "j k scroll it, G follows the tail again"),
+                   row("A", "show / hide the agent pane (@dv at work)"),
+                   row("Tab to it", "type to @dv in a vim line; Enter sends"),
+                   row("", "insert: Up Down scroll; Esc normal: j k ^U ^D, G"),
+                   row("", "Esc Esc / Tab leaves (the draft stays), A hides"),
                    row("Enter  l", "tree: toggle directory, open file"),
                    row("a  s", "all files / changed only, tree / by size"),
                    row("]c [c  ]f [f", "next / previous hunk, file"),

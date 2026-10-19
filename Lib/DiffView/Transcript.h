@@ -45,7 +45,12 @@ public:
     // Any bytes: a line split across calls is read once it ends.
     void append(std::string_view bytes);
 
+    // Sent but not yet read back: the CLI replays a message only once it
+    // takes it, after any turn in flight.
+    void addQueuedPrompt(const std::string& text);
+
     const std::vector<TranscriptEntry>& getEntries() const;
+    const std::vector<std::string>& getQueuedPrompts() const;
     bool isTurnOpen() const;
 
 private:
@@ -54,6 +59,7 @@ private:
     std::string worktree;
     std::string partialLine;
     std::vector<TranscriptEntry> entries;
+    std::vector<std::string> queuedPrompts;
     bool turnOpen = false;
 };
 
@@ -68,7 +74,8 @@ enum class TranscriptRowStyle
     toolError,
     result,
     failedResult,
-    working
+    working,
+    queuedPrompt
 };
 
 struct TranscriptRow

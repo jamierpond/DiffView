@@ -50,7 +50,6 @@ enum class Action
     grepDiffs,
     pickComments,
     toggleAgentPane,
-    typeToAgent,
     toggleFold,
     closeFold,
     openFold,

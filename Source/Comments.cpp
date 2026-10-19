@@ -61,6 +61,8 @@ std::string editorKey(const ftxui::Event& event)
     return {};
 }
 
+constexpr auto agentInputScrollRows = 1;
+
 std::string trimmedEnd(std::string text)
 {
     while (!text.empty()
@@ -705,6 +707,165 @@ void Viewer::pasteIntoEditor()
     }
 
     editor.insertText(text);
+}
+
+// The agent pane's input is a vim buffer like the reply editor's. Around it:
+// Tab or Esc in normal mode leaves (the draft stays), Enter sends, and the
+// transcript scrolls with the arrows in insert mode or j k Ctrl-U Ctrl-D G in
+// normal mode.
+bool Viewer::onAgentInputEvent(const ftxui::Event& event)
+{
+    using ftxui::Event;
+
+    if (event == Event::Custom)
+        return false;
+
+    auto mode = agentInput.mode();
+    auto isInsert = mode == vim::Mode::insert;
+    auto isNormal = mode == vim::Mode::normal;
+    auto halfPage = std::max(1, transcriptHeight / 2);
+
+    if (event == Event::Tab)
+    {
+        cycleFocus();
+        return true;
+    }
+
+    if (event == Event::F1)
+    {
+        modal = Modal::help;
+        return true;
+    }
+
+    if (event == Event::Return && (isInsert || isNormal))
+    {
+        sendAgentInput();
+        return true;
+    }
+
+    if (event == Event::PageUp)
+    {
+        scrollTranscript(-halfPage);
+        return true;
+    }
+
+    if (event == Event::PageDown)
+    {
+        scrollTranscript(halfPage);
+        return true;
+    }
+
+    if (isInsert && event == Event::ArrowUp)
+    {
+        scrollTranscript(-agentInputScrollRows);
+        return true;
+    }
+
+    if (isInsert && event == Event::ArrowDown)
+    {
+        scrollTranscript(agentInputScrollRows);
+        return true;
+    }
+
+    if (isNormal)
+    {
+        if (event == Event::CtrlU)
+        {
+            scrollTranscript(-halfPage);
+            return true;
+        }
+
+        if (event == Event::CtrlD)
+        {
+            scrollTranscript(halfPage);
+            return true;
+        }
+
+        if (event == Event::Character("j") || event == Event::ArrowDown)
+        {
+            scrollTranscript(agentInputScrollRows);
+            return true;
+        }
+
+        if (event == Event::Character("k") || event == Event::ArrowUp)
+        {
+            scrollTranscript(-agentInputScrollRows);
+            return true;
+        }
+
+        if (event == Event::Character("G"))
+        {
+            followTranscript();
+            return true;
+        }
+
+        if (event == Event::CtrlC)
+        {
+            requestQuit();
+            return true;
+        }
+
+        if (event == Event::Escape)
+        {
+            focus = Pane::diff;
+            return true;
+        }
+    }
+
+    auto key = editorKey(event);
+
+    if (key.empty())
+        return true;
+
+    switch (agentInput.feed(key))
+    {
+        case vim::Outcome::none:
+            break;
+        case vim::Outcome::save:
+        case vim::Outcome::saveAndClose:
+            sendAgentInput();
+            break;
+        case vim::Outcome::close:
+            focus = Pane::diff;
+            break;
+        case vim::Outcome::discard:
+            agentInput.setText({});
+            say("Discarded");
+            break;
+        case vim::Outcome::paste:
+            pasteIntoAgentInput();
+            break;
+    }
+
+    return true;
+}
+
+void Viewer::sendAgentInput()
+{
+    auto typed = trim(agentInput.text());
+
+    if (typed.empty())
+        return;
+
+    agentInput.setText({});
+
+    if (agentInput.mode() != vim::Mode::insert)
+        agentInput.feed("i");
+
+    sendTypedMessage(typed);
+}
+
+void Viewer::pasteIntoAgentInput()
+{
+    auto text = eacp::Clipboard::getText();
+
+    if (text.empty())
+    {
+        say("Clipboard is empty");
+        return;
+    }
+
+    agentInput.insertText(text);
 }
 
 void Viewer::editAtCursor()

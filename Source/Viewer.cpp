@@ -126,6 +126,7 @@ Viewer::Viewer(const Options& optionsToUse)
         message += (message.empty() ? "" : "; ") + note;
 
     messageAt = nowMs();
+    agentInput.feed("i");
 
     refresh();
 }
@@ -230,15 +231,15 @@ void Viewer::readTranscriptTail()
 
 void Viewer::toggleAgentPane()
 {
-    if (isAgentPaneShown && focus == Pane::agent)
+    if (isAgentPaneShown)
     {
         isAgentPaneShown = false;
-        focus = Pane::diff;
         return;
     }
 
     isAgentPaneShown = true;
     focus = Pane::agent;
+    followTranscript();
     readTranscriptTail();
 }
 
@@ -258,49 +259,18 @@ void Viewer::cycleFocus()
     }
 }
 
+// Scrolling down to the end follows the tail again.
 void Viewer::scrollTranscript(int delta)
 {
-    isFollowingTranscript = false;
     auto lastTop =
         std::max(0, static_cast<int>(transcriptRows.size()) - transcriptHeight);
     transcriptTop = std::clamp(transcriptTop + delta, 0, lastTop);
+    isFollowingTranscript = delta > 0 && transcriptTop == lastTop;
 }
 
 void Viewer::followTranscript()
 {
     isFollowingTranscript = true;
-}
-
-void Viewer::openAgentInput()
-{
-    isAgentPaneShown = true;
-    focus = Pane::agent;
-    isTypingToAgent = true;
-}
-
-bool Viewer::onAgentInputEvent(const std::string& key)
-{
-    if (key == "Esc" || key == "C-c")
-    {
-        isTypingToAgent = false;
-        agentInputLine.set({});
-        return true;
-    }
-
-    if (key == "Enter")
-    {
-        auto typed = trim(agentInputLine.text());
-        isTypingToAgent = false;
-        agentInputLine.set({});
-
-        if (!typed.empty())
-            sendTypedMessage(typed);
-
-        return true;
-    }
-
-    agentInputLine.feed(key);
-    return true;
 }
 
 // Through the same path as a round: it waits for a finishing responder, and
@@ -451,6 +421,12 @@ void Viewer::deliverNewRounds()
         }
 
         responder->send(makeTypedResponderMessage(typed));
+
+        if (!transcript)
+            readTranscriptTail();
+
+        transcript->addQueuedPrompt(typed);
+        isTranscriptLayoutDirty = true;
     }
 }
 

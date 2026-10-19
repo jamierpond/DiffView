@@ -32,7 +32,6 @@ const std::map<std::string, Action>& singleKeys()
         {"N", Action::searchPrevious},
         {"a", Action::toggleAllFiles},
         {"A", Action::toggleAgentPane},
-        {"i", Action::typeToAgent},
         {"s", Action::toggleTreeSort},
         {"c", Action::annotate},
         {"C", Action::commentFile},

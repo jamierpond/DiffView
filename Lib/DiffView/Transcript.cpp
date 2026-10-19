@@ -352,6 +352,16 @@ void Transcript::append(std::string_view bytes)
     partialLine.erase(0, start);
 }
 
+void Transcript::addQueuedPrompt(const std::string& text)
+{
+    queuedPrompts.push_back(trim(text));
+}
+
+const std::vector<std::string>& Transcript::getQueuedPrompts() const
+{
+    return queuedPrompts;
+}
+
 const std::vector<TranscriptEntry>& Transcript::getEntries() const
 {
     return entries;
@@ -396,6 +406,11 @@ void Transcript::readLine(std::string_view line)
         if (prompt.empty())
             return;
 
+        auto queued = std::find(queuedPrompts.begin(), queuedPrompts.end(), prompt);
+
+        if (queued != queuedPrompts.end())
+            queuedPrompts.erase(queued);
+
         addEntry(entries, makeEntry(TranscriptEntryKind::prompt, prompt));
         turnOpen = true;
         return;
@@ -434,6 +449,15 @@ std::vector<TranscriptRow> layoutTranscript(const Transcript& transcript, int wi
             makeRow(TranscriptRowStyle::working, thinkingLead, "Working…");
         working.isInFlight = true;
         rows.push_back(std::move(working));
+    }
+
+    for (const auto& queued: transcript.getQueuedPrompts())
+    {
+        if (!rows.empty())
+            rows.push_back({});
+
+        addWrappedRows(
+            rows, TranscriptRowStyle::queuedPrompt, promptLead, queued, width);
     }
 
     return rows;

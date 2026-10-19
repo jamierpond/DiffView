@@ -118,8 +118,9 @@ private:
     void cycleFocus();
     void scrollTranscript(int delta);
     void followTranscript();
-    void openAgentInput();
-    bool onAgentInputEvent(const std::string& key);
+    bool onAgentInputEvent(const ftxui::Event& event);
+    void sendAgentInput();
+    void pasteIntoAgentInput();
     void sendTypedMessage(const std::string& text);
     void deliverNewRounds();
     bool isPreviousResponderFinishing(const ResponderConfig& config) const;
@@ -228,7 +229,7 @@ private:
     ftxui::Element renderDiff(int width, int height);
     ftxui::Element renderAgentPane(int width, int height);
     ftxui::Element renderTranscriptRow(const TranscriptRow& row, int width);
-    ftxui::Element renderAgentInput(int width);
+    ftxui::Elements renderAgentInput(int width);
     ftxui::Element renderRow(const DiffRow& row, int index, int width);
     ftxui::Element renderCommentThreadRow(const DiffRow& row,
                                           const Annotation& note,
@@ -304,8 +305,8 @@ private:
     int transcriptTop = 0;
     int transcriptHeight = 20;
     bool isFollowingTranscript = true;
-    bool isTypingToAgent = false;
-    telescope::LineEdit agentInputLine;
+    // Always open along the pane's bottom edge; a draft survives leaving it.
+    vim::Editor agentInput;
     std::vector<std::string> typedAwaitingResponder;
 
     // What the files said when last read or written, to tell our own writes
@@ -331,7 +332,7 @@ private:
     int treeHeight = 20;
     int wrapWidth = 60;
 
-    Pane focus = Pane::tree;
+    Pane focus = Pane::agent;
     KeyParser keys;
     std::optional<int> visualAnchor;
     Modal modal = Modal::none;
