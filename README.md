@@ -95,48 +95,55 @@ isn't folded away before you read it.
 after the status. An unaddressed thread is everyone's until an agent
 answers it, which claims it. An agent can't answer another's thread without
 `--force`. Agents waiting with `dv monitor --as <name>` show in the status
-bar (`◉ @name`); a `--once` monitor still counts for ten minutes after it
-exits. A thread whose owner isn't listening is everyone's again: it wakes
-every listening agent, and whoever answers it takes it over.
+bar (`◉ @name`) while their monitor runs. A thread whose owner isn't
+listening is everyone's again: it wakes every listening agent, and whoever
+answers it takes it over.
 
-### Waking an agent nobody is listening for
+### The responder: dv's own agent
 
-When you send a round or a reply and no agent is listening, dv starts the
-owner's agent session again, detached, in this worktree, in the CLI the agent
-ran `dv monitor --as <name>` from (`.diffview/sessions/<name>`): for Claude
-Code, `claude --dangerously-skip-permissions -p --resume <session> "<the
-monitor line> Handle it with dv … as <name>, then exit."`, falling back to a
-fresh `claude -p` if the resume fails. Headless, nobody can answer a
-permission prompt, so without the flag the woken agent can't run `dv` at all.
-A session that is still open isn't resumed (two writers on one transcript); a
-fresh one is started and the status bar says so. Output goes to
-`.diffview/wakes/` (a linked worktree's to `.diffview/worktrees/<name>/wakes/`)
-as the CLI's JSON event stream, between a `dv-wake pid … cli … threads …` line
-and a `dv-wake-exit <status>` one. While the wake runs, the UI follows its log
-and shows what it is doing at the bottom of the thread and in the status bar:
-`⠋ @dev is working · running dv show 46`, `· thinking`, `· editing
-Source/Foo.cpp`. The row goes when it exits, after showing `✗ … failed · exit
-1` for a few seconds if it failed. Unowned threads wake no one.
+Whatever no listening agent will take goes to dv's own agent, the
+responder (`@dv`): unowned threads when nobody is listening, threads whose
+owner isn't listening, and every thread it owns. Agents you run with `dv
+monitor --as <name>` keep their threads as before.
 
-| CLI | detected by | woken as | resumes |
-| --- | --- | --- | --- |
-| `claude` (Claude Code and compatible) | `CLAUDECODE` | `claude --dangerously-skip-permissions -p --output-format stream-json --verbose` | by `CLAUDE_CODE_SESSION_ID` |
-| `gemini` (Gemini CLI) | `GEMINI_CLI` | `gemini --yolo --output-format stream-json -p` | no: Gemini doesn't expose its session id, so wakes start fresh |
+The UI starts it on the first send that needs it: one agent CLI session,
+headless, with every permission granted (nobody is there to answer a
+prompt), for Claude Code `claude --dangerously-skip-permissions -p
+--input-format stream-json --output-format stream-json --verbose`. Each send
+for it is written to its stdin as a user message, the line `dv monitor --as
+dv` would print plus "Handle it with dv comments/show/reply/resolve as dv.",
+so it keeps its context from one to the next; sends that arrive while it
+works wait their turn. It runs in the main worktree: one responder per
+repo, and Claude Code resumes sessions by working directory. While it runs
+it is registered as listening, so agents and `dv comments` see `@dv`, and
+any other dv open on the repo leaves the sends to it.
+
+The UI shows what it is doing at the bottom of the thread and in the status
+bar, straight from its output: `⠋ @dv is working · running dv show 46`, `·
+thinking`, `· editing Source/Foo.cpp`. Its output and what dv did with it go
+to `.diffview/responder/dv.log`; its session id to `dv.session`, and the
+next dv resumes that session (a new one if it can't be resumed). It is
+stopped when dv quits, and can't outlive it: its stdin is a pipe from dv,
+and it ends when that closes. If it crashes it is restarted once, with the
+message it was working on, and the status bar says so; a second crash
+stops it, shown in red in the status bar until dv restarts.
+
+| CLI | session | resumes |
+| --- | --- | --- |
+| `claude` (Claude Code and compatible) | one process, messages on stdin | by session id |
+| `gemini` (Gemini CLI) | can't read messages once started: a fresh `gemini --yolo --output-format stream-json -p <message>` per send, one at a time | no |
 
 Another CLI is one adapter in `Lib/DiffView` (see `ClaudeCodeCli.cpp`,
-`GeminiCli.cpp`: its commands, environment variables and a parser from its
-event stream to one line of status) and one line in the registry in
-`AgentCli.cpp`.
+`GeminiCli.cpp`: its command, flags and a parser from its event stream to
+one line of status) and one line in the registry in `AgentCli.cpp`.
 
 Set it in `~/.config/diffview/config`, or per repo in `.diffview/config`
 (the repo's wins, as with git):
 
 ```
-wake = resume   # resume | fresh | off
-agent = claude  # claude | gemini: for agents whose CLI dv doesn't know
-wakeCommand = claude --dangerously-skip-permissions
-# replaces the configured agent CLI's command; run by /bin/sh as
-# `<wakeCommand> <its headless flags> [--resume <id>] <prompt>`
+responder = on       # on | off
+agent = claude       # claude | gemini
+responderName = dv
 ```
 
 ### The files are the store

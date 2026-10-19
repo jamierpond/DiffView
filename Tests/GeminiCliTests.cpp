@@ -20,34 +20,23 @@ std::optional<std::string> summarise(const std::string& line)
 {
     return getAgentCli("gemini").summariseStreamLine(line, worktree);
 }
-
-std::string readVariableInGemini(const std::string& name)
-{
-    if (name == "GEMINI_CLI")
-        return "1";
-
-    return {};
-}
 } // namespace
 
 auto tGeminiCommand =
-    test("GeminiCli/runs headless with the prompt after -p, yolo by default") = []
+    test("GeminiCli/has no stdin session: each message is a fresh run after -p") = []
 {
     const auto& cli = getAgentCli("gemini");
+    using Arguments = std::vector<std::string>;
 
-    check(makeAgentCommand(cli, cli.unattendedCommand, "\"$1\"", {})
-          == "gemini --yolo --output-format stream-json -p \"$1\"");
-    check(makeAgentCommand(cli, cli.unattendedCommand, "\"$1\"", "\"$4\"")
-          == "gemini --yolo --output-format stream-json --resume \"$4\" -p \"$1\"");
-};
-
-auto tGeminiDetected =
-    test("GeminiCli/is detected by GEMINI_CLI, with no session id to record") = []
-{
-    auto cli = detectAgentCli(readVariableInGemini);
-
-    check(cli && cli->name == "gemini");
-    check(cli->sessionIdVariable.empty() && cli->processIdVariable.empty());
+    check(!hasStdinSession(cli) && !canResume(cli));
+    check(makeAgentArguments(cli, "session-1", "the prompt")
+          == Arguments {"gemini",
+                        "--yolo",
+                        "--output-format",
+                        "stream-json",
+                        "-p",
+                        "the prompt"});
+    check(!cli.isEndOfTurn(R"({"type":"result","status":"success"})"));
 };
 
 auto tGeminiToolUse =

@@ -53,20 +53,19 @@ std::optional<std::string> summariseGeminiStreamLine(std::string_view line,
 }
 } // namespace
 
-// Gemini puts no session id in its shells' environment (only GEMINI_CLI=1), so
-// `dv monitor` can't record one: its wakes start fresh.
+// Gemini reads no messages from stdin once started and resumes only "latest"
+// or an index, not an id: each message is a fresh run.
 AgentCli makeGeminiCli()
 {
     return {
         "gemini",
-        "gemini --yolo",
-        "--output-format stream-json",
+        {"gemini", "--yolo"},
+        {"--output-format", "stream-json"},
+        {},
         "-p",
-        "--resume",
-        "GEMINI_CLI",
-        "",
         "",
         summariseGeminiStreamLine,
+        [](std::string_view) { return false; },
     };
 }
 } // namespace diffview

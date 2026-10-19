@@ -78,14 +78,14 @@ AgentCli makeClaudeCodeCli()
 {
     return {
         std::string {defaultAgentCliName},
-        "claude --dangerously-skip-permissions",
-        "-p --output-format stream-json --verbose",
+        {"claude", "--dangerously-skip-permissions"},
+        {"-p", "--output-format", "stream-json", "--verbose"},
+        {"--input-format", "stream-json"},
         "",
         "--resume",
-        "CLAUDECODE",
-        "CLAUDE_CODE_SESSION_ID",
-        "CLAUDE_PID",
         summariseClaudeStreamLine,
+        [](std::string_view line)
+        { return getString(Miro::Json::getParsedValue(line), "type") == "result"; },
     };
 }
 } // namespace diffview

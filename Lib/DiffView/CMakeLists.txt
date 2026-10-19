@@ -10,13 +10,13 @@ add_library(DiffViewCore STATIC
         GeminiCli.cpp
         Git.cpp
         Keymap.cpp
+        Responder.cpp
         Review.cpp
         ReviewMarkdown.cpp
         Search.cpp
         Store.cpp
         StreamEvents.cpp
-        Text.cpp
-        Wake.cpp)
+        Text.cpp)
 
 target_include_directories(DiffViewCore PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(DiffViewCore PUBLIC eacp-core TextBuffer)

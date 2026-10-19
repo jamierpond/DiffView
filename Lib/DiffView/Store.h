@@ -59,6 +59,15 @@ void writeText(const eacp::FilePath& path, std::string_view text);
 // eacp's Files only reads whole files.
 std::string readFileFromByteOffset(const eacp::FilePath& path, std::uint64_t offset);
 
+// The line `dv monitor --as <agent>` prints for a round, naming its worktree
+// when it isn't `fromWorktree`.
+std::string describeRoundForAgent(const StoreLayout& store,
+                                  const std::string& fromWorktree,
+                                  const std::string& id,
+                                  const ReviewFile& round,
+                                  const RoundRoute& counts,
+                                  const std::string& agent);
+
 std::vector<eacp::FilePath> listDraftFiles(const StoreLayout& store);
 
 int findHighestIdInOtherDrafts(const StoreLayout& store);

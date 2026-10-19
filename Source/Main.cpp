@@ -1,3 +1,4 @@
+#include "AgentProcess.h"
 #include "Agents.h"
 #include "Commands.h"
 #include "Monitor.h"
@@ -5,12 +6,13 @@
 
 #include <Review.h>
 #include <Store.h>
-#include <Wake.h>
+#include <Responder.h>
 
 #include <eacp/Core/Utils/Files.h>
 
 #include <eacp/Core/App/App.h>
 
+#include <csignal>
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
@@ -75,14 +77,15 @@ constexpr auto usage =
     "Worktrees share one .diffview, in the main worktree (as they share .git);\n"
     "every command sees the whole repo from any of them.\n"
     "\n"
-    "Nobody listening: a send resumes the owner's last `dv monitor` session\n"
-    "headless in the agent CLI it ran in (claude, gemini), with every\n"
-    "permission granted; the UI shows what it is doing under the thread from\n"
-    "its log in .diffview/wakes/.\n"
+    "dv's own agent, the responder (@dv), takes what no listening agent will:\n"
+    "the UI starts one headless agent CLI session for the repo on the first\n"
+    "send that needs it, with every permission granted, hands it each such\n"
+    "send on its stdin, shows what it is doing under the thread, and stops it\n"
+    "on quit. Its log and session id are in .diffview/responder/.\n"
     "~/.config/diffview/config or .diffview/config:\n"
-    "  wake = resume|fresh|off\n"
-    "  agent = claude|gemini        for agents with no known CLI\n"
-    "  wakeCommand = claude --dangerously-skip-permissions   replaces agent's\n";
+    "  responder = on|off\n"
+    "  agent = claude|gemini\n"
+    "  responderName = dv\n";
 
 const std::map<std::string, std::string>& commandHelp()
 {
@@ -146,7 +149,7 @@ const std::map<std::string, std::string>& commandHelp()
          "Say what you're doing on a thread. The UI shows it under the thread\n"
          "with a spinner, and in its status bar, until you clear it or a few\n"
          "minutes pass without an update. One per agent: a new one replaces it.\n"
-         "Woken agents (dv started them) needn't: the UI reads their log.\n"
+         "dv's responder needn't: the UI reads its output.\n"
          "\n"
          "usage: dv status <id> [-m] <text> [--as <name>] [--repo <dir>]\n"
          "       dv status <id> --done [--as <name>] [--repo <dir>]\n"
@@ -259,24 +262,8 @@ std::string readEnvironment(const std::string& name)
     return value;
 }
 
-diffview::AgentSession readAgentSession(const diffview::StoreLayout& store)
-{
-    auto session = diffview::AgentSession {};
-    session.worktree = store.worktree.str();
-    auto cli = diffview::detectAgentCli(readEnvironment);
-
-    if (!cli)
-        return session;
-
-    auto pidText = readEnvironment(cli->processIdVariable);
-    session.agentCli = cli->name;
-    session.sessionId = readEnvironment(cli->sessionIdVariable);
-    session.agentPid = std::atoi(pidText.c_str());
-    return session;
-}
-
 // As git reads ~/.config/git/config, then the repo's: the repo's wins.
-diffview::WakeConfig readWakeConfig(const diffview::StoreLayout& store)
+diffview::ResponderConfig readResponderConfig(const diffview::StoreLayout& store)
 {
     auto configHome = readEnvironment("XDG_CONFIG_HOME");
 
@@ -287,7 +274,8 @@ diffview::WakeConfig readWakeConfig(const diffview::StoreLayout& store)
                                       / diffview::configFileName);
     auto repo = eacp::Files::readFile(store.directory / diffview::configFileName);
 
-    return diffview::parseWakeConfig(repo, diffview::parseWakeConfig(user, {}));
+    return diffview::parseResponderConfig(repo,
+                                          diffview::parseResponderConfig(user, {}));
 }
 
 void printMergeNotes(const std::vector<std::string>& notes)
@@ -364,10 +352,20 @@ int runCommand(const std::string& command, int argc, char* argv[])
         if (!positional.empty())
             return usageError("unexpected " + positional.front(), command);
 
+        if (!agent.empty()
+            && diffview::isRunningResponder(store->directory.str(), agent))
+        {
+            std::fprintf(
+                stderr,
+                "dv: @%s is dv's responder: dv writes each send for it to its "
+                "stdin, so it never needs dv monitor\n",
+                agent.c_str());
+            return 1;
+        }
+
         auto options = diffview::MonitorOptions {};
         options.once = arguments.flags["--once"];
         options.agent = agent;
-        options.session = readAgentSession(*store);
 
         if (arguments.values.contains("after"))
             options.after = arguments.values["after"];
@@ -483,7 +481,11 @@ int main(int argc, char* argv[])
     options.repo = *root;
     options.store = *store;
     options.mergeNotes = diffview::mergeWorktreeStores(*store);
-    options.readWakeConfig = [store = *store] { return readWakeConfig(store); };
-    options.launchWake = diffview::launchDetached;
+    options.readResponderConfig = [store = *store]
+    { return readResponderConfig(store); };
+    options.startAgentProcess = diffview::startPipedAgentProcess;
+
+    // A write to a responder that just died must not take dv with it.
+    std::signal(SIGPIPE, SIG_IGN);
     return eacp::Apps::run<diffview::Viewer>(options);
 }

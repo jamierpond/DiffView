@@ -627,6 +627,30 @@ std::string readFileFromByteOffset(const eacp::FilePath& path, std::uint64_t off
     return {std::istreambuf_iterator<char> {in}, std::istreambuf_iterator<char> {}};
 }
 
+std::string describeRoundForAgent(const StoreLayout& store,
+                                  const std::string& fromWorktree,
+                                  const std::string& id,
+                                  const ReviewFile& round,
+                                  const RoundRoute& counts,
+                                  const std::string& agent)
+{
+    auto roundWorktree = round.worktree.empty() ? store.home.str() : round.worktree;
+    auto worktree = isSamePath(roundWorktree, fromWorktree)
+                        ? std::string {}
+                        : getWorktreeShortName(roundWorktree);
+    auto own = (store.directory / reviewDirectory / (id + ".md")).str();
+
+    if (round.reply)
+        return replyNotice(id, round, agent, worktree, own);
+
+    auto latest = store.directory / latestReviewFileName;
+
+    if (readReviewOrEmpty(latest).title == id)
+        return roundNotice(id, counts, agent, worktree, latest.str());
+
+    return roundNotice(id, counts, agent, worktree, own);
+}
+
 std::vector<eacp::FilePath> listDraftFiles(const StoreLayout& store)
 {
     auto drafts = std::vector<eacp::FilePath> {};

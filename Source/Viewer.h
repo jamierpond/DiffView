@@ -8,9 +8,9 @@
 #include <FileTree.h>
 #include <Git.h>
 #include <Keymap.h>
+#include <Responder.h>
 #include <Review.h>
 #include <Store.h>
-#include <Wake.h>
 #include <Telescope.h>
 #include <VimEditor.h>
 
@@ -41,8 +41,10 @@ struct Options
     std::string repo;
     StoreLayout store;
     std::vector<std::string> mergeNotes;
-    std::function<WakeConfig()> readWakeConfig = [] { return WakeConfig {}; };
-    std::function<void(const WakeLaunch&)> launchWake = [](const WakeLaunch&) {};
+    std::function<ResponderConfig()> readResponderConfig = []
+    { return ResponderConfig {}; };
+    StartAgentProcess startAgentProcess = [](const AgentLaunch&)
+    { return std::unique_ptr<AgentProcess> {}; };
     git::BaseSpec base;
 };
 
@@ -107,6 +109,10 @@ private:
     // Viewer.cpp
     void tick();
     void pollActivities(std::int64_t now);
+    void pollResponder(std::int64_t now);
+    void deliverNewRounds();
+    bool claimResponder(const ResponderConfig& config);
+    void stopResponder();
     void onRepoChanged(const std::vector<std::string>& paths);
     void onStoreChanged(const std::vector<std::string>& paths);
     void scheduleRefresh(int delayMs);
@@ -129,7 +135,7 @@ private:
     int annotationAtCursor() const;
     Annotation* annotation(int id);
     int findNextAnnotationId() const;
-    std::string wakeAgentsFor(const ReviewFile& round, const std::string& path);
+    std::string routeToAgents(const ReviewFile& round);
     std::optional<Annotation> findAnnotationInAnyWorktree(int id) const;
     std::string describeCommentPlace(const Annotation& note) const;
     std::optional<LineRange> hunkRange(int row) const;
@@ -251,7 +257,10 @@ private:
     std::vector<std::string> rounds;
     std::vector<std::string> listening;
 
-    ActivityWatcher activityWatcher;
+    std::optional<Responder> responder;
+    std::vector<std::string> deliveredRounds;
+    std::int64_t lastRoundPoll = 0;
+    bool isResponderFailureHandled = false;
     std::vector<AgentActivity> activities;
     std::int64_t lastActivityPoll = 0;
     std::int64_t lastSpinnerRedraw = 0;

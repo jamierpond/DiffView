@@ -17,6 +17,7 @@
 #include <map>
 #include <set>
 #include <sstream>
+#include <unistd.h>
 
 namespace diffview
 {
@@ -64,6 +65,7 @@ bool isActivityFileInRepo(const std::string& path)
 }
 
 constexpr auto activityPollMs = std::int64_t {250};
+constexpr auto roundPollMs = std::int64_t {1000};
 } // namespace
 
 std::int64_t nowMs()
@@ -78,9 +80,6 @@ Viewer::Viewer(const Options& optionsToUse)
     , repo(optionsToUse.repo)
     , store(optionsToUse.store)
     , base(optionsToUse.base)
-    , activityWatcher(optionsToUse.store.worktreeDirectory / wakeDirectory,
-                      optionsToUse.store.directory / statusDirectory,
-                      optionsToUse.store.worktree.str())
     , pump([this] { tick(); }, eacp::Time::MS {16})
 {
     root = ftxui::Renderer([this] { return render(); })
@@ -94,6 +93,7 @@ Viewer::Viewer(const Options& optionsToUse)
     loop = std::make_unique<ftxui::Loop>(&screen, root);
 
     loadStore();
+    deliveredRounds = listRoundIdsInOrder(store.directory);
     watcher = std::make_unique<RepoWatcher>(
         repo,
         [this](const std::vector<std::string>& changed) { onRepoChanged(changed); });
@@ -115,7 +115,10 @@ Viewer::Viewer(const Options& optionsToUse)
     refresh();
 }
 
-Viewer::~Viewer() = default;
+Viewer::~Viewer()
+{
+    stopResponder();
+}
 
 void Viewer::tick()
 {
@@ -138,6 +141,7 @@ void Viewer::tick()
         redraw();
     }
 
+    pollResponder(now);
     pollActivities(now);
 }
 
@@ -147,7 +151,23 @@ void Viewer::pollActivities(std::int64_t now)
     {
         lastActivityPoll = now;
         auto wasActive = !activities.empty();
-        activities = activityWatcher.findActivities(std::time(nullptr));
+        activities =
+            responder ? responder->findActivities() : std::vector<AgentActivity> {};
+
+        for (auto& status: findStatusActivities(store.directory / statusDirectory,
+                                                std::time(nullptr)))
+        {
+            auto isShown = std::any_of(activities.begin(),
+                                       activities.end(),
+                                       [&](const AgentActivity& shown)
+                                       {
+                                           return shown.agent == status.agent
+                                                  && shown.thread == status.thread;
+                                       });
+
+            if (!isShown)
+                activities.push_back(std::move(status));
+        }
 
         if (wasActive && activities.empty())
             redraw();
@@ -158,6 +178,112 @@ void Viewer::pollActivities(std::int64_t now)
         lastSpinnerRedraw = now;
         redraw();
     }
+}
+
+void Viewer::pollResponder(std::int64_t now)
+{
+    if (now - lastRoundPoll >= roundPollMs)
+    {
+        lastRoundPoll = now;
+        deliverNewRounds();
+    }
+
+    if (!responder)
+        return;
+
+    responder->poll();
+
+    for (auto& notice: responder->takeNotices())
+        say(std::move(notice));
+
+    if (responder->getFailure() && !isResponderFailureHandled)
+    {
+        isResponderFailureHandled = true;
+        unregisterResponder(store.directory.str(), responder->getName());
+        listening = findListeningAgents(store.directory.str());
+    }
+}
+
+// Every dv watches for rounds, from any worktree; the one running the
+// responder hands it what no listening agent takes, and the first to need
+// one starts it.
+void Viewer::deliverNewRounds()
+{
+    auto current = listRoundIdsInOrder(store.directory);
+    auto fresh = newRounds(deliveredRounds, current);
+    deliveredRounds = std::move(current);
+
+    if (fresh.empty())
+        return;
+
+    auto config = options.readResponderConfig();
+
+    if (!config.isEnabled)
+    {
+        stopResponder();
+        return;
+    }
+
+    listening = findListeningAgents(store.directory.str());
+
+    for (const auto& id: fresh)
+    {
+        auto round =
+            readReviewOrEmpty(store.directory / reviewDirectory / (id + ".md"));
+        auto name = responder ? responder->getName() : config.name;
+        auto route = routeSend(round, listening, name);
+
+        if (route.responderThreads.empty() || !claimResponder(config))
+            continue;
+
+        auto everyone = listening;
+        everyone.push_back(name);
+        auto notice = describeRoundForAgent(store,
+                                            store.home.str(),
+                                            id,
+                                            round,
+                                            routeRound(round, name, everyone),
+                                            name);
+        responder->send(
+            {makeResponderMessage(notice, name), route.responderThreads});
+    }
+}
+
+// In the main worktree: one responder for the repo, and the CLI keys the
+// sessions it can resume by working directory.
+bool Viewer::claimResponder(const ResponderConfig& config)
+{
+    if (responder)
+        return true;
+
+    const auto& directory = store.directory;
+    createStoreDirectory(directory);
+    auto lock = StoreLock {directory};
+    auto holder = findListenerProcessId(directory.str(), config.name);
+
+    if (holder && *holder != getpid())
+        return false;
+
+    registerResponder(directory.str(), config.name);
+    auto files = directory / responderDirectory;
+    responder.emplace(ResponderSettings {config.name,
+                                         getAgentCli(config.agentCli),
+                                         store.home.str(),
+                                         files / (config.name + ".log"),
+                                         files / (config.name + ".session")},
+                      options.startAgentProcess);
+    listening = findListeningAgents(directory.str());
+    return true;
+}
+
+void Viewer::stopResponder()
+{
+    if (!responder)
+        return;
+
+    responder->stop();
+    unregisterResponder(store.directory.str(), responder->getName());
+    responder.reset();
 }
 
 void Viewer::onRepoChanged(const std::vector<std::string>& changed)

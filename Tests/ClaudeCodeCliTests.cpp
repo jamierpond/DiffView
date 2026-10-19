@@ -19,36 +19,36 @@ std::optional<std::string> summarise(const std::string& line)
 {
     return getAgentCli("claude").summariseStreamLine(line, worktree);
 }
-
-std::string readVariableInClaudeCode(const std::string& name)
-{
-    if (name == "CLAUDECODE")
-        return "1";
-
-    return {};
-}
 } // namespace
 
 auto tClaudeCodeCommand =
-    test("ClaudeCodeCli/runs headless on a positional prompt and resumes by id") = []
+    test("ClaudeCodeCli/reads messages from stdin and resumes by id") = []
+{
+    const auto& cli = getAgentCli("claude");
+    using Arguments = std::vector<std::string>;
+    auto session = Arguments {"claude",
+                              "--dangerously-skip-permissions",
+                              "-p",
+                              "--output-format",
+                              "stream-json",
+                              "--verbose",
+                              "--input-format",
+                              "stream-json"};
+
+    check(hasStdinSession(cli) && canResume(cli));
+    check(makeAgentArguments(cli, {}, "ignored") == session);
+
+    session.insert(session.end(), {"--resume", "session-1"});
+    check(makeAgentArguments(cli, "session-1", "ignored") == session);
+};
+
+auto tClaudeCodeEndOfTurn = test("ClaudeCodeCli/a result line ends a turn") = []
 {
     const auto& cli = getAgentCli("claude");
 
-    check(makeAgentCommand(cli, cli.unattendedCommand, "\"$1\"", {})
-          == "claude --dangerously-skip-permissions -p --output-format stream-json "
-             "--verbose \"$1\"");
-    check(makeAgentCommand(cli, "/bin/stub", "\"$1\"", "\"$4\"")
-          == "/bin/stub -p --output-format stream-json --verbose --resume \"$4\" "
-             "\"$1\"");
-};
-
-auto tClaudeCodeDetected = test("ClaudeCodeCli/is detected by CLAUDECODE") = []
-{
-    auto cli = detectAgentCli(readVariableInClaudeCode);
-
-    check(cli && cli->name == "claude");
-    check(cli->sessionIdVariable == "CLAUDE_CODE_SESSION_ID");
-    check(!detectAgentCli([](const std::string&) { return std::string {}; }));
+    check(cli.isEndOfTurn(R"({"type":"result","subtype":"success"})"));
+    check(!cli.isEndOfTurn(R"({"type":"assistant","message":{}})"));
+    check(!cli.isEndOfTurn("not json"));
 };
 
 auto tActivityToolUse =

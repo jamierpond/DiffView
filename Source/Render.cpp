@@ -855,6 +855,10 @@ Element Viewer::renderStatus()
         parts.push_back(text("  ◉" + names) | color(Color::Cyan));
     }
 
+    if (responder && responder->getFailure())
+        parts.push_back(text("  ✗ @" + responder->getName() + " stopped")
+                        | color(Color::Red));
+
     if (!activities.empty())
     {
         const auto& first = activities.front();
@@ -884,9 +888,6 @@ Element Viewer::renderStatus()
 
 Element Viewer::renderActivity(const AgentActivity& activity)
 {
-    if (activity.hasFailed)
-        return text("✗ " + describeActivity(activity)) | color(Color::Red);
-
     return text(getSpinnerFrame(nowMs()) + " " + describeActivity(activity))
            | color(Color::Cyan);
 }

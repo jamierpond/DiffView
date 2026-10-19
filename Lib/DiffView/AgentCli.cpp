@@ -37,36 +37,37 @@ const AgentCli& getAgentCli(std::string_view name)
     return getAgentCli(defaultAgentCliName);
 }
 
-std::optional<AgentCli> detectAgentCli(
-    const std::function<std::string(const std::string&)>& readVariable)
-{
-    for (const auto& cli: getAgentClis())
-    {
-        if (!readVariable(cli.detectionVariable).empty())
-            return cli;
-    }
-
-    return std::nullopt;
-}
-
 bool canResume(const AgentCli& cli)
 {
     return !cli.resumeFlag.empty();
 }
 
-std::string makeAgentCommand(const AgentCli& cli,
-                             const std::string& command,
-                             const std::string& promptArgument,
-                             const std::string& sessionArgument)
+bool hasStdinSession(const AgentCli& cli)
 {
-    auto text = command + " " + cli.headlessArguments;
+    return !cli.stdinSessionArguments.empty();
+}
 
-    if (!sessionArgument.empty() && canResume(cli))
-        text += " " + cli.resumeFlag + " " + sessionArgument;
+std::vector<std::string> makeAgentArguments(const AgentCli& cli,
+                                            const std::string& sessionId,
+                                            const std::string& prompt)
+{
+    auto arguments = cli.unattendedCommand;
+    auto append = [&](const std::vector<std::string>& more)
+    { arguments.insert(arguments.end(), more.begin(), more.end()); };
+
+    append(cli.headlessArguments);
+    append(cli.stdinSessionArguments);
+
+    if (!sessionId.empty() && canResume(cli))
+        append({cli.resumeFlag, sessionId});
+
+    if (hasStdinSession(cli))
+        return arguments;
 
     if (!cli.promptFlag.empty())
-        text += " " + cli.promptFlag;
+        arguments.push_back(cli.promptFlag);
 
-    return text + " " + promptArgument;
+    arguments.push_back(prompt);
+    return arguments;
 }
 } // namespace diffview

@@ -11,11 +11,11 @@ add_executable(DiffViewTests
         GitTests.cpp
         KeymapTests.cpp
         ReviewMarkdownTests.cpp
+        ResponderTests.cpp
         ReviewTests.cpp
         SearchTests.cpp
         StoreTests.cpp
-        TextTests.cpp
-        WakeTests.cpp)
+        TextTests.cpp)
 target_link_libraries(DiffViewTests PRIVATE NanoTest NanoTestMain DiffViewCore)
 target_compile_definitions(DiffViewTests PRIVATE
         DIFFVIEW_GOLDEN_DIR="${CMAKE_CURRENT_SOURCE_DIR}/Golden")

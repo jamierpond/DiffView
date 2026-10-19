@@ -189,7 +189,7 @@ void Viewer::submitReview()
     saveStore();
     rebuildRows();
     say("Submitted " + std::to_string(round.comments.size()) + " comments → "
-        + wakeAgentsFor(round, (root / latestReviewFileName).str()));
+        + routeToAgents(round));
 }
 
 void Viewer::sendReply(Annotation& note, const std::string& text)
@@ -230,35 +230,26 @@ void Viewer::sendReply(Annotation& note, const std::string& text)
     rounds.push_back(id);
     lastRoundsSignature = roundsSignature();
 
-    say("Sent reply on #" + std::to_string(note.id) + " → "
-        + wakeAgentsFor(round, path.str()));
+    say("Sent reply on #" + std::to_string(note.id) + " → " + routeToAgents(round));
 }
 
-std::string Viewer::wakeAgentsFor(const ReviewFile& round, const std::string& path)
+std::string Viewer::routeToAgents(const ReviewFile& round)
 {
     listening = findListeningAgents(store.directory.str());
-    auto config = options.readWakeConfig();
-    auto decisions = decideWakes(
-        round, listening, readKnownSessions(store.directory.str()), config.mode);
+    auto config = options.readResponderConfig();
+    auto name = std::string {};
 
-    for (const auto& decision: decisions)
-    {
-        auto isLaunch =
-            decision.kind != WakeKind::listening && decision.kind != WakeKind::off;
+    if (config.isEnabled)
+        name = responder ? responder->getName() : config.name;
 
-        if (!isLaunch)
-            continue;
+    auto route = routeSend(round, listening, name);
+    deliverNewRounds();
 
-        auto log = store.worktreeDirectory / wakeDirectory
-                   / (round.title + "-" + decision.agent + ".log");
-        auto prompt = makeWakePrompt(makeWakeNotice(round, decision.agent, path),
-                                     decision.agent);
+    if (responder && responder->getFailure() && !route.responderThreads.empty())
+        return describeSendRoute({route.listeners, {}}, name) + " (@" + name
+               + " stopped)";
 
-        options.launchWake(makeWakeLaunch(
-            decision, config, prompt, store.worktree.str(), log.str()));
-    }
-
-    return describeWakes(decisions);
+    return describeSendRoute(route, name);
 }
 
 std::string Viewer::threadKey(const Annotation& note)
