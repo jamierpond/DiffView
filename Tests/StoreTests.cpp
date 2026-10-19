@@ -1,6 +1,5 @@
 #include <Git.h>
 #include <Store.h>
-#include <Text.h>
 
 #include <eacp/Core/Utils/Files.h>
 

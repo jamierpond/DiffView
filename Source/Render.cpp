@@ -1,6 +1,5 @@
 #include "Viewer.h"
 
-#include <Search.h>
 #include <Text.h>
 
 #include <ftxui/dom/elements.hpp>
@@ -957,7 +956,7 @@ Element Viewer::renderPicker()
             i = end;
         }
 
-        auto detailWidth = static_cast<int>(codepointCount(item.detail)) + 1;
+        auto detailWidth = codepointCount(item.detail) + 1;
         auto line =
             hbox({hbox(std::move(label))
                       | size(WIDTH, LESS_THAN, std::max(8, listWidth - detailWidth)),
