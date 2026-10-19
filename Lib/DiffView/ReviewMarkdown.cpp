@@ -157,7 +157,8 @@ std::optional<Heading> parseHeading(std::string_view line)
         parts.pop_back();
     }
 
-    if (parts.size() >= 3 && startsWith(parts.back(), "@") && parts.back().size() > 1)
+    if (parts.size() >= 3 && startsWith(parts.back(), "@")
+        && parts.back().size() > 1)
     {
         heading.owner = trim(std::string_view {parts.back()}.substr(1));
         parts.pop_back();
@@ -240,7 +241,8 @@ std::vector<std::string> splitParts(std::string_view text)
     {
         auto at = text.find(separator, from);
         parts.push_back(trim(text.substr(
-            from, at == std::string_view::npos ? std::string_view::npos : at - from)));
+            from,
+            at == std::string_view::npos ? std::string_view::npos : at - from)));
 
         if (at == std::string_view::npos)
             return parts;
@@ -249,8 +251,6 @@ std::vector<std::string> splitParts(std::string_view text)
     }
 }
 
-// "#### reply · diffview-dev · 2026-10-18 14:02", "· new" on the reviewer's
-// first sent in this round. Author and time may be left off by hand.
 std::optional<Reply> parseReplyHeading(std::string_view line)
 {
     if (!startsWith(line, replyMark))
@@ -560,10 +560,8 @@ Json::Value commentValue(const Block& block)
     comment["lines"] = toArray(lines);
     comment["after"] = toArray(after);
 
-    // The comment, then each reply: prose split at reply headings outside
-    // fences.
     auto segments = std::vector<std::vector<std::string>> {{}};
-    auto replies = Json::Array {};
+    auto headings = std::vector<Reply> {};
     auto fence = std::string {};
 
     for (; i < body.size(); ++i)
@@ -574,11 +572,7 @@ Json::Value commentValue(const Block& block)
         {
             if (auto reply = parseReplyHeading(line))
             {
-                auto value = Json::Object {};
-                value["author"] = reply->author;
-                value["time"] = reply->time;
-                value["fresh"] = reply->fresh;
-                replies.push_back(std::move(value));
+                headings.push_back(*reply);
                 segments.emplace_back();
                 continue;
             }
@@ -613,8 +607,17 @@ Json::Value commentValue(const Block& block)
 
     comment["text"] = joined(segments.front());
 
-    for (std::size_t k = 0; k < replies.size(); ++k)
-        replies[k].asObject()["text"] = joined(segments[k + 1]);
+    auto replies = Json::Array {};
+
+    for (std::size_t k = 0; k < headings.size(); ++k)
+    {
+        auto value = Json::Object {};
+        value["author"] = headings[k].author;
+        value["time"] = headings[k].time;
+        value["text"] = joined(segments[k + 1]);
+        value["fresh"] = headings[k].fresh;
+        replies.push_back(std::move(value));
+    }
 
     comment["replies"] = std::move(replies);
     return comment;
@@ -775,7 +778,7 @@ Miro::JSON parseMarkdown(std::string_view input)
     return review;
 }
 
-std::string commentMarkdown(const Annotation& comment)
+std::string printComment(const Annotation& comment)
 {
     auto out = std::string {};
     writeComment(out, Miro::toJSON(comment));

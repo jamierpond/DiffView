@@ -49,7 +49,10 @@ ReviewFile sampleReview()
     line.owner = "diffview-dev";
     line.replies = {
         {"diffview-dev", "2026-10-16 17:10", "It aliases the map entry.", false},
-        {"you", "2026-10-16 18:15", "Then say so:\n\n#### reply · not one\n```\n#### reply · nor this\n```", true}};
+        {"you",
+         "2026-10-16 18:15",
+         "Then say so:\n\n#### reply · not one\n```\n#### reply · nor this\n```",
+         true}};
     review.comments.push_back(line);
 
     auto removed = makeAnnotation(
@@ -274,7 +277,8 @@ auto tReplies = test("ReviewMarkdown/replies and the owner read back") = []
           != std::string::npos);
     check(text.find("#### reply · diffview-dev · 2026-10-16 17:10\n\nIt aliases")
           != std::string::npos);
-    check(text.find("#### reply · you · 2026-10-16 18:15 · new\n") != std::string::npos);
+    check(text.find("#### reply · you · 2026-10-16 18:15 · new\n")
+          != std::string::npos);
     check(text.find("\\#### reply · not one") != std::string::npos);
 
     auto review = fromMarkdown(text);
@@ -285,8 +289,9 @@ auto tReplies = test("ReviewMarkdown/replies and the owner read back") = []
 
 auto tHandReply = test("ReviewMarkdown/a reply written by hand") = []
 {
-    auto back = fromMarkdown("### src/a.cpp:3 · open · #2\n\nWhy?\n\n#### reply\n\nBecause.\n"
-                             "#### reply · dev\nAlso.\n#### replying is prose\n");
+    auto back = fromMarkdown(
+        "### src/a.cpp:3 · open · #2\n\nWhy?\n\n#### reply\n\nBecause.\n"
+        "#### reply · dev\nAlso.\n#### replying is prose\n");
 
     check(back.comments.size() == 1);
     const auto& replies = back.comments[0].replies;
@@ -298,7 +303,7 @@ auto tHandReply = test("ReviewMarkdown/a reply written by hand") = []
 
 auto tShowOne = test("ReviewMarkdown/one comment's block for dv show") = []
 {
-    auto text = commentMarkdown(*byId(sampleReview(), 4));
+    auto text = printComment(*byId(sampleReview(), 4));
 
     check(text.starts_with("### src/Focus.cpp:48-49 · open"));
     check(text.find("> 48 │+") != std::string::npos);

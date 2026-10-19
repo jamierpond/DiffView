@@ -161,7 +161,9 @@ auto tRoundNotice =
 
 namespace
 {
-Reply said(const std::string& author, const std::string& time, const std::string& text)
+Reply said(const std::string& author,
+           const std::string& time,
+           const std::string& text)
 {
     return {author, time, text, false};
 }
@@ -179,8 +181,8 @@ auto tMergeReplies =
     drafted.replies = {said("you", "2026-10-18 10:05", "h1"),
                        said("you", "2026-10-18 10:09", "h2")};
 
-    auto reviews = mergeReviews(
-        {{"r1", {}, {}, {first}}, {"r2", {}, {}, {second}}}, {"draft", {}, {}, {drafted}});
+    auto reviews = mergeReviews({{"r1", {}, {}, {first}}, {"r2", {}, {}, {second}}},
+                                {"draft", {}, {}, {drafted}});
     const auto& thread = reviews.annotations[0].replies;
 
     check(thread.size() == 3);
@@ -193,8 +195,8 @@ auto tMergeOwner = test("Review/an owner, once set, is kept") = []
 {
     auto claimed = comment(1, "q");
     claimed.owner = "dev";
-    auto reviews =
-        mergeReviews({{"r1", {}, {}, {claimed}}}, {"draft", {}, {}, {comment(1, "q2")}});
+    auto reviews = mergeReviews({{"r1", {}, {}, {claimed}}},
+                                {"draft", {}, {}, {comment(1, "q2")}});
 
     check(reviews.annotations[0].owner == "dev");
     check(reviews.annotations[0].text == "q2");
@@ -209,7 +211,8 @@ auto tSubmitReplies =
     drafted.replies.push_back(said("you", "2026-10-18 10:05", "h1"));
 
     auto annotations =
-        mergeReviews({{"r1", {}, {}, {sent}}}, {"draft", {}, {}, {drafted}}).annotations;
+        mergeReviews({{"r1", {}, {}, {sent}}}, {"draft", {}, {}, {drafted}})
+            .annotations;
     auto round = submitDraft(annotations, "r2", {}, {});
 
     check(round.comments.size() == 1);
@@ -221,15 +224,15 @@ auto tSubmitReplies =
 
 auto tMentions = test("Review/@names in a text, not e-mail addresses") = []
 {
-    auto names = mentionsIn("@diffview-dev, look. Ask @b_2. not me@host.com (@c)");
+    auto names = findMentions("@diffview-dev, look. Ask @b_2. not me@host.com (@c)");
 
     check(names.size() == 3);
     check(names[0] == "diffview-dev" && names[1] == "b_2" && names[2] == "c");
 
     auto note = comment(1, "for @dev");
-    check(ownerOf(note) == "dev");
+    check(findOwner(note) == "dev");
     note.owner = "other";
-    check(ownerOf(note) == "other");
+    check(findOwner(note) == "other");
 };
 
 auto tRoundFor = test("Review/which rounds wake which agent") = []
@@ -239,33 +242,35 @@ auto tRoundFor = test("Review/which rounds wake which agent") = []
     auto anyone = comment(3, "typo");
     auto replied = comment(4, "q");
     replied.owner = "ops";
-    replied.replies = {said("you", "t", "and @dev, check this"), };
+    replied.replies = {
+        said("you", "t", "and @dev, check this"),
+    };
     replied.replies[0].fresh = true;
     replied.resolved = true;
 
     auto round = ReviewFile {"r", {}, {}, {mine, theirs, anyone, replied}};
 
-    auto forDev = roundFor(round, "dev");
+    auto forDev = routeRound(round, "dev");
     check(forDev.open == 2 && forDev.replied == 1 && forDev.wakes());
 
-    auto forOps = roundFor(round, "ops");
+    auto forOps = routeRound(round, "ops");
     check(forOps.open == 2 && forOps.replied == 1);
 
-    auto everyone = roundFor(round, {});
+    auto everyone = routeRound(round, {});
     check(everyone.open == 3 && everyone.replied == 1);
 
     auto onlyOps = ReviewFile {"r", {}, {}, {theirs}};
-    check(!roundFor(onlyOps, "dev").wakes());
-    check(roundFor(onlyOps, "ops").wakes());
+    check(!routeRound(onlyOps, "dev").wakes());
+    check(routeRound(onlyOps, "ops").wakes());
 
     auto resolvedAnyone = anyone;
     resolvedAnyone.resolved = true;
-    check(!roundFor({"r", {}, {}, {resolvedAnyone}}, "dev").wakes());
+    check(!routeRound({"r", {}, {}, {resolvedAnyone}}, "dev").wakes());
 };
 
 auto tRoundsUpTo = test("Review/--after drops the rounds up to it") = []
 {
-    auto kept = roundsUpTo(
+    auto kept = keepRoundsUpTo(
         {"2026-10-16-100000.md", "2026-10-16-120000.md", "2026-10-16-120000-2.md"},
         "2026-10-16-120000");
 
@@ -275,9 +280,11 @@ auto tRoundsUpTo = test("Review/--after drops the rounds up to it") = []
 
 auto tChangeThread = test("Review/reply and resolve claim, refuse, force") = []
 {
-    auto round = ReviewFile {"r", {}, {}, {comment(1, "q"), comment(2, "@ops look")}};
+    auto round =
+        ReviewFile {"r", {}, {}, {comment(1, "q"), comment(2, "@ops look")}};
 
-    auto change = ThreadChange {"dev", true, false, false, "on it", "2026-10-18 11:00"};
+    auto change =
+        ThreadChange {"dev", true, false, false, "on it", "2026-10-18 11:00"};
     check(!changeThread(round, 1, change));
     check(round.comments[0].owner == "dev");
     check(round.comments[0].replies.size() == 1);

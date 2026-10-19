@@ -17,13 +17,10 @@ enum class Side
     oldSide
 };
 
-// One message in a comment's thread. `you` is the reviewer, anything else an
-// agent's name. `fresh`: not sent yet (in memory and the draft), or first
-// sent in this round (in a round file); only the reviewer's are ever fresh.
 struct Reply
 {
     std::string author;
-    std::string time; // "2026-10-18 14:02", local
+    std::string time;
     std::string text;
     bool fresh = false;
 
@@ -57,8 +54,6 @@ struct Annotation
     std::string text;
     bool resolved = false;
 
-    // The agent the thread belongs to: named with @ in the comment, or the
-    // first to answer it. Empty: anyone's.
     std::string owner;
 
     std::vector<Reply> replies;
@@ -145,10 +140,7 @@ int nextAnnotationId(const std::vector<Annotation>& annotations);
 
 std::string lineLabel(const Annotation& annotation);
 
-// The @names in a text, in order: "@diffview-dev, look" names diffview-dev.
-// Not an e-mail address; a trailing '.' is the sentence's.
-std::vector<std::string> mentionsIn(const std::string& text);
+std::vector<std::string> findMentions(const std::string& text);
 
-// Its owner, else the first agent its text names.
-std::string ownerOf(const Annotation& annotation);
+std::string findOwner(const Annotation& annotation);
 } // namespace diffview

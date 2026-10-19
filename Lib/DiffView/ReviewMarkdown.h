@@ -60,7 +60,5 @@ Miro::JSON parseMarkdown(std::string_view text);
 
 std::string toMarkdown(const ReviewFile& review);
 ReviewFile fromMarkdown(std::string_view text);
-
-// One comment's block as a round writes it, for `dv show`.
-std::string commentMarkdown(const Annotation& comment);
+std::string printComment(const Annotation& comment);
 } // namespace diffview

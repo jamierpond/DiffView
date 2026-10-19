@@ -26,7 +26,7 @@ std::string roundLabel(const std::string& id)
     return id.substr(5, 5) + " " + id.substr(11, 2) + ":" + id.substr(13, 2);
 }
 
-std::string replyTime(std::int64_t epochMs)
+std::string formatReplyTime(std::int64_t epochMs)
 {
     auto seconds = static_cast<std::time_t>(epochMs / 1000);
     auto local = std::tm {};
@@ -52,12 +52,11 @@ bool isAgentName(const std::string& name)
 
 namespace
 {
-bool sameReply(const Reply& a, const Reply& b)
+bool isSameReply(const Reply& a, const Reply& b)
 {
     return a.author == b.author && a.time == b.time && a.text == b.text;
 }
 
-// `newer` replaces `older`, keeping older's replies and owner.
 void carryOver(Annotation& newer, const Annotation& older)
 {
     auto replies = older.replies;
@@ -65,7 +64,7 @@ void carryOver(Annotation& newer, const Annotation& older)
     for (const auto& reply: newer.replies)
         if (std::none_of(replies.begin(),
                          replies.end(),
-                         [&](const Reply& r) { return sameReply(r, reply); }))
+                         [&](const Reply& r) { return isSameReply(r, reply); }))
             replies.push_back(reply);
 
     std::stable_sort(replies.begin(),
@@ -135,7 +134,6 @@ Reviews mergeReviews(const std::vector<ReviewFile>& rounds, const ReviewFile& dr
         for (auto& reply: comment.replies)
             reply.fresh = true;
 
-        // The sent copies are kept, so a reply already sent isn't fresh.
         if (sent != byId.end())
             carryOver(comment, sent->second);
 
@@ -176,8 +174,8 @@ std::vector<std::string> newRounds(const std::vector<std::string>& seen,
     return current;
 }
 
-std::vector<std::string> roundsUpTo(std::vector<std::string> names,
-                                    const std::string& after)
+std::vector<std::string> keepRoundsUpTo(std::vector<std::string> names,
+                                        const std::string& after)
 {
     std::erase_if(names,
                   [&](const std::string& name)
@@ -185,18 +183,18 @@ std::vector<std::string> roundsUpTo(std::vector<std::string> names,
     return names;
 }
 
-RoundFor roundFor(const ReviewFile& round, const std::string& agent)
+RoundRoute routeRound(const ReviewFile& round, const std::string& agent)
 {
-    auto counts = RoundFor {};
+    auto counts = RoundRoute {};
 
     for (const auto& comment: round.comments)
     {
-        auto owner = ownerOf(comment);
+        auto owner = findOwner(comment);
         auto named = false;
 
         for (const auto& reply: comment.replies)
             if (reply.fresh)
-                for (const auto& name: mentionsIn(reply.text))
+                for (const auto& name: findMentions(reply.text))
                     named = named || name == agent;
 
         auto forMe = agent.empty() || owner.empty() || owner == agent || named;
@@ -212,7 +210,7 @@ RoundFor roundFor(const ReviewFile& round, const std::string& agent)
 }
 
 std::string roundNotice(const std::string& id,
-                        const RoundFor& counts,
+                        const RoundRoute& counts,
                         const std::string& agent,
                         const std::string& path)
 {
@@ -239,7 +237,7 @@ ReviewFile draftFile(const std::vector<Annotation>& annotations,
         if (annotation.draft)
         {
             annotation.updates = annotation.round;
-            annotation.owner = ownerOf(annotation);
+            annotation.owner = findOwner(annotation);
             file.comments.push_back(annotation);
         }
 
@@ -286,7 +284,7 @@ std::optional<std::string>
     if (found == round.comments.end())
         return "no comment #" + std::to_string(id);
 
-    auto owner = ownerOf(*found);
+    auto owner = findOwner(*found);
 
     if (!owner.empty() && owner != change.from && !change.force)
         return "#" + std::to_string(id) + " belongs to @" + owner
@@ -295,7 +293,7 @@ std::optional<std::string>
     if (owner.empty() && change.named)
         found->owner = change.from;
     else if (found->owner.empty())
-        found->owner = owner; // a @name in the text: say so in the heading
+        found->owner = owner;
 
     if (!change.text.empty())
         found->replies.push_back({change.from, change.time, change.text, false});
@@ -319,7 +317,7 @@ ReviewFile submitDraft(std::vector<Annotation>& annotations,
         {
             annotation.draft = false;
             annotation.round = id;
-            annotation.owner = ownerOf(annotation);
+            annotation.owner = findOwner(annotation);
 
             for (auto& reply: annotation.replies)
                 reply.fresh = false;

@@ -354,7 +354,7 @@ std::string lineLabel(const Annotation& annotation)
 
     return label;
 }
-std::vector<std::string> mentionsIn(const std::string& text)
+std::vector<std::string> findMentions(const std::string& text)
 {
     auto names = std::vector<std::string> {};
 
@@ -388,12 +388,12 @@ std::vector<std::string> mentionsIn(const std::string& text)
     return names;
 }
 
-std::string ownerOf(const Annotation& annotation)
+std::string findOwner(const Annotation& annotation)
 {
     if (!annotation.owner.empty())
         return annotation.owner;
 
-    auto names = mentionsIn(annotation.text);
+    auto names = findMentions(annotation.text);
     return names.empty() ? std::string {} : names.front();
 }
 } // namespace diffview
