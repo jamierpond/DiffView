@@ -98,6 +98,11 @@ void carryOver(Annotation& newer, const Annotation& older)
         newer.owner = older.owner;
 }
 
+bool hasSameReplies(const Annotation& a, const Annotation& b)
+{
+    return std::ranges::equal(a.replies, b.replies, isSameReply);
+}
+
 bool hasFresh(const Annotation& comment)
 {
     return std::any_of(comment.replies.begin(),
@@ -335,18 +340,30 @@ std::optional<ReviewFile> resolutionsFrom(const ReviewFile& latest,
     auto changed = false;
 
     for (auto& comment: updated.comments)
+    {
         for (const auto& copy: latest.comments)
-            if (copy.id == comment.id
-                && (copy.resolved != comment.resolved || copy.owner != comment.owner
-                    || copy.replies != comment.replies))
-            {
-                comment.resolved = copy.resolved;
-                comment.owner = copy.owner;
-                comment.replies = copy.replies;
-                changed = true;
-            }
+        {
+            if (copy.id != comment.id)
+                continue;
 
-    return changed ? std::optional<ReviewFile> {updated} : std::nullopt;
+            auto hasChanged = copy.resolved != comment.resolved
+                              || copy.owner != comment.owner
+                              || !hasSameReplies(copy, comment);
+
+            if (!hasChanged)
+                continue;
+
+            comment.resolved = copy.resolved;
+            comment.owner = copy.owner;
+            comment.replies = copy.replies;
+            changed = true;
+        }
+    }
+
+    if (!changed)
+        return std::nullopt;
+
+    return updated;
 }
 
 std::optional<std::string>

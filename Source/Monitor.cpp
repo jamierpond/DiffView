@@ -27,7 +27,7 @@ std::string describeRound(const eacp::FilePath& root,
 
     auto latest = root / latestReviewFileName;
 
-    if (readReview(latest).title == id)
+    if (readReviewOrEmpty(latest).title == id)
         return roundNotice(id, counts, agent, latest.str());
 
     return roundNotice(id, counts, agent, own);
@@ -54,7 +54,7 @@ int runMonitor(const std::string& repo, const MonitorOptions& options)
 
         for (const auto& id: newRounds(seen, current))
         {
-            auto round = readReview(root / reviewDirectory / (id + ".md"));
+            auto round = readReviewOrEmpty(root / reviewDirectory / (id + ".md"));
             auto counts = routeRound(round, options.agent);
 
             if (!options.agent.empty() && !counts.wakes())

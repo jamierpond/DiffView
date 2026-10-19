@@ -257,7 +257,11 @@ bool reanchor(Annotation& annotation, const FileDiff& file)
     }
 
     auto moved = makeAnnotation(file, *range, annotation.id, annotation.text);
-    auto before = annotation;
+    auto hasMoved =
+        annotation.side != moved.side || annotation.start != moved.start
+        || annotation.end != moved.end || annotation.before != moved.before
+        || annotation.lines != moved.lines || annotation.after != moved.after
+        || annotation.unchangedFile != moved.unchangedFile || annotation.stale;
 
     annotation.side = moved.side;
     annotation.start = moved.start;
@@ -268,7 +272,7 @@ bool reanchor(Annotation& annotation, const FileDiff& file)
     annotation.unchangedFile = moved.unchangedFile;
     annotation.stale = false;
 
-    return !(annotation == before);
+    return hasMoved;
 }
 
 bool reanchorAll(std::vector<Annotation>& annotations,

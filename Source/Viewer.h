@@ -143,7 +143,7 @@ private:
     void submitReview();
     void sendReply(Annotation& note, const std::string& text);
     static std::string threadKey(const Annotation& note);
-    bool needsSeeing(const Annotation& note) const;
+    bool hasUnseenAgentReply(const Annotation& note) const;
     void pinUnseenThreads();
     void markSeen(const Annotation& note);
     void annotateAtCursor(bool wholeHunk);

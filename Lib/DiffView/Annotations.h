@@ -24,8 +24,6 @@ struct Reply
     std::string text;
     bool fresh = false;
 
-    bool operator==(const Reply&) const = default;
-
     MIRO_REFLECT(author, time, text, fresh)
 };
 
@@ -72,8 +70,6 @@ struct Annotation
     // Which file it came from, so never written into one.
     std::string round;
     bool draft = true;
-
-    bool operator==(const Annotation&) const = default;
 
     MIRO_REFLECT(id,
                  path,

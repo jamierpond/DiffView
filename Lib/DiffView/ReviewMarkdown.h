@@ -49,8 +49,6 @@ struct ReviewFile
 
     bool reply = false;
 
-    bool operator==(const ReviewFile&) const = default;
-
     MIRO_REFLECT(title, baseLabel, baseSha, comments, reply)
 };
 

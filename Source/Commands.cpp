@@ -22,7 +22,7 @@ namespace
 {
 namespace fs = std::filesystem;
 
-bool contains(const ReviewFile& file, int id)
+bool hasComment(const ReviewFile& file, int id)
 {
     return std::any_of(file.comments.begin(),
                        file.comments.end(),
@@ -79,11 +79,11 @@ int changeAndWrite(const ThreadOptions& options, bool resolve)
     auto at =
         std::find_if(rounds.rbegin(),
                      rounds.rend(),
-                     [&](const ReviewFile& r) { return contains(r, options.id); });
+                     [&](const ReviewFile& r) { return hasComment(r, options.id); });
 
     if (at == rounds.rend())
     {
-        if (contains(readReview(root / draftFileName), options.id))
+        if (hasComment(readReviewOrEmpty(root / draftFileName), options.id))
             return fail("#" + std::to_string(options.id)
                         + " is still in the reviewer's draft, not sent to you");
 
@@ -92,7 +92,7 @@ int changeAndWrite(const ThreadOptions& options, bool resolve)
 
     auto& round = *at;
     auto latestPath = root / latestReviewFileName;
-    auto latest = readReview(latestPath);
+    auto latest = readReviewOrEmpty(latestPath);
     auto isNewest = latest.title == round.title;
 
     if (isNewest)

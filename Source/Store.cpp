@@ -27,14 +27,14 @@ std::vector<ReviewFile> readRounds(const eacp::FilePath& repo)
 
     for (const auto& id: listRoundIdsInOrder(repo))
     {
-        rounds.push_back(readReview(repo / reviewDirectory / (id + ".md")));
+        rounds.push_back(readReviewOrEmpty(repo / reviewDirectory / (id + ".md")));
         rounds.back().title = id;
     }
 
     return rounds;
 }
 
-ReviewFile readReview(const eacp::FilePath& path)
+ReviewFile readReviewOrEmpty(const eacp::FilePath& path)
 {
     return fromMarkdown(eacp::Files::readFile(path));
 }

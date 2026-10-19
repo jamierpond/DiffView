@@ -108,16 +108,18 @@ auto tThreadCursor =
     auto annotation = makeAnnotation(file, {0, 0}, 7, "why?");
     annotation.replies = {{"dev", "2026-10-18 10:00", "because\nit is", false}};
     auto rows = buildRows(file, {annotation}, 80);
-    auto secondReplyLine = 9;
+    constexpr auto secondReplyLine = std::size_t {9};
+    constexpr auto bottomAfterRebuild = 13;
+    constexpr auto farPastTheBottom = 99;
 
-    check(rows[static_cast<std::size_t>(secondReplyLine)].text == "it is");
+    check(rows[secondReplyLine].text == "it is");
 
     auto offset = findOffsetInThread(rows, secondReplyLine);
     annotation.replies.push_back({"you", "2026-10-18 10:05", "ok", false});
     auto rebuilt = buildRows(file, {annotation}, 80);
 
-    check(findRowInThread(rebuilt, 7, offset) == secondReplyLine);
-    check(rebuilt[13].kind == RowKind::annotationBottom);
-    check(findRowInThread(rebuilt, 7, 99) == 13);
+    check(findRowInThread(rebuilt, 7, offset) == static_cast<int>(secondReplyLine));
+    check(rebuilt[bottomAfterRebuild].kind == RowKind::annotationBottom);
+    check(findRowInThread(rebuilt, 7, farPastTheBottom) == bottomAfterRebuild);
     check(!findRowInThread(rebuilt, 8, 0));
 };

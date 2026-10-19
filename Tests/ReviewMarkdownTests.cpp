@@ -3,6 +3,7 @@
 #include <NanoTest/NanoTest.h>
 
 #include <cstdlib>
+#include <optional>
 #include <fstream>
 #include <sstream>
 
@@ -83,13 +84,31 @@ std::string readText(const std::string& path)
     return buffer.str();
 }
 
-const Annotation* byId(const ReviewFile& review, int id)
+std::string findCommentJson(const ReviewFile& review, int id)
 {
     for (const auto& comment: review.comments)
+    {
         if (comment.id == id)
-            return &comment;
+            return Miro::toJSONString(comment);
+    }
 
-    return nullptr;
+    return {};
+}
+
+std::optional<Annotation> byId(const ReviewFile& review, int id)
+{
+    for (const auto& comment: review.comments)
+    {
+        if (comment.id == id)
+            return comment;
+    }
+
+    return std::nullopt;
+}
+
+bool isSameReview(const ReviewFile& a, const ReviewFile& b)
+{
+    return Miro::toJSONString(a) == Miro::toJSONString(b);
 }
 } // namespace
 
@@ -99,7 +118,7 @@ auto tRoundTrip =
     auto review = sampleReview();
     auto back = fromMarkdown(toMarkdown(review));
 
-    check(back == review);
+    check(isSameReview(back, review));
 };
 
 auto tGolden = test("ReviewMarkdown/the exact output matches the golden file") = []
@@ -114,7 +133,9 @@ auto tGolden = test("ReviewMarkdown/the exact output matches the golden file") =
 };
 
 auto tGoldenParses = test("ReviewMarkdown/the golden file parses to the review") = []
-{ check(fromMarkdown(readText(golden("review.md"))) == sampleReview()); };
+{
+    check(isSameReview(fromMarkdown(readText(golden("review.md"))), sampleReview()));
+};
 
 auto tReordered = test("ReviewMarkdown/blocks in any order") = []
 {
@@ -129,8 +150,10 @@ auto tReordered = test("ReviewMarkdown/blocks in any order") = []
 
     auto back = fromMarkdown(swapped);
     check(back.comments.size() == review.comments.size());
-    check(byId(back, 7) != nullptr && *byId(back, 7) == *byId(review, 7));
-    check(byId(back, 5) != nullptr && *byId(back, 5) == *byId(review, 5));
+    check(!findCommentJson(back, 7).empty());
+    check(findCommentJson(back, 7) == findCommentJson(review, 7));
+    check(!findCommentJson(back, 5).empty());
+    check(findCommentJson(back, 5) == findCommentJson(review, 5));
 };
 
 auto tEditedProse =
@@ -144,9 +167,9 @@ auto tEditedProse =
         "Rewritten.\n\n\n```\n### src/y.cpp:2 · open\n```\n\nMore after a gap.");
 
     auto back = fromMarkdown(text);
-    auto* edited = byId(back, 4);
+    auto edited = byId(back, 4);
 
-    check(edited != nullptr);
+    check(edited.has_value());
     check(
         edited->text
         == "Rewritten.\n\n\n```\n### src/y.cpp:2 · open\n```\n\nMore after a gap.\nIt was a copy.");
@@ -163,7 +186,7 @@ auto tDeleted = test("ReviewMarkdown/a deleted block is just gone") = []
 
     auto back = fromMarkdown(text);
     check(back.comments.size() == 4);
-    check(byId(back, 5) == nullptr);
+    check(!byId(back, 5));
 };
 
 auto tHandWritten =
@@ -213,7 +236,7 @@ auto tCrlf = test("ReviewMarkdown/CRLF and trailing junk") = []
     }
 
     auto back = fromMarkdown(crlf + "\r\n\r\n   \r\n");
-    check(back == sampleReview());
+    check(isSameReview(back, sampleReview()));
 };
 
 auto tTrimmedContext =
@@ -226,7 +249,7 @@ auto tTrimmedContext =
     check(at != std::string::npos);
     text.erase(at + std::string {"│"}.size(), 1);
 
-    check(fromMarkdown(text) == sampleReview());
+    check(isSameReview(fromMarkdown(text), sampleReview()));
 };
 
 auto tUnmarkedFence =
@@ -252,7 +275,7 @@ auto tUnchangedFile =
     check(text.find("### notes.md:2 · open, unchanged file · #3")
           != std::string::npos);
     check(text.find(">  2 │ b\n") != std::string::npos);
-    check(fromMarkdown(text) == review);
+    check(isSameReview(fromMarkdown(text), review));
 };
 
 auto tDraft =
@@ -265,7 +288,7 @@ auto tDraft =
     check(text.starts_with(
         "# DiffView draft · not sent yet\n\nYour comments on the changes"));
     check(text.find("change its `· open` to `· resolved`") == std::string::npos);
-    check(fromMarkdown(text) == draft);
+    check(isSameReview(fromMarkdown(text), draft));
 };
 
 auto tReplies = test("ReviewMarkdown/replies and the owner read back") = []
@@ -282,8 +305,8 @@ auto tReplies = test("ReviewMarkdown/replies and the owner read back") = []
     check(text.find("\\#### reply · not one") != std::string::npos);
 
     auto review = fromMarkdown(text);
-    auto* back = byId(review, 4);
-    check(back != nullptr && back->replies.size() == 2);
+    auto back = byId(review, 4);
+    check(back && back->replies.size() == 2);
     check(back->text == "Why a reference here?\nIt was a copy.");
 };
 

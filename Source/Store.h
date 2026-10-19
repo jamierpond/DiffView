@@ -14,7 +14,7 @@ std::vector<std::string> listRoundIdsInOrder(const eacp::FilePath& repo);
 
 std::vector<ReviewFile> readRounds(const eacp::FilePath& repo);
 
-ReviewFile readReview(const eacp::FilePath& path);
+ReviewFile readReviewOrEmpty(const eacp::FilePath& path);
 
 void writeText(const eacp::FilePath& path, std::string_view text);
 } // namespace diffview

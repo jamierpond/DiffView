@@ -90,7 +90,7 @@ void Viewer::loadStore()
 {
     auto root = eacp::FilePath {repo};
     auto roundFiles = readRounds(root);
-    auto latest = readReview(root / latestReviewFileName);
+    auto latest = readReviewOrEmpty(root / latestReviewFileName);
 
     for (auto& round: roundFiles)
     {
@@ -219,7 +219,7 @@ std::string Viewer::threadKey(const Annotation& note)
     return std::to_string(note.id) + " " + std::to_string(note.replies.size());
 }
 
-bool Viewer::needsSeeing(const Annotation& note) const
+bool Viewer::hasUnseenAgentReply(const Annotation& note) const
 {
     return note.resolved && !note.withdrawn && !note.replies.empty()
            && note.replies.back().author != reviewerName
@@ -235,14 +235,14 @@ void Viewer::pinUnseenThreads()
 
     for (const auto& note: annotations)
     {
-        if (needsSeeing(note))
+        if (hasUnseenAgentReply(note))
             pinnedThreads.insert(note.id);
     }
 }
 
 void Viewer::markSeen(const Annotation& note)
 {
-    if (!needsSeeing(note))
+    if (!hasUnseenAgentReply(note))
         return;
 
     seenThreads.insert(threadKey(note));
