@@ -159,6 +159,8 @@ private:
     bool onEditorEvent(const ftxui::Event& event);
     bool commitEditor();
     void closeEditor(bool keepPastedImages);
+    bool isCursorInThread(int id) const;
+    void moveCursorToEndOfThread(int id);
     void pasteIntoEditor();
     void editAtCursor();
     void deleteAtCursor();
