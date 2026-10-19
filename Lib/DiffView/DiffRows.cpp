@@ -2,6 +2,8 @@
 #include "Text.h"
 
 #include <algorithm>
+#include <ranges>
+#include <span>
 #include <map>
 
 namespace diffview
@@ -108,40 +110,26 @@ std::vector<DiffRow> buildRows(const FileDiff& file,
     return rows;
 }
 
-int findThreadOffset(const std::vector<DiffRow>& rows, int index)
+int findThreadOffset(const std::vector<DiffRow>& rows, std::size_t index)
 {
-    auto top = index;
-
-    while (top > 0
-           && rows[static_cast<std::size_t>(top)].kind != RowKind::annotationTop)
-        --top;
-
-    return index - top;
+    auto upward = std::span {rows}.first(index + 1) | std::views::reverse;
+    auto top = std::ranges::find(upward, RowKind::annotationTop, &DiffRow::kind);
+    return static_cast<int>(top - upward.begin());
 }
 
 std::optional<int>
     findThreadRow(const std::vector<DiffRow>& rows, int annotation, int offset)
 {
-    for (std::size_t i = 0; i < rows.size(); ++i)
-    {
-        if (rows[i].kind != RowKind::annotationTop
-            || rows[i].annotation != annotation)
-            continue;
+    auto isTop = [&](const DiffRow& row)
+    { return row.kind == RowKind::annotationTop && row.annotation == annotation; };
+    auto top = std::ranges::find_if(rows, isTop);
 
-        auto row = static_cast<int>(i);
+    if (top == rows.end())
+        return std::nullopt;
 
-        for (auto step = 0; step < offset; ++step)
-        {
-            if (rows[static_cast<std::size_t>(row)].kind
-                == RowKind::annotationBottom)
-                break;
-
-            ++row;
-        }
-
-        return row;
-    }
-
-    return std::nullopt;
+    auto bottom = std::ranges::find(
+        top, rows.end(), RowKind::annotationBottom, &DiffRow::kind);
+    auto steps = std::min<std::ptrdiff_t>(offset, bottom - top);
+    return static_cast<int>(top - rows.begin() + steps);
 }
 } // namespace diffview
