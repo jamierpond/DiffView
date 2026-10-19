@@ -12,24 +12,14 @@
 #include <algorithm>
 #include <chrono>
 #include <filesystem>
-#include <fstream>
 #include <map>
 #include <set>
-#include <sstream>
 
 namespace diffview
 {
 namespace
 {
 constexpr auto maxUntrackedBytes = std::uintmax_t {1024 * 1024};
-
-std::string readFile(const std::filesystem::path& path)
-{
-    auto in = std::ifstream {path, std::ios::binary};
-    auto buffer = std::stringstream {};
-    buffer << in.rdbuf();
-    return buffer.str();
-}
 
 std::vector<std::string> splitWords(const std::string& text)
 {
@@ -240,7 +230,7 @@ eacp::Threads::Async<void> Viewer::refresh()
                 continue;
             }
 
-            diffs.push_back(diffForNewFile(path, readFile(full)));
+            diffs.push_back(diffForNewFile(path, eacp::Files::readFile(full)));
         }
 
         std::erase_if(diffs, [](const FileDiff& file) { return isOurs(file.path); });
@@ -358,7 +348,7 @@ const FileDiff* Viewer::fileAt(const std::string& path) const
     }
     else
     {
-        file = unchangedFile(path, readFile(full));
+        file = unchangedFile(path, eacp::Files::readFile(full));
     }
 
     return &unchangedCache.emplace(path, std::move(file)).first->second;
