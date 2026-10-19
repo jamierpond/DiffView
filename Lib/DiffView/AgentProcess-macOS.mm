@@ -2,12 +2,10 @@
 
 #include <array>
 #include <cerrno>
-#include <chrono>
 #include <csignal>
 #include <fcntl.h>
 #include <spawn.h>
 #include <sys/wait.h>
-#include <thread>
 #include <unistd.h>
 
 extern char** environ;
@@ -16,10 +14,9 @@ namespace diffview
 {
 namespace
 {
-constexpr auto readChunkBytes = std::size_t {65536};
-constexpr auto stopGracePeriod = std::chrono::milliseconds {1000};
-constexpr auto stopPollInterval = std::chrono::milliseconds {10};
 constexpr auto exitCodeForSignal = 128;
+constexpr auto appendFlags = O_WRONLY | O_CREAT | O_APPEND;
+constexpr auto fileMode = mode_t {0644};
 
 int decodeWaitStatus(int status)
 {
@@ -37,14 +34,13 @@ void setFlag(int descriptor, int command, int getCommand, int flag)
 class PipedAgentProcess final : public AgentProcess
 {
 public:
-    PipedAgentProcess(pid_t pidToUse, int inputToUse, int outputToUse)
+    PipedAgentProcess(pid_t pidToUse, int inputToUse)
         : pid(pidToUse)
         , input(inputToUse)
-        , output(outputToUse)
     {
     }
 
-    ~PipedAgentProcess() override { stop(); }
+    ~PipedAgentProcess() override { closeInput(); }
 
     int getProcessId() const override { return static_cast<int>(pid); }
 
@@ -66,24 +62,6 @@ public:
         return text.empty();
     }
 
-    std::string readAvailableOutput() override
-    {
-        auto text = std::string {};
-        auto buffer = std::array<char, readChunkBytes> {};
-
-        while (output >= 0)
-        {
-            auto count = read(output, buffer.data(), buffer.size());
-
-            if (count <= 0)
-                break;
-
-            text.append(buffer.data(), static_cast<std::size_t>(count));
-        }
-
-        return text;
-    }
-
     std::optional<int> findExitCode() override
     {
         if (exitCode || pid <= 0)
@@ -97,41 +75,17 @@ public:
         return exitCode;
     }
 
-    void stop() override
+    void closeInput() override
     {
-        closeDescriptor(input);
+        if (input >= 0)
+            close(input);
 
-        if (!findExitCode())
-            killpg(pid, SIGTERM);
-
-        auto deadline = std::chrono::steady_clock::now() + stopGracePeriod;
-
-        while (!findExitCode() && std::chrono::steady_clock::now() < deadline)
-            std::this_thread::sleep_for(stopPollInterval);
-
-        if (!exitCode)
-        {
-            killpg(pid, SIGKILL);
-            auto status = 0;
-            waitpid(pid, &status, 0);
-            exitCode = decodeWaitStatus(status);
-        }
-
-        closeDescriptor(output);
+        input = -1;
     }
 
 private:
-    static void closeDescriptor(int& descriptor)
-    {
-        if (descriptor >= 0)
-            close(descriptor);
-
-        descriptor = -1;
-    }
-
     pid_t pid = 0;
     int input = -1;
-    int output = -1;
     std::optional<int> exitCode;
 };
 } // namespace
@@ -139,42 +93,37 @@ private:
 std::unique_ptr<AgentProcess> startPipedAgentProcess(const AgentLaunch& launch)
 {
     auto toChild = std::array<int, 2> {};
-    auto fromChild = std::array<int, 2> {};
 
     if (pipe(toChild.data()) != 0)
         return nullptr;
 
-    if (pipe(fromChild.data()) != 0)
-    {
-        close(toChild[0]);
-        close(toChild[1]);
-        return nullptr;
-    }
-
-    for (auto descriptor: {toChild[1], fromChild[0]})
-        setFlag(descriptor, F_SETFD, F_GETFD, FD_CLOEXEC);
-
-    setFlag(fromChild[0], F_SETFL, F_GETFL, O_NONBLOCK);
+    setFlag(toChild[1], F_SETFD, F_GETFD, FD_CLOEXEC);
 
     auto actions = posix_spawn_file_actions_t {};
     posix_spawn_file_actions_init(&actions);
     posix_spawn_file_actions_adddup2(&actions, toChild[0], STDIN_FILENO);
-    posix_spawn_file_actions_adddup2(&actions, fromChild[1], STDOUT_FILENO);
     posix_spawn_file_actions_addopen(&actions,
-                                     STDERR_FILENO,
-                                     launch.logPath.c_str(),
-                                     O_WRONLY | O_CREAT | O_APPEND,
-                                     0644);
+                                     STDOUT_FILENO,
+                                     launch.outputPath.c_str(),
+                                     appendFlags,
+                                     fileMode);
+    posix_spawn_file_actions_addopen(
+        &actions, STDERR_FILENO, launch.logPath.c_str(), appendFlags, fileMode);
     posix_spawn_file_actions_addchdir_np(&actions, launch.workingDirectory.c_str());
 
     auto attributes = posix_spawnattr_t {};
     posix_spawnattr_init(&attributes);
-    short flags = POSIX_SPAWN_SETPGROUP | POSIX_SPAWN_SETSIGDEF;
+    short flags = POSIX_SPAWN_SETSIGDEF;
+#if defined(POSIX_SPAWN_SETSID)
+    flags |= POSIX_SPAWN_SETSID;
+#else
+    flags |= POSIX_SPAWN_SETPGROUP;
+    posix_spawnattr_setpgroup(&attributes, 0);
+#endif
 #if defined(POSIX_SPAWN_CLOEXEC_DEFAULT)
     flags |= POSIX_SPAWN_CLOEXEC_DEFAULT;
 #endif
     posix_spawnattr_setflags(&attributes, flags);
-    posix_spawnattr_setpgroup(&attributes, 0);
 
     auto defaults = sigset_t {};
     sigemptyset(&defaults);
@@ -195,15 +144,13 @@ std::unique_ptr<AgentProcess> startPipedAgentProcess(const AgentLaunch& launch)
     posix_spawnattr_destroy(&attributes);
     posix_spawn_file_actions_destroy(&actions);
     close(toChild[0]);
-    close(fromChild[1]);
 
     if (result != 0)
     {
         close(toChild[1]);
-        close(fromChild[0]);
         return nullptr;
     }
 
-    return std::make_unique<PipedAgentProcess>(pid, toChild[1], fromChild[0]);
+    return std::make_unique<PipedAgentProcess>(pid, toChild[1]);
 }
 } // namespace diffview

@@ -130,3 +130,25 @@ auto tAgentCliAncestor =
     check(!findAgentCliAncestor(shellPid, plainShell));
     check(!findAgentCliAncestor(shellPid, makeProcessTable({})));
 };
+
+auto tFinishingResponderHolds = test(
+    "Listener/after its dv quits the responder's CLI holds it until it ends") = []
+{
+    auto registration = ListenerRegistration {};
+    registration.monitorPid = monitorPid;
+    registration.agentPid = agentPid;
+    registration.isResponder = true;
+
+    check(findLiveListenerPid(registration, makeLiveSet({monitorPid, agentPid}))
+          == monitorPid);
+    check(!isFinishingResponder(registration, makeLiveSet({monitorPid, agentPid})));
+
+    check(findLiveListenerPid(registration, makeLiveSet({agentPid})) == agentPid);
+    check(isFinishingResponder(registration, makeLiveSet({agentPid})));
+
+    check(!findLiveListenerPid(registration, makeLiveSet({})));
+    check(!isFinishingResponder(registration, makeLiveSet({})));
+
+    registration.isResponder = false;
+    check(!findLiveListenerPid(registration, makeLiveSet({agentPid})));
+};

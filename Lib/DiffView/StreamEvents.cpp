@@ -58,6 +58,19 @@ std::string shortenSummary(std::string_view text)
     return wrap(first, maxSummaryLength - 1).front() + "…";
 }
 
+std::string findToolArgument(const ToolSummaries& tools,
+                             const std::string& name,
+                             const Value& input,
+                             const std::string& worktree)
+{
+    auto found = tools.find(name);
+
+    if (found == tools.end())
+        return {};
+
+    return makeRelative(getString(input, found->second.argumentKey), worktree);
+}
+
 std::string summariseToolCall(const ToolSummaries& tools,
                               const std::string& name,
                               const Value& input,
@@ -68,9 +81,7 @@ std::string summariseToolCall(const ToolSummaries& tools,
     if (found == tools.end())
         return shortenSummary("using " + name);
 
-    const auto& [verb, key] = found->second;
-    auto argument = makeRelative(getString(input, key), worktree);
-
-    return shortenSummary(std::string {verb} + " " + argument);
+    auto argument = findToolArgument(tools, name, input, worktree);
+    return shortenSummary(std::string {found->second.verb} + " " + argument);
 }
 } // namespace diffview

@@ -18,11 +18,17 @@ void registerAgent(const std::string& store,
                    std::optional<int> agentPid);
 void markAgentBusy();
 
-// For the responder: listed while this process lives.
-void registerResponder(const std::string& store, const std::string& name);
+// For the responder: listed while this process lives, then while its agent
+// CLI process finishes.
+void registerResponder(const std::string& store,
+                       const std::string& name,
+                       std::optional<int> agentPid);
 void unregisterResponder(const std::string& store, const std::string& name);
 
 bool isRunningResponder(const std::string& store, const std::string& name);
+
+// Its dv has quit and its agent CLI is still finishing.
+bool isFinishingResponder(const std::string& store, const std::string& name);
 
 std::vector<std::string> findListeningAgents(const std::string& store);
 

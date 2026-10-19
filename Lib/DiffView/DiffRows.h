@@ -22,7 +22,8 @@ enum class RowKind
     replyHeader,
     annotationBottom,
     collapsedCommentThread,
-    earlierReplies
+    earlierReplies,
+    commentThreadGap
 };
 
 constexpr auto foldsFileName = "folds";

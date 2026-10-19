@@ -1,4 +1,4 @@
-#include "AgentProcess.h"
+#include <AgentProcess.h>
 #include "Agents.h"
 #include "Commands.h"
 #include "Monitor.h"
@@ -81,8 +81,10 @@ constexpr auto usage =
     "dv's own agent, the responder (@dv), takes what no listening agent will:\n"
     "the UI starts one headless agent CLI session for the repo on the first\n"
     "send that needs it, with every permission granted, hands it each such\n"
-    "send on its stdin, shows what it is doing under the thread, and stops it\n"
-    "on quit. Its log and session id are in .diffview/responder/.\n"
+    "send on its stdin, and shows what it is doing under the thread. Quitting\n"
+    "dv closes its stdin: it finishes what it was given and ends on its own;\n"
+    "the next dv waits for it, then resumes its session. Its log, stream and\n"
+    "session id are in .diffview/responder/.\n"
     "~/.config/diffview/config or .diffview/config:\n"
     "  responder = on|off\n"
     "  agent = claude|gemini\n"

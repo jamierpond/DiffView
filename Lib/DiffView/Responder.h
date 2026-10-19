@@ -6,6 +6,7 @@
 
 #include <eacp/Core/Utils/FilePath.h>
 
+#include <cstdint>
 #include <deque>
 #include <functional>
 #include <memory>
@@ -18,6 +19,7 @@ namespace diffview
 {
 constexpr auto responderDirectory = "responder";
 constexpr auto configFileName = "config";
+constexpr auto responderOutputExtension = ".jsonl";
 constexpr auto defaultResponderName = std::string_view {"dv"};
 
 struct ResponderConfig
@@ -56,6 +58,8 @@ struct AgentLaunch
 {
     std::vector<std::string> arguments;
     std::string workingDirectory;
+    // Gets its stdout.
+    std::string outputPath;
     // Gets its stderr.
     std::string logPath;
 };
@@ -67,10 +71,9 @@ public:
 
     virtual int getProcessId() const = 0;
     virtual bool writeInput(std::string_view text) = 0;
-    virtual std::string readAvailableOutput() = 0;
     virtual std::optional<int> findExitCode() = 0;
-    // Closes its stdin and terminates it and everything it started.
-    virtual void stop() = 0;
+    // A stream-json CLI finishes its turn and ends on EOF.
+    virtual void closeInput() = 0;
 };
 
 // Nothing when it couldn't be started.
@@ -83,6 +86,9 @@ struct ResponderSettings
     AgentCli cli;
     std::string workingDirectory;
     eacp::FilePath logPath;
+    // Its stream-json stdout, read back by byte offset: the CLI keeps writing
+    // it after dv has gone.
+    eacp::FilePath outputPath;
     eacp::FilePath sessionPath;
 };
 
@@ -95,7 +101,8 @@ struct ResponderMessage
 // dv's own agent: one CLI process, started on the first message, fed the
 // rest on its stdin one at a time, so it keeps its context. Its session id
 // is kept to resume on the next start. Restarted once after a crash; a
-// second crash stops it.
+// second crash stops it. It is never killed: finish() hands it the rest and
+// closes its stdin, and it ends on its own, with or without dv.
 class Responder
 {
 public:
@@ -107,10 +114,11 @@ public:
 
     void send(ResponderMessage message);
     void poll();
-    void stop();
+    void finish();
 
     const std::string& getName() const;
     bool isRunning() const;
+    bool isFinishing() const;
     std::optional<int> getProcessId() const;
     std::vector<AgentActivity> findActivities() const;
     const std::optional<std::string>& getFailure() const;
@@ -137,6 +145,8 @@ private:
     bool hasReportedActivity = false;
     std::string doing;
     std::string partialLine;
+    std::uint64_t outputOffset = 0;
+    bool isInputClosed = false;
     int crashes = 0;
     std::optional<std::string> failure;
     std::vector<std::string> notices;

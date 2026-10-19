@@ -105,11 +105,14 @@ void markAgentBusy()
     registered[0] = 0;
 }
 
-void registerResponder(const std::string& store, const std::string& name)
+void registerResponder(const std::string& store,
+                       const std::string& name,
+                       std::optional<int> agentPid)
 {
     createStoreDirectory(store);
     auto registration = makeRegistration();
     registration.isResponder = true;
+    registration.agentPid = agentPid.value_or(0);
     writeRegistration(makeRegistrationPath(store, name), registration);
 }
 
@@ -125,6 +128,13 @@ bool isRunningResponder(const std::string& store, const std::string& name)
 {
     auto path = std::filesystem::path {store} / agentDirectory / name;
     return readListenerProcessId(path) && readRegistration(path).isResponder;
+}
+
+bool isFinishingResponder(const std::string& store, const std::string& name)
+{
+    auto path = std::filesystem::path {store} / agentDirectory / name;
+    return isFinishingResponder(readRegistration(path),
+                                [](int pid) { return isAlive(pid); });
 }
 
 std::vector<std::string> findListeningAgents(const std::string& store)

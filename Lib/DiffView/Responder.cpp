@@ -6,6 +6,7 @@
 #include <eacp/Core/Utils/Files.h>
 
 #include <algorithm>
+#include <filesystem>
 #include <map>
 
 namespace diffview
@@ -59,6 +60,17 @@ std::string joinCommentThreads(const std::vector<int>& threads)
         text += (text.empty() ? "#" : " #") + std::to_string(thread);
 
     return text;
+}
+
+std::uint64_t getFileSizeOrZero(const eacp::FilePath& path)
+{
+    auto error = std::error_code {};
+    auto size = std::filesystem::file_size(path.str(), error);
+
+    if (error)
+        return 0;
+
+    return static_cast<std::uint64_t>(size);
 }
 
 std::string joinArguments(const std::vector<std::string>& arguments)
@@ -190,7 +202,7 @@ Responder::Responder(ResponderSettings settingsToUse, StartAgentProcess startToU
 
 Responder::~Responder()
 {
-    stop();
+    finish();
 }
 
 void Responder::send(ResponderMessage message)
@@ -216,20 +228,42 @@ void Responder::poll()
 
     readOutput();
     process.reset();
+
+    if (isInputClosed)
+    {
+        log("dv: exit " + std::to_string(*exitCode) + " after its stdin closed");
+        return;
+    }
+
     handleExit(*exitCode);
 }
 
-void Responder::stop()
+void Responder::finish()
 {
+    if (isInputClosed)
+        return;
+
+    isInputClosed = true;
+
+    if (process && hasStdinSession(settings.cli))
+    {
+        for (const auto& message: queue)
+        {
+            log("dv: sending " + joinCommentThreads(message.commentThreads) + ": "
+                + message.text);
+            process->writeInput(frameUserMessage(message.text));
+        }
+    }
+
     queue.clear();
     current.reset();
+    doing.clear();
 
     if (!process)
         return;
 
-    process->stop();
-    process.reset();
-    log("dv: stopped");
+    process->closeInput();
+    log("dv: closed its stdin; it finishes on its own");
 }
 
 const std::string& Responder::getName() const
@@ -240,6 +274,11 @@ const std::string& Responder::getName() const
 bool Responder::isRunning() const
 {
     return process != nullptr;
+}
+
+bool Responder::isFinishing() const
+{
+    return isInputClosed;
 }
 
 std::optional<int> Responder::getProcessId() const
@@ -275,7 +314,7 @@ std::vector<std::string> Responder::takeNotices()
 
 void Responder::sendNext()
 {
-    if (failure || current || queue.empty())
+    if (failure || isInputClosed || current || queue.empty())
         return;
 
     current = std::move(queue.front());
@@ -302,10 +341,13 @@ bool Responder::start(const std::string& prompt)
     isResuming = !sessionId.empty() && canResume(settings.cli);
     hasReportedActivity = false;
     partialLine.clear();
+    outputOffset = getFileSizeOrZero(settings.outputPath);
 
     eacp::Files::createDirectories(settings.logPath.parentDirectory());
-    process =
-        startProcess({arguments, settings.workingDirectory, settings.logPath.str()});
+    process = startProcess({arguments,
+                            settings.workingDirectory,
+                            settings.outputPath.str(),
+                            settings.logPath.str()});
 
     if (!process)
     {
@@ -324,12 +366,12 @@ bool Responder::start(const std::string& prompt)
 
 void Responder::readOutput()
 {
-    auto text = process->readAvailableOutput();
+    auto text = readFileFromByteOffset(settings.outputPath, outputOffset);
 
     if (text.empty())
         return;
 
-    eacp::Files::appendFile(settings.logPath, text);
+    outputOffset += text.size();
     partialLine += text;
     auto start = std::size_t {0};
 

@@ -9,23 +9,10 @@ using Miro::Json::Value;
 
 std::string summariseToolUse(const Value& block, const std::string& worktree)
 {
-    static const auto tools = ToolSummaries {
-        {"Bash", {"running", "command"}},
-        {"Read", {"reading", "file_path"}},
-        {"Edit", {"editing", "file_path"}},
-        {"MultiEdit", {"editing", "file_path"}},
-        {"Write", {"writing", "file_path"}},
-        {"NotebookEdit", {"editing", "notebook_path"}},
-        {"Grep", {"searching for", "pattern"}},
-        {"Glob", {"finding", "pattern"}},
-        {"Agent", {"delegating:", "description"}},
-        {"Task", {"delegating:", "description"}},
-        {"WebFetch", {"fetching", "url"}},
-        {"WebSearch", {"searching the web for", "query"}},
-    };
-
-    return summariseToolCall(
-        tools, getString(block, "name"), getField(block, "input"), worktree);
+    return summariseToolCall(getClaudeCodeTools(),
+                             getString(block, "name"),
+                             getField(block, "input"),
+                             worktree);
 }
 
 std::optional<std::string> summariseAssistant(const Value& event,
@@ -74,6 +61,26 @@ std::optional<std::string> summariseClaudeStreamLine(std::string_view line,
 }
 } // namespace
 
+const ToolSummaries& getClaudeCodeTools()
+{
+    static const auto tools = ToolSummaries {
+        {"Bash", {"running", "command"}},
+        {"Read", {"reading", "file_path"}},
+        {"Edit", {"editing", "file_path"}},
+        {"MultiEdit", {"editing", "file_path"}},
+        {"Write", {"writing", "file_path"}},
+        {"NotebookEdit", {"editing", "notebook_path"}},
+        {"Grep", {"searching for", "pattern"}},
+        {"Glob", {"finding", "pattern"}},
+        {"Agent", {"delegating:", "description"}},
+        {"Task", {"delegating:", "description"}},
+        {"WebFetch", {"fetching", "url"}},
+        {"WebSearch", {"searching the web for", "query"}},
+    };
+
+    return tools;
+}
+
 AgentCli makeClaudeCodeCli()
 {
     return {
@@ -81,7 +88,7 @@ AgentCli makeClaudeCodeCli()
         "claude",
         {"claude", "--dangerously-skip-permissions"},
         {"-p", "--output-format", "stream-json", "--verbose"},
-        {"--input-format", "stream-json"},
+        {"--input-format", "stream-json", "--replay-user-messages"},
         "",
         "--resume",
         summariseClaudeStreamLine,

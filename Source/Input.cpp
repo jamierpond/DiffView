@@ -136,25 +136,45 @@ void Viewer::run(const Command& command)
     switch (command.action)
     {
         case Action::down:
-            focus == Pane::tree ? moveTree(count) : moveCursor(count);
+            if (focus == Pane::agent)
+                scrollTranscript(count);
+            else
+                focus == Pane::tree ? moveTree(count) : moveCursor(count);
             break;
         case Action::up:
-            focus == Pane::tree ? moveTree(-count) : moveCursor(-count);
+            if (focus == Pane::agent)
+                scrollTranscript(-count);
+            else
+                focus == Pane::tree ? moveTree(-count) : moveCursor(-count);
             break;
         case Action::top:
-            focus == Pane::tree ? moveTree(-1000000) : jumpToRow(0);
+            if (focus == Pane::agent)
+                scrollTranscript(-static_cast<int>(transcriptRows.size()));
+            else
+                focus == Pane::tree ? moveTree(-1000000) : jumpToRow(0);
             break;
         case Action::bottom:
-            focus == Pane::tree ? moveTree(1000000)
-                                : jumpToRow(static_cast<int>(rows.size()) - 1);
+            if (focus == Pane::agent)
+                followTranscript();
+            else
+                focus == Pane::tree ? moveTree(1000000)
+                                    : jumpToRow(static_cast<int>(rows.size()) - 1);
             break;
         case Action::halfPageDown:
-            focus == Pane::tree ? moveTree(count * std::max(1, treeHeight / 2))
-                                : moveCursor(count * std::max(1, diffHeight / 2));
+            if (focus == Pane::agent)
+                scrollTranscript(count * std::max(1, transcriptHeight / 2));
+            else
+                focus == Pane::tree
+                    ? moveTree(count * std::max(1, treeHeight / 2))
+                    : moveCursor(count * std::max(1, diffHeight / 2));
             break;
         case Action::halfPageUp:
-            focus == Pane::tree ? moveTree(-count * std::max(1, treeHeight / 2))
-                                : moveCursor(-count * std::max(1, diffHeight / 2));
+            if (focus == Pane::agent)
+                scrollTranscript(-count * std::max(1, transcriptHeight / 2));
+            else
+                focus == Pane::tree
+                    ? moveTree(-count * std::max(1, treeHeight / 2))
+                    : moveCursor(-count * std::max(1, diffHeight / 2));
             break;
         case Action::focusTree:
             focus = Pane::tree;
@@ -167,7 +187,10 @@ void Viewer::run(const Command& command)
                 focus = Pane::diff;
             break;
         case Action::togglePane:
-            focus = focus == Pane::tree ? Pane::diff : Pane::tree;
+            cycleFocus();
+            break;
+        case Action::toggleAgentPane:
+            toggleAgentPane();
             break;
         case Action::open:
             if (focus == Pane::tree

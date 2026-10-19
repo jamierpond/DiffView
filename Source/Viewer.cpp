@@ -65,6 +65,19 @@ bool isActivityFileInRepo(const std::string& path)
 }
 
 constexpr auto activityPollMs = std::int64_t {250};
+constexpr auto transcriptPollMs = std::int64_t {250};
+constexpr auto transcriptTailBytes = std::uint64_t {1024 * 1024};
+
+std::uint64_t getTranscriptFileSize(const std::string& path)
+{
+    auto error = std::error_code {};
+    auto size = std::filesystem::file_size(path, error);
+
+    if (error)
+        return 0;
+
+    return size;
+}
 constexpr auto roundPollMs = std::int64_t {1000};
 } // namespace
 
@@ -94,6 +107,8 @@ Viewer::Viewer(const Options& optionsToUse)
 
     loadStore();
     deliveredRounds = listRoundIdsInOrder(store.directory);
+    isWaitingForPreviousResponder = isFinishingResponder(
+        store.directory.str(), options.readResponderConfig().name);
     watcher = std::make_unique<RepoWatcher>(
         repo,
         [this](const std::vector<std::string>& changed) { onRepoChanged(changed); });
@@ -117,7 +132,7 @@ Viewer::Viewer(const Options& optionsToUse)
 
 Viewer::~Viewer()
 {
-    stopResponder();
+    finishResponder();
 }
 
 void Viewer::tick()
@@ -143,6 +158,119 @@ void Viewer::tick()
 
     pollResponder(now);
     pollActivities(now);
+    pollTranscript(now);
+}
+
+void Viewer::pollTranscript(std::int64_t now)
+{
+    if (!isAgentPaneShown)
+        return;
+
+    if (transcript && transcript->isTurnOpen()
+        && now - lastSpinnerRedraw >= spinnerFrameMs)
+    {
+        lastSpinnerRedraw = now;
+        redraw();
+    }
+
+    if (now - lastTranscriptPoll < transcriptPollMs)
+        return;
+
+    lastTranscriptPoll = now;
+    readTranscriptTail();
+}
+
+// Opened partway into a long stream, it starts at the first whole line of the
+// last transcriptTailBytes.
+void Viewer::readTranscriptTail()
+{
+    if (!transcript)
+    {
+        transcriptAgentName =
+            responder ? responder->getName() : options.readResponderConfig().name;
+        auto path = store.directory / responderDirectory
+                    / (transcriptAgentName + responderOutputExtension);
+        transcriptPath = path.str();
+        transcript.emplace(store.home.str());
+        transcriptOffset = 0;
+    }
+
+    auto size = getTranscriptFileSize(transcriptPath);
+
+    if (size < transcriptOffset)
+    {
+        transcript.emplace(store.home.str());
+        transcriptOffset = 0;
+        isTranscriptLayoutDirty = true;
+    }
+
+    if (size == transcriptOffset)
+        return;
+
+    auto isStartingMidStream = transcriptOffset == 0 && size > transcriptTailBytes;
+
+    if (isStartingMidStream)
+        transcriptOffset = size - transcriptTailBytes;
+
+    auto text =
+        readFileFromByteOffset(eacp::FilePath {transcriptPath}, transcriptOffset);
+    transcriptOffset += text.size();
+
+    if (isStartingMidStream)
+    {
+        auto firstLineEnd = text.find('\n');
+        text.erase(
+            0, firstLineEnd == std::string::npos ? text.size() : firstLineEnd + 1);
+    }
+
+    transcript->append(text);
+    isTranscriptLayoutDirty = true;
+    redraw();
+}
+
+void Viewer::toggleAgentPane()
+{
+    if (isAgentPaneShown && focus == Pane::agent)
+    {
+        isAgentPaneShown = false;
+        focus = Pane::diff;
+        return;
+    }
+
+    isAgentPaneShown = true;
+    focus = Pane::agent;
+    readTranscriptTail();
+}
+
+void Viewer::cycleFocus()
+{
+    auto isDiffHidden = isAgentPaneShown && !isAgentPaneBesideDiff;
+
+    switch (focus)
+    {
+        case Pane::tree:
+            focus = isDiffHidden ? Pane::agent : Pane::diff;
+            return;
+        case Pane::diff:
+            focus = isAgentPaneShown ? Pane::agent : Pane::tree;
+            return;
+        case Pane::agent:
+            focus = Pane::tree;
+            return;
+    }
+}
+
+void Viewer::scrollTranscript(int delta)
+{
+    isFollowingTranscript = false;
+    auto lastTop =
+        std::max(0, static_cast<int>(transcriptRows.size()) - transcriptHeight);
+    transcriptTop = std::clamp(transcriptTop + delta, 0, lastTop);
+}
+
+void Viewer::followTranscript()
+{
+    isFollowingTranscript = true;
 }
 
 void Viewer::pollActivities(std::int64_t now)
@@ -203,6 +331,13 @@ void Viewer::pollResponder(std::int64_t now)
         unregisterResponder(store.directory.str(), responder->getName());
         listening = findListeningAgents(store.directory.str());
     }
+
+    if (responder->isFinishing() && !responder->isRunning())
+    {
+        unregisterResponder(store.directory.str(), responder->getName());
+        responder.reset();
+        listening = findListeningAgents(store.directory.str());
+    }
 }
 
 // Every dv watches for rounds, from any worktree; the one running the
@@ -213,21 +348,34 @@ void Viewer::deliverNewRounds()
     auto current = listRoundIdsInOrder(store.directory);
     auto fresh = newRounds(deliveredRounds, current);
     deliveredRounds = std::move(current);
+    roundsAwaitingResponder.insert(
+        roundsAwaitingResponder.end(), fresh.begin(), fresh.end());
 
-    if (fresh.empty())
+    if (roundsAwaitingResponder.empty() && !isWaitingForPreviousResponder)
         return;
 
     auto config = options.readResponderConfig();
 
     if (!config.isEnabled)
     {
-        stopResponder();
+        finishResponder();
+        roundsAwaitingResponder.clear();
+        isWaitingForPreviousResponder = false;
         return;
     }
 
+    auto wasWaiting = std::exchange(isWaitingForPreviousResponder,
+                                    isPreviousResponderFinishing(config));
+
+    if (wasWaiting || isWaitingForPreviousResponder)
+        redraw();
+
+    if (isWaitingForPreviousResponder)
+        return;
+
     listening = findListeningAgents(store.directory.str());
 
-    for (const auto& id: fresh)
+    for (const auto& id: std::exchange(roundsAwaitingResponder, {}))
     {
         auto round =
             readReviewOrEmpty(store.directory / reviewDirectory / (id + ".md"));
@@ -250,6 +398,14 @@ void Viewer::deliverNewRounds()
     }
 }
 
+bool Viewer::isPreviousResponderFinishing(const ResponderConfig& config) const
+{
+    if (responder)
+        return responder->isFinishing();
+
+    return isFinishingResponder(store.directory.str(), config.name);
+}
+
 // In the main worktree: one responder for the repo, and the CLI keys the
 // sessions it can resume by working directory.
 bool Viewer::claimResponder(const ResponderConfig& config)
@@ -265,24 +421,41 @@ bool Viewer::claimResponder(const ResponderConfig& config)
     if (holder && *holder != getpid())
         return false;
 
-    registerResponder(directory.str(), config.name);
+    registerResponder(directory.str(), config.name, std::nullopt);
     auto files = directory / responderDirectory;
-    responder.emplace(ResponderSettings {config.name,
-                                         getAgentCli(config.agentCli),
-                                         store.home.str(),
-                                         files / (config.name + ".log"),
-                                         files / (config.name + ".session")},
-                      options.startAgentProcess);
+    auto startAndRegister = [this, name = config.name](const AgentLaunch& launch)
+    {
+        auto process = options.startAgentProcess(launch);
+
+        if (process)
+            registerResponder(store.directory.str(), name, process->getProcessId());
+
+        return process;
+    };
+    responder.emplace(
+        ResponderSettings {config.name,
+                           getAgentCli(config.agentCli),
+                           store.home.str(),
+                           files / (config.name + ".log"),
+                           files / (config.name + responderOutputExtension),
+                           files / (config.name + ".session")},
+        startAndRegister);
     listening = findListeningAgents(directory.str());
     return true;
 }
 
-void Viewer::stopResponder()
+// Its registration stays while its CLI finishes, so the next responder
+// waits for it.
+void Viewer::finishResponder()
 {
     if (!responder)
         return;
 
-    responder->stop();
+    responder->finish();
+
+    if (responder->isRunning())
+        return;
+
     unregisterResponder(store.directory.str(), responder->getName());
     responder.reset();
 }

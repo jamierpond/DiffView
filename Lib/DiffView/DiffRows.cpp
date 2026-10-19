@@ -63,9 +63,6 @@ void appendBlock(std::vector<DiffRow>& rows,
 
     rows.push_back({.kind = RowKind::annotationTop, .annotation = annotation.id});
 
-    if (!annotation.replies.empty())
-        rows.push_back({.kind = RowKind::replyHeader, .annotation = annotation.id});
-
     auto lines = splitLines(annotation.text);
 
     if (lines.empty())
@@ -82,7 +79,7 @@ void appendBlock(std::vector<DiffRow>& rows,
     if (firstShown > 0)
     {
         rows.push_back(
-            {.kind = RowKind::annotationText, .annotation = annotation.id});
+            {.kind = RowKind::commentThreadGap, .annotation = annotation.id});
         rows.push_back({.kind = RowKind::earlierReplies,
                         .annotation = annotation.id,
                         .text = describeEarlierReplies(firstShown)});
@@ -93,19 +90,20 @@ void appendBlock(std::vector<DiffRow>& rows,
         const auto& reply = annotation.replies[r];
         auto index = static_cast<int>(r);
         rows.push_back(
-            {.kind = RowKind::annotationText, .annotation = annotation.id});
+            {.kind = RowKind::commentThreadGap, .annotation = annotation.id});
         rows.push_back({.kind = RowKind::replyHeader,
                         .annotation = annotation.id,
                         .reply = index});
 
         for (const auto& line: splitLines(reply.text))
-            for (auto& piece: wrap(displayable(line), std::max(1, wrapWidth - 3)))
+            for (auto& piece: wrap(displayable(line), wrapWidth))
                 rows.push_back({.kind = RowKind::annotationText,
                                 .annotation = annotation.id,
                                 .text = std::move(piece),
                                 .reply = index});
     }
 
+    rows.push_back({.kind = RowKind::commentThreadGap, .annotation = annotation.id});
     rows.push_back({.kind = RowKind::annotationBottom, .annotation = annotation.id});
 }
 } // namespace

@@ -66,10 +66,20 @@ std::optional<int> findLiveListenerPid(const ListenerRegistration& registration,
         && isAlive(registration.monitorPid))
         return registration.monitorPid;
 
+    if (isFinishingResponder(registration, isAlive))
+        return registration.agentPid;
+
     if (registration.isBusy && registration.agentPid > 0
         && isAlive(registration.agentPid))
         return registration.agentPid;
 
     return std::nullopt;
+}
+
+bool isFinishingResponder(const ListenerRegistration& registration,
+                          const std::function<bool(int)>& isAlive)
+{
+    return registration.isResponder && !isAlive(registration.monitorPid)
+           && registration.agentPid > 0 && isAlive(registration.agentPid);
 }
 } // namespace diffview

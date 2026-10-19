@@ -84,8 +84,7 @@ std::string describePlace(const Annotation& note)
 
 std::string describeCommentThread(const Annotation& note)
 {
-    auto label =
-        "┌─ comment #" + std::to_string(note.id) + " · " + describePlace(note);
+    auto label = "comment #" + std::to_string(note.id) + " · " + describePlace(note);
 
     if (note.draft)
         label += " · draft";
@@ -121,7 +120,7 @@ std::string describeWhen(const Annotation& note, int reply)
 
     // "2026-10-18 19:56" without the year.
     if (said.time.size() > 5)
-        when = "  " + said.time.substr(5);
+        when = " " + said.time.substr(5);
     if (said.fresh)
         when += " · draft";
 
@@ -131,13 +130,29 @@ std::string describeWhen(const Annotation& note, int reply)
 std::string describeKeys(const Annotation& note)
 {
     if (note.replies.empty())
-        return " Enter edit · R reply";
+        return "Enter edit · R reply";
 
-    return " Enter reply · c edit";
+    return "Enter reply · c edit";
 }
+
+const auto commentThreadIndent = std::string(10, ' ');
+const auto userPromptBackground = Color::RGB(50, 52, 66);
 
 // A dark background rather than inverted, so +/- colours stay readable.
 const auto selectionBackground = Color::RGB(38, 58, 96);
+const auto claudeOrange = Color::RGB(215, 119, 87);
+constexpr auto agentPaneBesideDiffColumns = 200;
+constexpr auto agentPaneMargin = 1;
+
+Element renderToolCallText(const std::string& call)
+{
+    auto open = call.find('(');
+
+    if (open == std::string::npos)
+        return text(call) | bold;
+
+    return hbox({text(call.substr(0, open)) | bold, text(call.substr(open))});
+}
 
 Element cursorLine(Element line, bool focused)
 {
@@ -206,12 +221,22 @@ std::string modeName(vim::Mode mode)
 
 Element Viewer::render()
 {
+    frameTime = nowMs();
     auto terminal = Terminal::Size();
     auto treeWidth = std::clamp(terminal.dimx * 3 / 10, 20, 50);
     auto bodyHeight = std::max(1, terminal.dimy - 2); // pane title + status bar
-    auto diffWidth = std::max(10, terminal.dimx - treeWidth - 1);
+    auto rightWidth = std::max(10, terminal.dimx - treeWidth - 1);
+    isAgentPaneBesideDiff = terminal.dimx >= agentPaneBesideDiffColumns;
 
-    auto wantedWrap = std::max(10, diffWidth - 13); // less the "          │ " gutter
+    // Narrow, the agent pane stands in for the diff until the diff is wanted.
+    if (isAgentPaneShown && !isAgentPaneBesideDiff && focus == Pane::diff)
+        isAgentPaneShown = false;
+
+    auto isAgentBesideDiff = isAgentPaneShown && isAgentPaneBesideDiff;
+    auto agentWidth = isAgentBesideDiff ? (rightWidth - 1) / 2 : rightWidth;
+    auto diffWidth = isAgentBesideDiff ? rightWidth - 1 - agentWidth : rightWidth;
+
+    auto wantedWrap = std::max(10, diffWidth - 13); // less the "          > " gutter
 
     if (wantedWrap != wrapWidth)
     {
@@ -222,17 +247,107 @@ Element Viewer::render()
     treeHeight = bodyHeight;
     diffHeight = bodyHeight + 1; // no title row: the file header is a row
 
-    auto main = vbox(
-        {hbox({renderTree(treeWidth, bodyHeight) | size(WIDTH, EQUAL, treeWidth),
-               separator(),
-               renderDiff(diffWidth, diffHeight) | flex})
-             | flex,
-         prompt != Prompt::none ? renderPrompt() : renderStatus()});
+    auto columns =
+        Elements {renderTree(treeWidth, bodyHeight) | size(WIDTH, EQUAL, treeWidth),
+                  separator()};
+
+    if (!isAgentPaneShown || isAgentBesideDiff)
+        columns.push_back(renderDiff(diffWidth, diffHeight)
+                          | size(WIDTH, EQUAL, diffWidth));
+
+    if (isAgentBesideDiff)
+        columns.push_back(separator());
+
+    if (isAgentPaneShown)
+        columns.push_back(renderAgentPane(agentWidth, bodyHeight) | flex);
+    else
+        columns.back() = columns.back() | flex;
+
+    auto main = vbox({hbox(std::move(columns)) | flex,
+                      prompt != Prompt::none ? renderPrompt() : renderStatus()});
 
     if (modal == Modal::none)
         return main;
 
     return dbox({main, renderModal() | clear_under | center});
+}
+
+Element Viewer::renderAgentPane(int width, int height)
+{
+    auto rowWidth = std::max(1, width - agentPaneMargin);
+
+    if (transcript && (isTranscriptLayoutDirty || rowWidth != transcriptWidth))
+    {
+        transcriptRows = layoutTranscript(*transcript, rowWidth);
+        transcriptWidth = rowWidth;
+        isTranscriptLayoutDirty = false;
+    }
+
+    transcriptHeight = height;
+    auto count = static_cast<int>(transcriptRows.size());
+    auto lastTop = std::max(0, count - height);
+    transcriptTop =
+        isFollowingTranscript ? lastTop : std::min(transcriptTop, lastTop);
+
+    auto title =
+        " @" + transcriptAgentName + (isFollowingTranscript ? "" : " · G follows");
+    auto lines = Elements {
+        text(title) | bold | (focus == Pane::agent ? inverted : dim),
+    };
+
+    if (transcriptRows.empty())
+        lines.push_back(text(" nothing from its agent yet · " + transcriptPath)
+                        | dim);
+
+    auto end = std::min(count, transcriptTop + height);
+
+    for (auto i = transcriptTop; i < end; ++i)
+        lines.push_back(renderTranscriptRow(
+            transcriptRows[static_cast<std::size_t>(i)], rowWidth));
+
+    return vbox(std::move(lines)) | flex;
+}
+
+Element Viewer::renderTranscriptRow(const TranscriptRow& row, int width)
+{
+    auto lead = row.isInFlight ? getSpinnerFrame(frameTime) + " " : row.lead;
+    auto margin = text(std::string(agentPaneMargin, ' '));
+
+    switch (row.style)
+    {
+        case TranscriptRowStyle::blank:
+            return text("");
+        case TranscriptRowStyle::prompt:
+            return hbox({margin,
+                         hbox({text(lead) | dim, text(row.text), filler()})
+                             | size(WIDTH, EQUAL, width)
+                             | bgcolor(userPromptBackground)});
+        case TranscriptRowStyle::text:
+            return hbox({margin, text(lead), text(row.text)});
+        case TranscriptRowStyle::thinking:
+            return hbox({margin, text(lead + row.text) | dim | italic});
+        case TranscriptRowStyle::toolCall:
+            return hbox(
+                {margin,
+                 text(lead) | color(row.isInFlight ? claudeOrange : Color::Green),
+                 renderToolCallText(row.text)});
+        case TranscriptRowStyle::toolOutcome:
+            return hbox(
+                {margin, text(lead) | dim, text(row.text), text(row.detail) | dim});
+        case TranscriptRowStyle::toolError:
+            return hbox({margin,
+                         text(lead) | dim,
+                         text(row.text) | color(Color::Red),
+                         text(row.detail) | dim});
+        case TranscriptRowStyle::result:
+            return hbox({margin, text(lead + row.text) | dim});
+        case TranscriptRowStyle::failedResult:
+            return hbox({margin, text(lead + row.text) | color(Color::Red)});
+        case TranscriptRowStyle::working:
+            return hbox({margin, text(lead + row.text) | color(claudeOrange)});
+    }
+
+    return text("");
 }
 
 Element Viewer::renderTree(int width, int height)
@@ -717,6 +832,7 @@ Element Viewer::renderRow(const DiffRow& row, int index, int width)
         case RowKind::annotationBottom:
         case RowKind::collapsedCommentThread:
         case RowKind::earlierReplies:
+        case RowKind::commentThreadGap:
             if (auto* note = annotation(row.annotation))
                 element = renderCommentThreadRow(row, *note, index, body(row.text));
             else
@@ -759,7 +875,7 @@ Element Viewer::renderCommentThreadRow(const DiffRow& row,
 
         return Color::Yellow;
     }();
-    auto frame = text("          │ ") | color(accent);
+    auto indent = text(commentThreadIndent);
 
     if (index == diffCursor)
         markSeen(note);
@@ -772,7 +888,7 @@ Element Viewer::renderCommentThreadRow(const DiffRow& row,
     switch (row.kind)
     {
         case RowKind::annotationTop:
-            return text("          " + describeCommentThread(note) + " ")
+            return text(commentThreadIndent + describeCommentThread(note) + " ")
                    | color(accent);
 
         case RowKind::collapsedCommentThread:
@@ -780,7 +896,8 @@ Element Viewer::renderCommentThreadRow(const DiffRow& row,
             auto owner = findOwner(note);
             auto voice =
                 authorColor(owner.empty() ? std::string {reviewerName} : owner);
-            auto summary = text("          ▸ " + row.text) | color(voice) | dim;
+            auto summary =
+                text(commentThreadIndent + "⏺ " + row.text) | color(voice) | dim;
 
             if (auto activity = findActivityOn(note.id))
                 return hbox({summary, text("  "), renderActivity(*activity)});
@@ -789,15 +906,17 @@ Element Viewer::renderCommentThreadRow(const DiffRow& row,
         }
 
         case RowKind::earlierReplies:
-            return hbox({frame, text(row.text) | dim});
+            return hbox({indent, text(row.text) | dim});
+
+        case RowKind::commentThreadGap:
+            return text("");
 
         case RowKind::replyHeader:
         {
             auto voice = voiceOf(row.reply);
-            auto rule = text(row.reply < 0 ? "" : " ▍ ") | color(voice);
 
-            return hbox({frame,
-                         rule,
+            return hbox({indent,
+                         text("⏺ ") | color(voice),
                          text(findAuthor(note, row.reply)) | bold | color(voice),
                          text(describeWhen(note, row.reply)) | dim});
         }
@@ -807,10 +926,17 @@ Element Viewer::renderCommentThreadRow(const DiffRow& row,
             if (resolvedLook)
                 shown = shown | dim;
 
-            if (row.reply < 0)
-                return hbox({frame, shown});
+            if (row.reply >= 0)
+                return hbox({indent, text("  "), shown});
 
-            return hbox({frame, text(" ▍ ") | color(voiceOf(row.reply)), shown});
+            auto previous = static_cast<std::size_t>(index - 1);
+            auto isFirstLine =
+                index > 0 && rows[previous].kind == RowKind::annotationTop;
+            auto prompt = text(isFirstLine ? "> " : "  ") | dim;
+
+            return hbox(
+                {indent,
+                 hbox({prompt, shown, filler()}) | bgcolor(userPromptBackground)});
         }
 
         default:
@@ -822,24 +948,32 @@ Element Viewer::renderCommentThreadRow(const DiffRow& row,
             auto activity = findActivityOn(note.id);
 
             if (!activity)
-            {
-                return hbox(
-                    {text("          └─") | color(accent), text(hint) | dim});
-            }
+                return hbox({indent, text(hint) | dim});
 
-            return hbox({text("          └─ ") | color(accent),
-                         renderActivity(*activity),
-                         text("  " + hint) | dim});
+            return hbox(
+                {indent, renderActivity(*activity), text("  " + hint) | dim});
         }
     }
 }
 
 Element Viewer::renderStatus()
 {
-    auto mode = editing               ? modeName(editor.mode())
-                : visualAnchor        ? std::string {" VISUAL "}
-                : focus == Pane::tree ? std::string {" TREE "}
-                                      : std::string {" DIFF "};
+    auto mode = [&]
+    {
+        if (editing)
+            return modeName(editor.mode());
+
+        if (visualAnchor)
+            return std::string {" VISUAL "};
+
+        if (focus == Pane::tree)
+            return std::string {" TREE "};
+
+        if (focus == Pane::agent)
+            return std::string {" AGENT "};
+
+        return std::string {" DIFF "};
+    }();
     auto shortSha = baseSha.substr(0, 7);
     auto unseen = tracker.unseenCount();
     auto drafts = draftCount(annotations);
@@ -878,6 +1012,9 @@ Element Viewer::renderStatus()
         parts.push_back(text("  ✗ @" + responder->getName() + " stopped")
                         | color(Color::Red));
 
+    if (isWaitingForPreviousResponder)
+        parts.push_back(text("  ⋯ previous dv's agent finishing") | dim);
+
     if (!activities.empty())
     {
         const auto& first = activities.front();
@@ -907,7 +1044,7 @@ Element Viewer::renderStatus()
 
 Element Viewer::renderActivity(const AgentActivity& activity)
 {
-    return text(getSpinnerFrame(nowMs()) + " " + describeActivity(activity))
+    return text(getSpinnerFrame(frameTime) + " " + describeActivity(activity))
            | color(Color::Cyan);
 }
 
@@ -1108,6 +1245,8 @@ Element Viewer::renderHelp()
                    row("j k  gg G", "move, top / bottom (counts: 5j)"),
                    row("Ctrl-d Ctrl-u", "half page down / up"),
                    row("h l  Tab", "tree / diff / switch pane"),
+                   row("A", "agent pane: watch @dv work (A again hides)"),
+                   row("", "j k scroll it, G follows the tail again"),
                    row("Enter  l", "tree: toggle directory, open file"),
                    row("a  s", "all files / changed only, tree / by size"),
                    row("]c [c  ]f [f", "next / previous hunk, file"),

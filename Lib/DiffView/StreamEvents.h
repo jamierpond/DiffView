@@ -23,10 +23,19 @@ struct ToolSummary
 
 using ToolSummaries = std::map<std::string, ToolSummary, std::less<>>;
 
+// The tool's key argument, made relative to the worktree; empty for a tool not
+// in the table.
+std::string findToolArgument(const ToolSummaries& tools,
+                             const std::string& name,
+                             const Miro::Json::Value& input,
+                             const std::string& worktree);
+
 // "editing Source/Foo.cpp": the tool's verb and its key argument, made
 // relative to the worktree; "using <name>" for a tool not in the table.
 std::string summariseToolCall(const ToolSummaries& tools,
                               const std::string& name,
                               const Miro::Json::Value& input,
                               const std::string& worktree);
+
+const ToolSummaries& getClaudeCodeTools();
 } // namespace diffview

@@ -48,8 +48,9 @@ auto tBlockAfterAnchor = test("DiffRows/a comment block follows its last line") 
     check(rows[5].kind == RowKind::annotationText && rows[5].text == "first");
     check(rows[6].text == "second line");
     check(rows[7].text == "that wraps");
-    check(rows[8].kind == RowKind::annotationBottom);
-    check(rows[9].flat == 2);
+    check(rows[8].kind == RowKind::commentThreadGap);
+    check(rows[9].kind == RowKind::annotationBottom);
+    check(rows[10].flat == 2);
 };
 
 auto tFileLevelFirst = test("DiffRows/file comments sit under the file header") = []
@@ -62,8 +63,8 @@ auto tFileLevelFirst = test("DiffRows/file comments sit under the file header") 
 
     check(rows[0].kind == RowKind::fileHeader);
     check(rows[1].kind == RowKind::annotationTop && rows[1].annotation == 4);
-    check(rows[4].kind == RowKind::annotationTop && rows[4].annotation == 3);
-    check(rows[7].kind == RowKind::hunkHeader);
+    check(rows[5].kind == RowKind::annotationTop && rows[5].annotation == 3);
+    check(rows[9].kind == RowKind::hunkHeader);
 };
 
 auto tBinary = test("DiffRows/a binary file is a header and one message row") = []
@@ -84,21 +85,18 @@ auto tReplyRows = test("DiffRows/replies follow the comment inside its block") =
     auto rows = buildRows(file, {annotation}, {}, 80);
 
     auto isGap = [](const DiffRow& row)
-    {
-        return row.kind == RowKind::annotationText && row.text.empty()
-               && row.reply == -1;
-    };
+    { return row.kind == RowKind::commentThreadGap; };
 
     check(rows[3].kind == RowKind::annotationTop);
-    check(rows[4].kind == RowKind::replyHeader && rows[4].reply == -1);
-    check(rows[5].text == "why?" && rows[5].reply == -1);
-    check(isGap(rows[6]));
-    check(rows[7].kind == RowKind::replyHeader && rows[7].reply == 0);
-    check(rows[8].text == "because" && rows[8].reply == 0);
-    check(rows[9].text == "it is");
-    check(isGap(rows[10]));
-    check(rows[11].kind == RowKind::replyHeader && rows[11].reply == 1);
-    check(rows[12].text == "ok" && rows[12].reply == 1);
+    check(rows[4].text == "why?" && rows[4].reply == -1);
+    check(isGap(rows[5]));
+    check(rows[6].kind == RowKind::replyHeader && rows[6].reply == 0);
+    check(rows[7].text == "because" && rows[7].reply == 0);
+    check(rows[8].text == "it is");
+    check(isGap(rows[9]));
+    check(rows[10].kind == RowKind::replyHeader && rows[10].reply == 1);
+    check(rows[11].text == "ok" && rows[11].reply == 1);
+    check(isGap(rows[12]));
     check(rows[13].kind == RowKind::annotationBottom);
 };
 
@@ -109,7 +107,7 @@ auto tCommentThreadCursor =
     auto annotation = makeAnnotation(file, {0, 0}, 7, "why?");
     annotation.replies = {{"dev", "2026-10-18 10:00", "because\nit is", false}};
     auto rows = buildRows(file, {annotation}, {}, 80);
-    constexpr auto secondReplyLine = std::size_t {9};
+    constexpr auto secondReplyLine = std::size_t {8};
     constexpr auto bottomAfterRebuild = 13;
     constexpr auto farPastTheBottom = 99;
 

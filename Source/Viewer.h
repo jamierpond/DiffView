@@ -12,6 +12,7 @@
 #include <Review.h>
 #include <Store.h>
 #include <Telescope.h>
+#include <Transcript.h>
 #include <VimEditor.h>
 
 #include <eacp/Core/Threads/Async.h>
@@ -60,7 +61,8 @@ private:
     enum class Pane
     {
         tree,
-        diff
+        diff,
+        agent
     };
 
     // The comment editor isn't one: it is drawn inline (`editing`).
@@ -110,9 +112,16 @@ private:
     void tick();
     void pollActivities(std::int64_t now);
     void pollResponder(std::int64_t now);
+    void pollTranscript(std::int64_t now);
+    void readTranscriptTail();
+    void toggleAgentPane();
+    void cycleFocus();
+    void scrollTranscript(int delta);
+    void followTranscript();
     void deliverNewRounds();
+    bool isPreviousResponderFinishing(const ResponderConfig& config) const;
     bool claimResponder(const ResponderConfig& config);
-    void stopResponder();
+    void finishResponder();
     void onRepoChanged(const std::vector<std::string>& paths);
     void onStoreChanged(const std::vector<std::string>& paths);
     void scheduleRefresh(int delayMs);
@@ -214,6 +223,8 @@ private:
     ftxui::Element render();
     ftxui::Element renderTree(int width, int height);
     ftxui::Element renderDiff(int width, int height);
+    ftxui::Element renderAgentPane(int width, int height);
+    ftxui::Element renderTranscriptRow(const TranscriptRow& row, int width);
     ftxui::Element renderRow(const DiffRow& row, int index, int width);
     ftxui::Element renderCommentThreadRow(const DiffRow& row,
                                           const Annotation& note,
@@ -264,11 +275,32 @@ private:
 
     std::optional<Responder> responder;
     std::vector<std::string> deliveredRounds;
+    // Held while the previous responder's CLI finishes, then sent.
+    std::vector<std::string> roundsAwaitingResponder;
+    bool isWaitingForPreviousResponder = false;
     std::int64_t lastRoundPoll = 0;
     bool isResponderFailureHandled = false;
     std::vector<AgentActivity> activities;
     std::int64_t lastActivityPoll = 0;
     std::int64_t lastSpinnerRedraw = 0;
+    // Read once per render, so every spinner shows the same frame.
+    std::int64_t frameTime = 0;
+
+    // The responder's stream, read from its file: any dv can show it, not just
+    // the one running it.
+    bool isAgentPaneShown = false;
+    bool isAgentPaneBesideDiff = false;
+    std::optional<Transcript> transcript;
+    std::string transcriptAgentName;
+    std::string transcriptPath;
+    std::uint64_t transcriptOffset = 0;
+    std::int64_t lastTranscriptPoll = 0;
+    std::vector<TranscriptRow> transcriptRows;
+    bool isTranscriptLayoutDirty = true;
+    int transcriptWidth = 0;
+    int transcriptTop = 0;
+    int transcriptHeight = 20;
+    bool isFollowingTranscript = true;
 
     // What the files said when last read or written, to tell our own writes
     // from a hand edit.

@@ -33,7 +33,8 @@ auto tClaudeCodeCommand =
                               "stream-json",
                               "--verbose",
                               "--input-format",
-                              "stream-json"};
+                              "stream-json",
+                              "--replay-user-messages"};
 
     check(hasStdinSession(cli) && canResume(cli));
     check(makeAgentArguments(cli, {}, "ignored") == session);

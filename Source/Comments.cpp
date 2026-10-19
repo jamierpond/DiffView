@@ -654,15 +654,8 @@ void Viewer::moveCursorToEndOfCommentThread(int id)
 {
     for (std::size_t i = 0; i < rows.size(); ++i)
     {
-        auto isLastText =
-            rows[i].annotation == id && rows[i].kind == RowKind::annotationText
-            && i + 1 < rows.size() && rows[i + 1].kind == RowKind::annotationBottom;
-
-        if (isLastText)
-        {
+        if (rows[i].annotation == id && rows[i].kind == RowKind::annotationText)
             diffCursor = static_cast<int>(i);
-            return;
-        }
     }
 }
 

@@ -1,3 +1,4 @@
+#include <AgentProcess.h>
 #include <Responder.h>
 #include <Store.h>
 #include <StreamEvents.h>
@@ -6,7 +7,14 @@
 
 #include <eacp/Core/Utils/Files.h>
 
+#include <chrono>
 #include <filesystem>
+#include <thread>
+
+#if !defined(_WIN32)
+#include <sys/wait.h>
+#include <unistd.h>
+#endif
 
 using namespace nano;
 using namespace diffview;
@@ -50,9 +58,8 @@ struct FakeProcessState
     int pid = 0;
     AgentLaunch launch;
     std::string written;
-    std::string output;
     std::optional<int> exitCode;
-    bool isStopped = false;
+    bool isInputClosed = false;
 };
 
 class FakeAgentProcess final : public AgentProcess
@@ -71,14 +78,9 @@ public:
         return true;
     }
 
-    std::string readAvailableOutput() override
-    {
-        return std::exchange(state->output, {});
-    }
-
     std::optional<int> findExitCode() override { return state->exitCode; }
 
-    void stop() override { state->isStopped = true; }
+    void closeInput() override { state->isInputClosed = true; }
 
 private:
     std::shared_ptr<FakeProcessState> state;
@@ -112,7 +114,17 @@ eacp::FilePath makeEmptyDirectory(const std::string& name)
 ResponderSettings makeSettings(const eacp::FilePath& dir,
                                std::string_view cli = defaultAgentCliName)
 {
-    return {"dv", getAgentCli(cli), "/r/main", dir / "dv.log", dir / "dv.session"};
+    return {"dv",
+            getAgentCli(cli),
+            "/r/main",
+            dir / "dv.log",
+            dir / "dv.jsonl",
+            dir / "dv.session"};
+}
+
+void writeOutput(const eacp::FilePath& dir, const std::string& text)
+{
+    eacp::Files::appendFile(dir / "dv.jsonl", text);
 }
 
 std::string readMessageText(const std::string& line)
@@ -246,21 +258,21 @@ auto tResponderOneProcess =
     check(launcher.started.size() == 1);
     check(process.written.find("second") == std::string::npos);
 
-    process.output = claudeInit;
+    writeOutput(dir, claudeInit);
     responder.poll();
     check(responder.findActivities().size() == 1);
     check(responder.findActivities().front().commentThread == 4);
     check(responder.findActivities().front().doing == "starting");
 
-    process.output = claudeResult;
+    writeOutput(dir, claudeResult);
     responder.poll();
     check(launcher.started.size() == 1);
     check(process.written.find("second") != std::string::npos);
     check(responder.findActivities().front().commentThread == 5);
     check(responder.getProcessId() == firstFakePid);
 
-    responder.stop();
-    check(process.isStopped && !responder.isRunning());
+    responder.finish();
+    check(process.isInputClosed && responder.isFinishing());
 };
 
 auto tResponderResumes =
@@ -272,11 +284,11 @@ auto tResponderResumes =
     {
         auto responder = Responder {makeSettings(dir), launcher.makeStart()};
         responder.send({"first", {4}});
-        launcher.started.front()->output = claudeInit + claudeResult;
+        writeOutput(dir, claudeInit + claudeResult);
         responder.poll();
     }
 
-    check(launcher.started.front()->isStopped);
+    check(launcher.started.front()->isInputClosed);
     check(eacp::Files::readFile(dir / "dv.session") == "session-1\n");
 
     auto responder = Responder {makeSettings(dir), launcher.makeStart()};
@@ -295,9 +307,10 @@ auto tResponderFailedResume =
     auto responder = Responder {makeSettings(dir), launcher.makeStart()};
 
     responder.send({"first", {4}});
-    launcher.started.front()->output =
+    writeOutput(
+        dir,
         R"({"type":"result","subtype":"error_during_execution","session_id":"gone"})"
-        "\n";
+        "\n");
     launcher.started.front()->exitCode = crashExitCode;
     responder.poll();
 
@@ -317,7 +330,7 @@ auto tResponderCrashes = test(
     auto responder = Responder {makeSettings(dir), launcher.makeStart()};
 
     responder.send({"first", {4}});
-    launcher.started.front()->output = claudeInit;
+    writeOutput(dir, claudeInit);
     launcher.started.front()->exitCode = crashExitCode;
     responder.poll();
 
@@ -326,7 +339,7 @@ auto tResponderCrashes = test(
     check(responder.takeNotices()
           == std::vector<std::string> {"@dv crashed (exit 1), restarted"});
 
-    launcher.started.back()->output = claudeInit;
+    writeOutput(dir, claudeInit);
     launcher.started.back()->exitCode = crashExitCode;
     responder.poll();
 
@@ -349,7 +362,7 @@ auto tResponderIdleCrash =
     auto responder = Responder {makeSettings(dir), launcher.makeStart()};
 
     responder.send({"first", {4}});
-    launcher.started.front()->output = claudeInit + claudeResult;
+    writeOutput(dir, claudeInit + claudeResult);
     responder.poll();
     launcher.started.front()->exitCode = crashExitCode;
     responder.poll();
@@ -380,19 +393,108 @@ auto tResponderOneShot =
     check(responder.takeNotices().empty());
 };
 
-auto tResponderLog = test("Responder/its stream and what dv did go to its log") = []
+auto tResponderLog =
+    test("Responder/what dv did goes to its log, the stream to its own file") = []
 {
     auto dir = makeEmptyDirectory("ResponderLog");
     auto launcher = FakeLauncher {};
     auto responder = Responder {makeSettings(dir), launcher.makeStart()};
 
     responder.send({"first", {4}});
-    launcher.started.front()->output = claudeInit;
+    writeOutput(dir, claudeInit);
     responder.poll();
 
     auto log = eacp::Files::readFile(dir / "dv.log");
     check(log.find("dv: sending #4: first") != std::string::npos);
     check(log.find("dv: started pid 1000: claude") != std::string::npos);
-    check(log.find(claudeInit) != std::string::npos);
+    check(log.find(claudeInit) == std::string::npos);
     check(launcher.started.front()->launch.logPath == (dir / "dv.log").str());
+    check(launcher.started.front()->launch.outputPath == (dir / "dv.jsonl").str());
 };
+
+auto tResponderReadsOutputByOffset =
+    test("Responder/reads its stream from where it began, a line at a time") = []
+{
+    auto dir = makeEmptyDirectory("ResponderReadsOutputByOffset");
+    writeOutput(dir, claudeResult);
+    auto launcher = FakeLauncher {};
+    auto responder = Responder {makeSettings(dir), launcher.makeStart()};
+
+    responder.send({"first", {4}});
+    responder.send({"second", {5}});
+    responder.poll();
+    check(responder.findActivities().front().commentThread == 4);
+
+    auto half = claudeInit.size() / 2;
+    writeOutput(dir, claudeInit.substr(0, half));
+    responder.poll();
+    check(responder.findActivities().front().doing == "starting");
+
+    writeOutput(dir, claudeInit.substr(half) + claudeResult);
+    responder.poll();
+    check(responder.findActivities().front().commentThread == 5);
+};
+
+auto tResponderFinishes =
+    test("Responder/finishing hands it the queue and closes its stdin, and its "
+         "exit is no crash") = []
+{
+    auto dir = makeEmptyDirectory("ResponderFinishes");
+    auto launcher = FakeLauncher {};
+    auto responder = Responder {makeSettings(dir), launcher.makeStart()};
+
+    responder.send({"first", {4}});
+    responder.send({"second", {5}});
+    responder.finish();
+
+    auto& process = *launcher.started.front();
+    check(process.isInputClosed);
+    check(process.written.find("second") != std::string::npos);
+    check(responder.isRunning() && responder.isFinishing());
+    check(responder.findActivities().empty());
+
+    process.exitCode = crashExitCode;
+    responder.poll();
+    check(!responder.isRunning() && launcher.started.size() == 1);
+    check(responder.takeNotices().empty() && !responder.getFailure());
+};
+
+#if !defined(_WIN32)
+auto tAgentProcessOutlivesItsOwner =
+    test("Responder/a closed agent process is not signalled and finishes on its "
+         "own, in its own session") = []
+{
+    constexpr auto finishDeadline = std::chrono::seconds {5};
+    constexpr auto pollInterval = std::chrono::milliseconds {20};
+
+    auto dir = makeEmptyDirectory("AgentProcessOutlivesItsOwner");
+    auto outputPath = dir / "out.jsonl";
+    auto launch =
+        AgentLaunch {{"/bin/sh", "-c", "cat >/dev/null; sleep 0.3; echo finished"},
+                     dir.str(),
+                     outputPath.str(),
+                     (dir / "err.log").str()};
+
+    auto process = startPipedAgentProcess(launch);
+    check(process != nullptr);
+
+    auto pid = static_cast<pid_t>(process->getProcessId());
+    check(getsid(pid) == pid);
+    check(process->writeInput("input\n"));
+    process->closeInput();
+    process.reset();
+
+    auto deadline = std::chrono::steady_clock::now() + finishDeadline;
+
+    while (eacp::Files::readFile(outputPath).empty()
+           && std::chrono::steady_clock::now() < deadline)
+    {
+        std::this_thread::sleep_for(pollInterval);
+    }
+
+    auto status = 0;
+    waitpid(pid, &status, 0);
+    check(eacp::Files::readFile(outputPath) == "finished\n");
+    check(WIFEXITED(status) && WEXITSTATUS(status) == 0);
+};
+#endif
