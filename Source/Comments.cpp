@@ -570,6 +570,7 @@ void Viewer::closeEditor(bool)
     }
 
     auto id = editingId != 0 ? editingId : replyCommentId.value_or(0);
+    auto wasReplying = replyCommentId.has_value();
     editing = false;
     editingId = 0;
     replyCommentId.reset();
@@ -580,12 +581,45 @@ void Viewer::closeEditor(bool)
     if (id == 0)
         return;
 
+    if (wasReplying)
+    {
+        moveCursorToEndOfThread(id);
+        return;
+    }
+
+    if (isCursorInThread(id))
+        return;
+
     for (std::size_t i = 0; i < rows.size(); ++i)
     {
         if (rows[i].kind == RowKind::annotationTop && rows[i].annotation == id)
         {
             diffCursor = static_cast<int>(i);
             break;
+        }
+    }
+}
+
+bool Viewer::isCursorInThread(int id) const
+{
+    if (diffCursor < 0 || diffCursor >= static_cast<int>(rows.size()))
+        return false;
+
+    return rows[static_cast<std::size_t>(diffCursor)].annotation == id;
+}
+
+void Viewer::moveCursorToEndOfThread(int id)
+{
+    for (std::size_t i = 0; i < rows.size(); ++i)
+    {
+        auto isLastText =
+            rows[i].annotation == id && rows[i].kind == RowKind::annotationText
+            && i + 1 < rows.size() && rows[i + 1].kind == RowKind::annotationBottom;
+
+        if (isLastText)
+        {
+            diffCursor = static_cast<int>(i);
+            return;
         }
     }
 }
