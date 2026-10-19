@@ -1,10 +1,18 @@
 #pragma once
 
+#include <optional>
 #include <string>
 
 namespace diffview
 {
-// `dv monitor`: no terminal, no UI. Prints a line for each review round
-// submitted after it starts, until killed (or the first, with `once`).
-int runMonitor(const std::string& repo, bool once);
+struct MonitorOptions
+{
+    bool once = false;
+
+    std::optional<std::string> after;
+
+    std::string agent;
+};
+
+int runMonitor(const std::string& repo, const MonitorOptions& options);
 } // namespace diffview
