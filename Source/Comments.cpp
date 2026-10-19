@@ -712,7 +712,7 @@ void Viewer::pasteIntoEditor()
 // The agent pane's input is a vim buffer like the reply editor's. Around it:
 // Tab or Esc in normal mode leaves (the draft stays), Enter sends, and the
 // transcript scrolls with the arrows in insert mode or j k Ctrl-U Ctrl-D G in
-// normal mode.
+// normal mode, where za unfolds the subagent block in view.
 bool Viewer::onAgentInputEvent(const ftxui::Event& event)
 {
     using ftxui::Event;
@@ -764,6 +764,21 @@ bool Viewer::onAgentInputEvent(const ftxui::Event& event)
     if (isInsert && event == Event::ArrowDown)
     {
         scrollTranscript(agentInputScrollRows);
+        return true;
+    }
+
+    if (isNormal && event == Event::Character("a") && isTranscriptFoldKeyPending)
+    {
+        isTranscriptFoldKeyPending = false;
+        toggleSubagentBlockInView();
+        return true;
+    }
+
+    isTranscriptFoldKeyPending = false;
+
+    if (isNormal && event == Event::Character("z"))
+    {
+        isTranscriptFoldKeyPending = true;
         return true;
     }
 

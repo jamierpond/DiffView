@@ -1,6 +1,7 @@
 #pragma once
 
 #include <optional>
+#include <set>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -31,12 +32,17 @@ struct TranscriptEntry
     std::string toolUseId;
     std::optional<ToolOutcome> outcome;
     bool isError = false;
+    // A call that started a subagent: what the subagent did, its tail.
+    std::vector<TranscriptEntry> subagentEntries;
+    // A background subagent outlives its call's result.
+    bool isSubagentRunning = false;
 };
 
 // What Claude Code's `--output-format stream-json --verbose` says, read as it
 // is written: the user's prompts (with --replay-user-messages), its text,
 // thinking, tool calls with their results, and each turn's result.
-// Subagents' messages are left out, as Claude Code's own UI does.
+// A subagent's messages (with --forward-subagent-text, its text and thinking
+// too) nest under the call that started it.
 class Transcript
 {
 public:
@@ -52,6 +58,7 @@ public:
     const std::vector<TranscriptEntry>& getEntries() const;
     const std::vector<std::string>& getQueuedPrompts() const;
     bool isTurnOpen() const;
+    bool hasRunningSubagent() const;
 
 private:
     void readLine(std::string_view line);
@@ -72,6 +79,7 @@ enum class TranscriptRowStyle
     toolCall,
     toolOutcome,
     toolError,
+    hiddenRows,
     result,
     failedResult,
     working,
@@ -81,13 +89,25 @@ enum class TranscriptRowStyle
 struct TranscriptRow
 {
     TranscriptRowStyle style = TranscriptRowStyle::blank;
+    // Before the lead: two columns per level of subagent nesting.
+    std::string indent;
     std::string lead;
     std::string text;
     std::string detail;
     // Its lead is replaced by a spinner.
     bool isInFlight = false;
+    // Set on a call's row when it has a subagent block that za folds.
+    std::string subagentToolUseId;
 };
 
-// Claude Code's look, every row at most `width` columns.
-std::vector<TranscriptRow> layoutTranscript(const Transcript& transcript, int width);
+// Unexpanded, a subagent's block shows only this many of its last rows.
+constexpr auto collapsedSubagentRowCount = 3;
+
+using ExpandedSubagents = std::set<std::string>;
+
+// Claude Code's look, every row at most `width` columns, indent included.
+std::vector<TranscriptRow>
+    layoutTranscript(const Transcript& transcript,
+                     int width,
+                     const ExpandedSubagents& expandedSubagents = {});
 } // namespace diffview

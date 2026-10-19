@@ -167,7 +167,7 @@ void Viewer::pollTranscript(std::int64_t now)
     if (!isAgentPaneShown)
         return;
 
-    if (transcript && transcript->isTurnOpen()
+    if (transcript && (transcript->isTurnOpen() || transcript->hasRunningSubagent())
         && now - lastSpinnerRedraw >= spinnerFrameMs)
     {
         lastSpinnerRedraw = now;
@@ -271,6 +271,31 @@ void Viewer::scrollTranscript(int delta)
 void Viewer::followTranscript()
 {
     isFollowingTranscript = true;
+}
+
+// The pane has no cursor: za folds the last subagent block that starts above
+// the bottom of the view.
+void Viewer::toggleSubagentBlockInView()
+{
+    auto viewEnd = std::min(static_cast<int>(transcriptRows.size()),
+                            transcriptTop + transcriptHeight);
+
+    for (auto i = viewEnd - 1; i >= 0; --i)
+    {
+        const auto& id =
+            transcriptRows[static_cast<std::size_t>(i)].subagentToolUseId;
+
+        if (id.empty())
+            continue;
+
+        if (!expandedSubagents.erase(id))
+            expandedSubagents.insert(id);
+
+        isTranscriptLayoutDirty = true;
+        return;
+    }
+
+    say("No subagent here");
 }
 
 // Through the same path as a round: it waits for a finishing responder, and

@@ -61,6 +61,86 @@ Transcript makeTranscript(const std::string& stream)
     transcript.append(stream);
     return transcript;
 }
+
+std::string makeAgentCall(const std::string& id,
+                          const std::string& description,
+                          const std::string& parent)
+{
+    return R"({"type":"assistant","message":{"model":"claude-opus-5-5","type":"message","role":"assistant","content":[{"type":"tool_use","id":")"
+           + id + R"(","name":"Agent","input":{"description":")" + description
+           + R"(","subagent_type":"general-purpose","prompt":"Go."},"caller":{"type":"direct"}}]},"parent_tool_use_id":)"
+           + parent + R"(,"session_id":"79275283"})" + "\n";
+}
+
+std::string quoted(const std::string& text)
+{
+    return "\"" + text + "\"";
+}
+
+std::string makeSubagentPrompt(const std::string& parent)
+{
+    return R"({"type":"user","message":{"role":"user","content":[{"type":"text","text":"Read CLAUDE.md first."}]},"parent_tool_use_id":")"
+           + parent + R"(","session_id":"79275283"})" + "\n";
+}
+
+std::string makeSubagentThinking(const std::string& parent)
+{
+    return R"({"type":"assistant","message":{"model":"claude-opus-5-5","type":"message","role":"assistant","content":[{"type":"thinking","thinking":"","signature":"CAQS"}]},"parent_tool_use_id":")"
+           + parent + R"(","session_id":"79275283"})" + "\n";
+}
+
+std::string makeSubagentBash(const std::string& parent, const std::string& id)
+{
+    return R"({"type":"assistant","message":{"model":"claude-opus-5-5","type":"message","role":"assistant","content":[{"type":"tool_use","id":")"
+           + id
+           + R"(","name":"Bash","input":{"command":"cat Lib/DiffView/Transcript.h"},"caller":{"type":"direct"}}]},"parent_tool_use_id":")"
+           + parent + R"(","session_id":"79275283"})" + "\n";
+}
+
+std::string makeSubagentBashResult(const std::string& parent, const std::string& id)
+{
+    return R"({"type":"user","message":{"role":"user","content":[{"tool_use_id":")"
+           + id
+           + R"(","type":"tool_result","content":"#pragma once\n\n#include <optional>","is_error":false}]},"parent_tool_use_id":")"
+           + parent + R"(","agent_id":"acee39ba847179220","session_id":"79275283"})"
+           + "\n";
+}
+
+std::string makeSubagentText(const std::string& parent, const std::string& said)
+{
+    return R"({"type":"assistant","message":{"model":"claude-opus-5-5","type":"message","role":"assistant","content":[{"type":"text","text":")"
+           + said + R"("}]},"parent_tool_use_id":")" + parent
+           + R"(","session_id":"79275283"})" + "\n";
+}
+
+std::string makeToolResult(const std::string& id,
+                           const std::string& said,
+                           const std::string& parent)
+{
+    return R"({"type":"user","message":{"role":"user","content":[{"tool_use_id":")"
+           + id + R"(","type":"tool_result","content":[{"type":"text","text":")"
+           + said + R"("}]}]},"parent_tool_use_id":)" + parent
+           + R"(,"session_id":"79275283"})" + "\n";
+}
+
+std::string runSubagent(const std::string& id, const std::string& description)
+{
+    return makeAgentCall(id, description, "null") + makeSubagentPrompt(id)
+           + makeSubagentThinking(id) + makeSubagentBash(id, id + "-bash")
+           + makeSubagentBashResult(id, id + "-bash")
+           + makeSubagentText(id, "Transcript.h holds the parser.");
+}
+
+std::vector<TranscriptEntryKind>
+    getKinds(const std::vector<TranscriptEntry>& entries)
+{
+    auto kinds = std::vector<TranscriptEntryKind> {};
+
+    for (const auto& entry: entries)
+        kinds.push_back(entry.kind);
+
+    return kinds;
+}
 } // namespace
 
 auto tTranscriptTurn =
@@ -103,8 +183,9 @@ auto tTranscriptPartialLine =
     check(transcript.isTurnOpen());
 };
 
-auto tTranscriptSkips =
-    test("Transcript/subagents, synthetic messages and noise are left out") = []
+auto tTranscriptSkips = test(
+    "Transcript/orphaned subagent messages, synthetic ones and noise are left out") =
+    []
 {
     auto subagent = std::string {
         R"({"type":"assistant","parent_tool_use_id":"t9","message":{"content":[{"type":"text","text":"inner"}]}})"
@@ -220,4 +301,176 @@ auto tTranscriptQueuedPrompt =
     check(transcript.getQueuedPrompts().empty());
     check(transcript.getEntries().back().kind == TranscriptEntryKind::prompt);
     check(transcript.getEntries().back().text == "hello how are you ?");
+};
+
+auto tTranscriptSubagentNested =
+    test("Transcript/a subagent's run nests under its Agent call") = []
+{
+    auto transcript = makeTranscript(
+        prompt + runSubagent("toolu_A", "Read the parser")
+        + makeToolResult(
+            "toolu_A", "Transcript.h holds the parser.\nagentId: a1", "null"));
+    const auto& entries = transcript.getEntries();
+    using Kind = TranscriptEntryKind;
+
+    check(getKinds(transcript) == std::vector {Kind::prompt, Kind::toolCall});
+
+    const auto& call = entries[1];
+    check(call.text == "Agent(Read the parser)");
+    check(getKinds(call.subagentEntries)
+          == std::vector {Kind::prompt, Kind::thinking, Kind::toolCall, Kind::text});
+    check(call.subagentEntries[0].text == "Read CLAUDE.md first.");
+    check(call.subagentEntries[2].text == "Bash(cat Lib/DiffView/Transcript.h)");
+    check(call.subagentEntries[2].outcome
+          && call.subagentEntries[2].outcome->firstLine == "#pragma once");
+    check(call.subagentEntries[3].text == "Transcript.h holds the parser.");
+};
+
+auto tTranscriptSubagentRunning =
+    test("Transcript/a running subagent spins its call and shows no result yet") = []
+{
+    auto rows = layoutTranscript(
+        makeTranscript(prompt + runSubagent("toolu_A", "Read the parser")),
+        wideWidth,
+        {"toolu_A"});
+    using Style = TranscriptRowStyle;
+
+    check(rows[2].style == Style::toolCall && rows[2].isInFlight);
+    check(rows[2].subagentToolUseId == "toolu_A");
+    check(rows[3].style == Style::prompt && rows[3].indent == "⎿ ");
+    check(rows[5].style == Style::toolCall && rows[5].indent == "  ");
+    check(rows[5].isInFlight == false && rows[6].style == Style::toolOutcome);
+    check(rows[7].style == Style::text && rows[7].indent == "  ");
+    check(rows[8].style == Style::blank && rows[9].style == Style::working);
+};
+
+auto tTranscriptBackgroundSubagent =
+    test("Transcript/a background subagent runs past its launch result") = []
+{
+    auto started = std::string {
+        R"({"type":"system","subtype":"task_started","task_id":"acee39ba847179220","tool_use_id":"toolu_A","description":"Read the parser","subagent_type":"general-purpose","is_backgrounded":true,"spawn_depth":1,"task_type":"local_agent","prompt":"Go."})"
+        "\n"};
+    auto launched =
+        makeToolResult("toolu_A", "Async agent launched successfully.", "null");
+    auto finished = std::string {
+        R"({"type":"system","subtype":"task_notification","task_id":"acee39ba847179220","tool_use_id":"toolu_A","status":"completed","output_file":"","summary":"Transcript.h holds the parser."})"
+        "\n"};
+    auto transcript = makeTranscript(
+        prompt + makeAgentCall("toolu_A", "Read the parser", "null") + started
+        + launched + result + makeSubagentText("toolu_A", "Reading."));
+
+    check(!transcript.isTurnOpen() && transcript.hasRunningSubagent());
+
+    auto rows = layoutTranscript(transcript, wideWidth);
+    check(rows[2].style == TranscriptRowStyle::toolCall && rows[2].isInFlight);
+    check(rows[3].style == TranscriptRowStyle::text && rows[3].text == "Reading.");
+    check(rows[4].style == TranscriptRowStyle::blank);
+
+    transcript.append(finished);
+    check(!transcript.hasRunningSubagent());
+    check(transcript.getEntries()[1].outcome->firstLine
+          == "Transcript.h holds the parser.");
+};
+
+auto tTranscriptSubagentResult =
+    test("Transcript/a finished subagent's last text is its call's result") = []
+{
+    auto transcript = makeTranscript(
+        prompt + runSubagent("toolu_A", "Read the parser")
+        + makeToolResult("toolu_A",
+                         "Transcript.h holds the parser.\nagentId: a1\n<usage>",
+                         "null")
+        + result);
+    auto rows = layoutTranscript(transcript, wideWidth);
+    using Style = TranscriptRowStyle;
+
+    check(!rows[2].isInFlight);
+    check(rows[7].style == Style::toolOutcome && rows[7].indent.empty());
+    check(rows[7].text == "Transcript.h holds the parser."
+          && rows[7].detail.empty());
+};
+
+auto tTranscriptSubagentCollapsed =
+    test("Transcript/a subagent block shows its last rows until za expands it") = []
+{
+    auto transcript =
+        makeTranscript(prompt + runSubagent("toolu_A", "Read the parser")
+                       + makeToolResult("toolu_A", "done", "null"));
+    auto collapsed = layoutTranscript(transcript, wideWidth);
+    auto expanded = layoutTranscript(transcript, wideWidth, {"toolu_A"});
+    using Style = TranscriptRowStyle;
+
+    check(expanded.size() == 11);
+    check(collapsed.size() == 10);
+    check(collapsed[3].style == Style::hiddenRows && collapsed[3].indent == "⎿ ");
+    check(collapsed[3].lead == "⋯ " && collapsed[3].text == "2 more rows");
+    check(collapsed[4].style == Style::toolCall && collapsed[4].indent == "  ");
+    check(collapsed[4].text == "Bash(cat Lib/DiffView/Transcript.h)");
+    check(collapsed[5].style == Style::toolOutcome);
+    check(collapsed[6].style == Style::text);
+
+    auto shortRun =
+        makeTranscript(prompt + makeAgentCall("toolu_B", "Quick look", "null")
+                       + makeSubagentText("toolu_B", "Nothing there."));
+    auto shortRows = layoutTranscript(shortRun, wideWidth);
+    check(shortRows[3].style == Style::text && shortRows[3].indent == "⎿ ");
+};
+
+auto tTranscriptSubagentTwoLevels =
+    test("Transcript/a subagent's own subagent nests one level further") = []
+{
+    auto stream = prompt + runSubagent("toolu_A", "Outer")
+                  + makeAgentCall("toolu_B", "Inner", quoted("toolu_A"))
+                  + makeSubagentBash("toolu_B", "toolu_B-bash")
+                  + makeSubagentBashResult("toolu_B", "toolu_B-bash")
+                  + makeSubagentText("toolu_B", "Inner found it.")
+                  + makeToolResult("toolu_B", "Inner found it.", quoted("toolu_A"));
+    auto transcript = makeTranscript(stream);
+    const auto& outer = transcript.getEntries()[1];
+    using Kind = TranscriptEntryKind;
+
+    check(outer.subagentEntries.back().kind == Kind::toolCall);
+    const auto& inner = outer.subagentEntries.back();
+    check(inner.text == "Agent(Inner)");
+    check(getKinds(inner.subagentEntries)
+          == std::vector {Kind::toolCall, Kind::text});
+    check(inner.subagentEntries[0].outcome.has_value());
+
+    auto rows = layoutTranscript(transcript, wideWidth, {"toolu_A", "toolu_B"});
+    auto innerCall = std::find_if(rows.begin(),
+                                  rows.end(),
+                                  [](const TranscriptRow& row)
+                                  { return row.subagentToolUseId == "toolu_B"; });
+    check(innerCall != rows.end() && innerCall->indent == "  ");
+    check((innerCall + 1)->indent == "  ⎿ ");
+    check((innerCall + 2)->indent == "    ");
+    check((innerCall + 3)->indent == "    "
+          && (innerCall + 3)->text == "Inner found it.");
+    check((innerCall + 4)->indent == "  "
+          && (innerCall + 4)->style == TranscriptRowStyle::toolOutcome);
+
+    for (const auto& row:
+         layoutTranscript(transcript, narrowWidth, {"toolu_A", "toolu_B"}))
+        check(codepointCount(row.indent + row.lead + row.text + row.detail)
+              <= narrowWidth);
+};
+
+auto tTranscriptForkedCommand =
+    test("Transcript/a forked skill from the prompt is a finished Skill call") = []
+{
+    auto parent = std::string {"forked-command-review"};
+    auto stream = prompt + makeSubagentPrompt(parent) + makeSubagentThinking(parent)
+                  + makeSubagentText(parent, "Looks good.") + result;
+    auto transcript = makeTranscript(stream);
+    const auto& entries = transcript.getEntries();
+
+    check(entries.size() == 3);
+    check(entries[1].kind == TranscriptEntryKind::toolCall);
+    check(entries[1].text == "Skill(review)");
+    check(entries[1].subagentEntries.size() == 3);
+
+    auto rows = layoutTranscript(transcript, wideWidth);
+    check(rows[2].style == TranscriptRowStyle::toolCall && !rows[2].isInFlight);
+    check(rows[6].style == TranscriptRowStyle::toolOutcome
+          && rows[6].text == "Looks good.");
 };

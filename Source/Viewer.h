@@ -118,6 +118,7 @@ private:
     void cycleFocus();
     void scrollTranscript(int delta);
     void followTranscript();
+    void toggleSubagentBlockInView();
     bool onAgentInputEvent(const ftxui::Event& event);
     void sendAgentInput();
     void pasteIntoAgentInput();
@@ -305,6 +306,8 @@ private:
     int transcriptTop = 0;
     int transcriptHeight = 20;
     bool isFollowingTranscript = true;
+    ExpandedSubagents expandedSubagents;
+    bool isTranscriptFoldKeyPending = false;
     // Always open along the pane's bottom edge; a draft survives leaving it.
     vim::Editor agentInput;
     std::vector<std::string> typedAwaitingResponder;

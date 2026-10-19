@@ -353,7 +353,7 @@ Element Viewer::renderAgentPane(int width, int height)
 
     if (transcript && (isTranscriptLayoutDirty || rowWidth != transcriptWidth))
     {
-        transcriptRows = layoutTranscript(*transcript, rowWidth);
+        transcriptRows = layoutTranscript(*transcript, rowWidth, expandedSubagents);
         transcriptWidth = rowWidth;
         isTranscriptLayoutDirty = false;
     }
@@ -417,7 +417,9 @@ Elements Viewer::renderAgentInput(int width)
 Element Viewer::renderTranscriptRow(const TranscriptRow& row, int width)
 {
     auto lead = row.isInFlight ? getSpinnerFrame(frameTime) + " " : row.lead;
-    auto margin = text(std::string(agentPaneMargin, ' '));
+    auto margin =
+        hbox({text(std::string(agentPaneMargin, ' ')), text(row.indent) | dim});
+    width -= codepointCount(row.indent);
 
     switch (row.style)
     {
@@ -445,6 +447,7 @@ Element Viewer::renderTranscriptRow(const TranscriptRow& row, int width)
                          text(lead) | dim,
                          text(row.text) | color(Color::Red),
                          text(row.detail) | dim});
+        case TranscriptRowStyle::hiddenRows:
         case TranscriptRowStyle::result:
             return hbox({margin, text(lead + row.text) | dim});
         case TranscriptRowStyle::failedResult:
@@ -1302,6 +1305,7 @@ Element Viewer::renderHelp()
                    row("Tab to it", "type to @dv in a vim line; Enter sends"),
                    row("", "insert: Up Down scroll; Esc normal: j k ^U ^D, G"),
                    row("", "Esc Esc / Tab leaves (the draft stays), A hides"),
+                   row("", "normal: za shows / folds a subagent's whole run"),
                    row("Enter  l", "tree: toggle directory, open file"),
                    row("a  s", "all files / changed only, tree / by size"),
                    row("]c [c  ]f [f", "next / previous hunk, file"),

@@ -32,6 +32,7 @@ auto tClaudeCodeCommand =
                               "--output-format",
                               "stream-json",
                               "--verbose",
+                              "--forward-subagent-text",
                               "--input-format",
                               "stream-json",
                               "--replay-user-messages"};

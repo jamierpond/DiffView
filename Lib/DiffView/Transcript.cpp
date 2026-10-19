@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <array>
 #include <cstdio>
+#include <functional>
 
 namespace diffview
 {
@@ -22,6 +23,16 @@ constexpr auto ellipsis = "…";
 constexpr auto millisecondsPerSecond = 1000.0;
 constexpr auto secondsPerMinute = 60;
 constexpr auto emptyOutcome = "(No content)";
+constexpr auto indentUnit = "  ";
+constexpr auto subagentConnector = "⎿ ";
+constexpr auto hiddenRowsLead = "⋯ ";
+constexpr auto forkedCommandPrefix = std::string_view {"forked-command-"};
+constexpr auto forkedCommandToolName = "Skill";
+constexpr auto backgroundAgentTaskType = "local_agent";
+constexpr auto completedTaskStatus = "completed";
+constexpr auto maxKeptSubagentEntries = std::size_t {500};
+
+using ToolCallAction = std::function<void(TranscriptEntry&)>;
 
 TranscriptEntry makeEntry(TranscriptEntryKind kind, std::string text = {})
 {
@@ -71,17 +82,26 @@ std::string joinTextBlocks(const Value& content)
     return joined;
 }
 
-ToolOutcome summariseToolOutcome(const Value& block)
+bool isTrue(const Value& value)
 {
-    auto lines = splitLines(trim(joinTextBlocks(getField(block, "content"))));
+    return value.isBool() && value.asBool();
+}
+
+ToolOutcome summariseOutcomeText(const std::string& text, bool isError)
+{
+    auto lines = splitLines(trim(text));
     auto outcome = ToolOutcome {};
     outcome.lineCount = static_cast<int>(lines.size());
     outcome.firstLine =
         lines.empty() ? std::string {emptyOutcome} : displayable(lines.front());
-
-    const auto& isError = getField(block, "is_error");
-    outcome.isError = isError.isBool() && isError.asBool();
+    outcome.isError = isError;
     return outcome;
+}
+
+ToolOutcome summariseToolOutcome(const Value& block)
+{
+    return summariseOutcomeText(joinTextBlocks(getField(block, "content")),
+                                isTrue(getField(block, "is_error")));
 }
 
 std::string describeToolCall(const Value& block, const std::string& worktree)
@@ -146,15 +166,9 @@ TranscriptEntry describeResult(const Value& event)
     return entry;
 }
 
-bool isFromSubagent(const Value& event)
-{
-    return getField(event, "parent_tool_use_id").isString();
-}
-
 bool isSynthetic(const Value& event)
 {
-    const auto& synthetic = getField(event, "isSynthetic");
-    return synthetic.isBool() && synthetic.asBool();
+    return isTrue(getField(event, "isSynthetic"));
 }
 
 void addEntry(std::vector<TranscriptEntry>& entries, TranscriptEntry entry)
@@ -213,6 +227,15 @@ void attachToolOutcome(std::vector<TranscriptEntry>& entries, const Value& block
     }
 }
 
+void attachToolOutcomes(std::vector<TranscriptEntry>& entries, const Value& content)
+{
+    for (const auto& block: content.asArray())
+    {
+        if (getString(block, "type") == "tool_result")
+            attachToolOutcome(entries, block);
+    }
+}
+
 bool hasToolResults(const Value& content)
 {
     if (!content.isArray())
@@ -225,6 +248,171 @@ bool hasToolResults(const Value& content)
     }
 
     return false;
+}
+
+// Newest first, nested subagents' calls included.
+bool applyToToolCall(std::vector<TranscriptEntry>& entries,
+                     const std::string& toolUseId,
+                     const ToolCallAction& action)
+{
+    for (auto entry = entries.rbegin(); entry != entries.rend(); ++entry)
+    {
+        if (entry->kind == TranscriptEntryKind::toolCall
+            && entry->toolUseId == toolUseId)
+        {
+            action(*entry);
+            return true;
+        }
+
+        if (applyToToolCall(entry->subagentEntries, toolUseId, action))
+            return true;
+    }
+
+    return false;
+}
+
+void dropOldestSubagentEntries(std::vector<TranscriptEntry>& entries)
+{
+    if (entries.size() <= maxKeptSubagentEntries)
+        return;
+
+    auto excess =
+        static_cast<std::ptrdiff_t>(entries.size() - maxKeptSubagentEntries);
+    entries.erase(entries.begin(), entries.begin() + excess);
+}
+
+void readSubagentMessage(std::vector<TranscriptEntry>& entries,
+                         const Value& event,
+                         const std::string& worktree)
+{
+    auto type = getString(event, "type");
+    const auto& content = getField(getField(event, "message"), "content");
+
+    if (type == "assistant")
+        readAssistant(entries, content, worktree);
+    else if (type == "user" && hasToolResults(content))
+        attachToolOutcomes(entries, content);
+    else if (type == "user")
+    {
+        if (auto prompt = trim(joinTextBlocks(content)); !prompt.empty())
+            addEntry(entries, makeEntry(TranscriptEntryKind::prompt, prompt));
+    }
+
+    dropOldestSubagentEntries(entries);
+}
+
+// Started from the prompt, a forked skill has no call: its messages arrive
+// once it has finished.
+TranscriptEntry makeForkedCommandCall(const std::string& parentToolUseId)
+{
+    auto skillName = parentToolUseId.substr(forkedCommandPrefix.size());
+    auto call =
+        makeEntry(TranscriptEntryKind::toolCall,
+                  std::string {forkedCommandToolName} + "(" + skillName + ")");
+    call.toolUseId = parentToolUseId;
+    call.outcome = summariseOutcomeText({}, false);
+    return call;
+}
+
+void readSubagentEvent(std::vector<TranscriptEntry>& entries,
+                       const std::string& parentToolUseId,
+                       const Value& event,
+                       const std::string& worktree)
+{
+    auto isAttached = applyToToolCall(
+        entries,
+        parentToolUseId,
+        [&](TranscriptEntry& call)
+        { readSubagentMessage(call.subagentEntries, event, worktree); });
+
+    if (isAttached || !parentToolUseId.starts_with(forkedCommandPrefix))
+        return;
+
+    auto call = makeForkedCommandCall(parentToolUseId);
+    readSubagentMessage(call.subagentEntries, event, worktree);
+    entries.push_back(std::move(call));
+}
+
+void markBackgroundSubagentStarted(std::vector<TranscriptEntry>& entries,
+                                   const Value& event)
+{
+    if (getString(event, "task_type") != backgroundAgentTaskType
+        || !isTrue(getField(event, "is_backgrounded")))
+        return;
+
+    applyToToolCall(entries,
+                    getString(event, "tool_use_id"),
+                    [](TranscriptEntry& call) { call.isSubagentRunning = true; });
+}
+
+// A background subagent's call has long had its result: the launch notice.
+// What it found comes with its notification.
+void markBackgroundSubagentFinished(std::vector<TranscriptEntry>& entries,
+                                    const Value& event)
+{
+    applyToToolCall(entries,
+                    getString(event, "tool_use_id"),
+                    [&](TranscriptEntry& call)
+                    {
+                        if (!call.isSubagentRunning)
+                            return;
+
+                        call.isSubagentRunning = false;
+                        auto isFailed =
+                            getString(event, "status") != completedTaskStatus;
+                        call.outcome = summariseOutcomeText(
+                            getString(event, "summary"), isFailed);
+                    });
+}
+
+void stopEverySubagent(std::vector<TranscriptEntry>& entries)
+{
+    for (auto& entry: entries)
+    {
+        entry.isSubagentRunning = false;
+        stopEverySubagent(entry.subagentEntries);
+    }
+}
+
+bool hasRunningSubagentIn(const std::vector<TranscriptEntry>& entries)
+{
+    return std::any_of(entries.begin(),
+                       entries.end(),
+                       [](const TranscriptEntry& entry)
+                       {
+                           return entry.isSubagentRunning
+                                  || hasRunningSubagentIn(entry.subagentEntries);
+                       });
+}
+
+bool isToolCallRunning(const TranscriptEntry& call, bool isParentRunning)
+{
+    return call.isSubagentRunning || (isParentRunning && !call.outcome);
+}
+
+std::optional<std::string> findFinalSubagentText(const TranscriptEntry& call)
+{
+    if (call.subagentEntries.empty()
+        || call.subagentEntries.back().kind != TranscriptEntryKind::text)
+        return std::nullopt;
+
+    return call.subagentEntries.back().text;
+}
+
+// A finished subagent's answer is its last text; a failure stays a failure.
+std::optional<ToolOutcome> findShownOutcome(const TranscriptEntry& call,
+                                            bool isRunning)
+{
+    if (isRunning)
+        return std::nullopt;
+
+    if (call.outcome && call.outcome->isError)
+        return call.outcome;
+
+    if (auto finalText = findFinalSubagentText(call))
+        return summariseOutcomeText(*finalText, false);
+
+    return call.outcome;
 }
 
 std::string truncateToWidth(const std::string& text, int width)
@@ -256,20 +444,80 @@ void addWrappedRows(std::vector<TranscriptRow>& rows,
     }
 }
 
+void addEntryRows(std::vector<TranscriptRow>& rows,
+                  const TranscriptEntry& entry,
+                  int width,
+                  bool isParentRunning,
+                  const ExpandedSubagents& expandedSubagents);
+
+void keepLastSubagentRows(std::vector<TranscriptRow>& rows)
+{
+    auto rowCount = static_cast<int>(rows.size());
+
+    if (rowCount <= collapsedSubagentRowCount)
+        return;
+
+    auto hiddenCount = rowCount - collapsedSubagentRowCount;
+    rows.erase(rows.begin(), rows.begin() + hiddenCount);
+    auto noun = hiddenCount == 1 ? " more row" : " more rows";
+    rows.insert(rows.begin(),
+                makeRow(TranscriptRowStyle::hiddenRows,
+                        hiddenRowsLead,
+                        std::to_string(hiddenCount) + noun));
+}
+
+void addSubagentRows(std::vector<TranscriptRow>& rows,
+                     const TranscriptEntry& call,
+                     int width,
+                     bool isRunning,
+                     const ExpandedSubagents& expandedSubagents)
+{
+    if (call.subagentEntries.empty())
+        return;
+
+    auto nestedWidth = std::max(1, width - codepointCount(indentUnit));
+    auto nested = std::vector<TranscriptRow> {};
+
+    for (const auto& entry: call.subagentEntries)
+        addEntryRows(nested, entry, nestedWidth, isRunning, expandedSubagents);
+
+    if (!expandedSubagents.contains(call.toolUseId))
+        keepLastSubagentRows(nested);
+
+    auto isFirst = true;
+
+    for (auto& row: nested)
+    {
+        auto prefix = isFirst ? subagentConnector : indentUnit;
+        row.indent = prefix + row.indent;
+        rows.push_back(std::move(row));
+        isFirst = false;
+    }
+}
+
 void addToolCallRows(std::vector<TranscriptRow>& rows,
                      const TranscriptEntry& entry,
                      int width,
-                     bool isTurnOpen)
+                     bool isParentRunning,
+                     const ExpandedSubagents& expandedSubagents)
 {
+    auto isRunning = isToolCallRunning(entry, isParentRunning);
     auto call = makeRow(TranscriptRowStyle::toolCall, messageLead);
     call.text = truncateToWidth(entry.text, width - codepointCount(messageLead));
-    call.isInFlight = isTurnOpen && !entry.outcome;
-    rows.push_back(std::move(call));
+    call.isInFlight = isRunning;
 
-    if (!entry.outcome)
+    if (!entry.subagentEntries.empty())
+        call.subagentToolUseId = entry.toolUseId;
+
+    rows.push_back(std::move(call));
+    addSubagentRows(rows, entry, width, isRunning, expandedSubagents);
+
+    auto shownOutcome = findShownOutcome(entry, isRunning);
+
+    if (!shownOutcome)
         return;
 
-    const auto& outcome = *entry.outcome;
+    const auto& outcome = *shownOutcome;
     auto style = outcome.isError ? TranscriptRowStyle::toolError
                                  : TranscriptRowStyle::toolOutcome;
     auto row = makeRow(style, outcomeLead);
@@ -295,7 +543,8 @@ void addToolCallRows(std::vector<TranscriptRow>& rows,
 void addEntryRows(std::vector<TranscriptRow>& rows,
                   const TranscriptEntry& entry,
                   int width,
-                  bool isTurnOpen)
+                  bool isParentRunning,
+                  const ExpandedSubagents& expandedSubagents)
 {
     switch (entry.kind)
     {
@@ -312,7 +561,7 @@ void addEntryRows(std::vector<TranscriptRow>& rows,
                 makeRow(TranscriptRowStyle::thinking, thinkingLead, "Thinking…"));
             return;
         case TranscriptEntryKind::toolCall:
-            addToolCallRows(rows, entry, width, isTurnOpen);
+            addToolCallRows(rows, entry, width, isParentRunning, expandedSubagents);
             return;
         case TranscriptEntryKind::result:
             if (entry.isError)
@@ -372,12 +621,23 @@ bool Transcript::isTurnOpen() const
     return turnOpen;
 }
 
+bool Transcript::hasRunningSubagent() const
+{
+    return hasRunningSubagentIn(entries);
+}
+
 void Transcript::readLine(std::string_view line)
 {
     auto event = Miro::Json::getParsedValue(line);
 
-    if (isFromSubagent(event) || isSynthetic(event))
+    if (isSynthetic(event))
         return;
+
+    if (auto parent = getString(event, "parent_tool_use_id"); !parent.empty())
+    {
+        readSubagentEvent(entries, parent, event, worktree);
+        return;
+    }
 
     auto type = getString(event, "type");
     const auto& content = getField(getField(event, "message"), "content");
@@ -390,12 +650,7 @@ void Transcript::readLine(std::string_view line)
 
     if (type == "user" && hasToolResults(content))
     {
-        for (const auto& block: content.asArray())
-        {
-            if (getString(block, "type") == "tool_result")
-                attachToolOutcome(entries, block);
-        }
-
+        attachToolOutcomes(entries, content);
         return;
     }
 
@@ -423,12 +678,27 @@ void Transcript::readLine(std::string_view line)
         return;
     }
 
-    // A fresh start after a crash: the turn it was in never finishes.
-    if (type == "system" && getString(event, "subtype") == "init")
+    if (type != "system")
+        return;
+
+    auto subtype = getString(event, "subtype");
+
+    if (subtype == "task_started")
+        markBackgroundSubagentStarted(entries, event);
+    else if (subtype == "task_notification")
+        markBackgroundSubagentFinished(entries, event);
+    else if (subtype == "init")
+    {
+        // A fresh start after a crash: what it was doing never finishes.
         turnOpen = false;
+        stopEverySubagent(entries);
+    }
 }
 
-std::vector<TranscriptRow> layoutTranscript(const Transcript& transcript, int width)
+std::vector<TranscriptRow>
+    layoutTranscript(const Transcript& transcript,
+                     int width,
+                     const ExpandedSubagents& expandedSubagents)
 {
     auto rows = std::vector<TranscriptRow> {};
 
@@ -437,7 +707,7 @@ std::vector<TranscriptRow> layoutTranscript(const Transcript& transcript, int wi
         if (!rows.empty())
             rows.push_back({});
 
-        addEntryRows(rows, entry, width, transcript.isTurnOpen());
+        addEntryRows(rows, entry, width, transcript.isTurnOpen(), expandedSubagents);
     }
 
     if (transcript.isTurnOpen())
