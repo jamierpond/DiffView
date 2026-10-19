@@ -265,18 +265,18 @@ void Viewer::apply(std::vector<FileDiff> diffs, const std::string& sha)
 
     reloadStoreIfChanged();
     listening = findListeningAgents(store.directory.str());
-    unchangedCache.clear();
-    auto moved =
-        reanchorAll(annotations,
-                    files,
-                    [this](const std::string& path) { return fileAt(path); });
+    unchangedFiles.clear();
+    auto moved = reanchorAll(annotations,
+                             files,
+                             [this](const std::string& path)
+                             { return findOrReadFile(path); });
 
     if (moved || baseMoved)
         saveStore();
 
     rebuildTree();
 
-    if (!loaded || fileAt(selectedPath) == nullptr)
+    if (!loaded || !findOrReadFile(selectedPath))
     {
         auto previous = std::min(treeCursor, static_cast<int>(treeRows.size()) - 1);
         auto path = std::string {};
@@ -316,24 +316,33 @@ void Viewer::say(std::string text)
     redraw();
 }
 
-const FileDiff* Viewer::fileAt(const std::string& path) const
+OptionalFileDiff Viewer::findFile(const std::string& path) const
 {
     // "" is the General notes.
     if (path.empty())
-        return &generalFile;
+        return generalFile;
 
-    if (const auto* changed = changedFile(path))
+    if (auto changed = changedFile(path))
         return changed;
 
-    // Not in the diff: the file whole, read the first time it is wanted.
-    if (auto cached = unchangedCache.find(path); cached != unchangedCache.end())
-        return &cached->second;
+    if (auto unchanged = unchangedFiles.find(path);
+        unchanged != unchangedFiles.end())
+        return unchanged->second;
 
+    return std::nullopt;
+}
+
+OptionalFileDiff Viewer::findOrReadFile(const std::string& path)
+{
+    if (auto found = findFile(path))
+        return found;
+
+    // Not in the diff: the file whole, read the first time it is wanted.
     auto full = std::filesystem::path {repo} / path;
     auto error = std::error_code {};
 
     if (!std::filesystem::is_regular_file(full, error))
-        return nullptr;
+        return std::nullopt;
 
     auto size = std::filesystem::file_size(full, error);
     auto file = FileDiff {};
@@ -351,12 +360,12 @@ const FileDiff* Viewer::fileAt(const std::string& path) const
         file = unchangedFile(path, eacp::Files::readFile(full));
     }
 
-    return &unchangedCache.emplace(path, std::move(file)).first->second;
+    return unchangedFiles.emplace(path, std::move(file)).first->second;
 }
 
-const FileDiff* Viewer::selectedFile() const
+OptionalFileDiff Viewer::selectedFile() const
 {
-    return fileAt(selectedPath);
+    return findFile(selectedPath);
 }
 
 std::vector<std::string> Viewer::paths() const
@@ -378,13 +387,13 @@ std::vector<std::string> Viewer::paths() const
     return list;
 }
 
-const FileDiff* Viewer::changedFile(const std::string& path) const
+OptionalFileDiff Viewer::changedFile(const std::string& path) const
 {
     for (const auto& file: files)
         if (file.path == path)
-            return &file;
+            return file;
 
-    return nullptr;
+    return std::nullopt;
 }
 
 std::vector<std::string> Viewer::fileOrder() const
@@ -396,8 +405,8 @@ std::vector<std::string> Viewer::fileOrder() const
     auto list = paths();
     auto size = [&](const std::string& path)
     {
-        const auto* file = changedFile(path);
-        return file == nullptr ? -1 : file->added + file->removed;
+        auto file = changedFile(path);
+        return file ? file->get().added + file->get().removed : -1;
     };
 
     std::stable_sort(list.begin(),
@@ -443,9 +452,9 @@ void Viewer::rebuildRows()
 {
     auto key = cursorKey();
     auto offset = diffCursor - diffTop;
-    auto* file = selectedFile();
+    auto selected = selectedFile();
 
-    rows = file != nullptr ? rowsFor(*file) : std::vector<DiffRow> {};
+    rows = selected ? rowsFor(selected->get()) : std::vector<DiffRow> {};
     restoreCursor(key);
     diffTop = std::max(0, diffCursor - offset);
 }
@@ -459,8 +468,8 @@ void Viewer::select(const std::string& path)
         diffTop = 0;
         visualAnchor.reset();
 
-        auto* file = selectedFile();
-        rows = file != nullptr ? rowsFor(*file) : std::vector<DiffRow> {};
+        auto selected = findOrReadFile(path);
+        rows = selected ? rowsFor(selected->get()) : std::vector<DiffRow> {};
 
         for (std::size_t i = 0; i < rows.size(); ++i)
             if (rows[i].kind == RowKind::line)
@@ -498,10 +507,11 @@ Viewer::CursorKey Viewer::cursorKey() const
 
     if (row.kind == RowKind::line)
     {
-        if (const auto* file = selectedFile();
-            file != nullptr && row.hunk < static_cast<int>(file->hunks.size()))
+        if (auto selected = selectedFile();
+            selected && row.hunk < static_cast<int>(selected->get().hunks.size()))
         {
-            const auto& line = file->hunks[static_cast<std::size_t>(row.hunk)]
+            const auto& line = selected->get()
+                                   .hunks[static_cast<std::size_t>(row.hunk)]
                                    .lines[static_cast<std::size_t>(row.line)];
             key.newLine = line.newLine;
             key.oldLine = line.oldLine;
@@ -531,7 +541,7 @@ void Viewer::restoreCursor(const CursorKey& key)
         }
     }
 
-    const auto* file = selectedFile();
+    auto selected = selectedFile();
     auto best = -1;
     auto bestScore = -1;
 
@@ -540,10 +550,10 @@ void Viewer::restoreCursor(const CursorKey& key)
         const auto& row = rows[static_cast<std::size_t>(i)];
         auto score = -1;
 
-        if (key.kind == RowKind::line && row.kind == RowKind::line
-            && file != nullptr)
+        if (key.kind == RowKind::line && row.kind == RowKind::line && selected)
         {
-            const auto& line = file->hunks[static_cast<std::size_t>(row.hunk)]
+            const auto& line = selected->get()
+                                   .hunks[static_cast<std::size_t>(row.hunk)]
                                    .lines[static_cast<std::size_t>(row.line)];
             auto sameLine = key.newLine > 0 ? line.newLine == key.newLine
                                             : line.oldLine == key.oldLine;
@@ -916,15 +926,17 @@ void Viewer::requestQuit()
 
 void Viewer::openInEditor()
 {
-    const auto* file = selectedFile();
+    auto selected = selectedFile();
 
-    if (file == nullptr || file->path.empty())
+    if (!selected || selected->get().path.empty())
     {
         say("No file open");
         return;
     }
 
-    if (file->status == FileStatus::deleted)
+    const auto& file = selected->get();
+
+    if (file.status == FileStatus::deleted)
     {
         say("Deleted in the working tree: nothing to edit");
         return;
@@ -937,7 +949,7 @@ void Viewer::openInEditor()
         if (row.kind != RowKind::line)
             return 0;
 
-        return file->hunks[static_cast<std::size_t>(row.hunk)]
+        return file.hunks[static_cast<std::size_t>(row.hunk)]
             .lines[static_cast<std::size_t>(row.line)]
             .newLine;
     };
@@ -968,7 +980,7 @@ void Viewer::openInEditor()
     processOptions.arguments.assign(words.begin() + 1, words.end());
     processOptions.arguments.push_back("+" + std::to_string(std::max(1, line)));
     processOptions.arguments.push_back(
-        (std::filesystem::path {repo} / file->path).string());
+        (std::filesystem::path {repo} / file.path).string());
     processOptions.workingDirectory = repo;
     processOptions.captureOutput = false;
 
@@ -998,8 +1010,8 @@ void Viewer::openWithSystem()
 
     if (focus == Pane::tree && treeCursor < static_cast<int>(treeRows.size()))
         path = treeRows[static_cast<std::size_t>(treeCursor)].path;
-    else if (const auto* file = selectedFile())
-        path = file->path;
+    else if (auto selected = selectedFile())
+        path = selected->get().path;
 
     if (path.empty())
     {

@@ -275,9 +275,10 @@ bool reanchor(Annotation& annotation, const FileDiff& file)
     return hasMoved;
 }
 
-bool reanchorAll(std::vector<Annotation>& annotations,
-                 const std::vector<FileDiff>& files,
-                 const std::function<const FileDiff*(const std::string&)>& unchanged)
+bool reanchorAll(
+    std::vector<Annotation>& annotations,
+    const std::vector<FileDiff>& files,
+    const std::function<OptionalFileDiff(const std::string&)>& unchanged)
 {
     auto changed = false;
 
@@ -291,17 +292,21 @@ bool reanchorAll(std::vector<Annotation>& annotations,
                                  [&](const FileDiff& f)
                                  { return f.path == annotation.path; });
 
-        const auto* found =
-            file != files.end() ? &*file : unchanged(annotation.path);
+        auto found = OptionalFileDiff {};
 
-        if (found == nullptr)
+        if (file != files.end())
+            found = *file;
+        else
+            found = unchanged(annotation.path);
+
+        if (!found)
         {
             changed = changed || !annotation.stale;
             annotation.stale = true;
             continue;
         }
 
-        changed = reanchor(annotation, *found) || changed;
+        changed = reanchor(annotation, found->get()) || changed;
     }
 
     return changed;

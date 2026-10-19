@@ -128,12 +128,12 @@ std::optional<LineRange> findAnchor(const Annotation& annotation,
 // One written by hand with only line numbers is anchored on them.
 bool reanchor(Annotation& annotation, const FileDiff& file);
 
-// `unchanged` finds the files that aren't in the diff (nullptr if gone).
+// `unchanged` finds the files that aren't in the diff (nullopt if gone).
 bool reanchorAll(
     std::vector<Annotation>& annotations,
     const std::vector<FileDiff>& files,
-    const std::function<const FileDiff*(const std::string&)>& unchanged =
-        [](const std::string&) -> const FileDiff* { return nullptr; });
+    const std::function<OptionalFileDiff(const std::string&)>& unchanged =
+        [](const std::string&) { return OptionalFileDiff {}; });
 
 // The .diffview/images/ files the text links to.
 std::vector<std::string> imagesIn(const std::string& text);

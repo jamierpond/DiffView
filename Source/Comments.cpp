@@ -321,13 +321,15 @@ void Viewer::toggleFoldAtCursor()
 
 void Viewer::annotateAtCursor(bool wholeHunk)
 {
-    const auto* file = selectedFile();
+    auto selected = selectedFile();
 
-    if (file == nullptr || rows.empty())
+    if (!selected || rows.empty())
     {
         say("Nothing to annotate");
         return;
     }
+
+    const auto& file = selected->get();
 
     auto range = std::optional<LineRange> {};
     const auto& row = rows[static_cast<std::size_t>(diffCursor)];
@@ -383,27 +385,29 @@ void Viewer::annotateAtCursor(bool wholeHunk)
         return;
     }
 
-    pendingAnnotation = makeAnnotation(*file, *range, findNextAnnotationId(), {});
+    pendingAnnotation = makeAnnotation(file, *range, findNextAnnotationId(), {});
     editingId = 0;
-    openEditor("New comment · " + file->path + ":" + lineLabel(*pendingAnnotation),
+    openEditor("New comment · " + file.path + ":" + lineLabel(*pendingAnnotation),
                {});
 }
 
 void Viewer::commentOnFile()
 {
-    const auto* file = selectedFile();
+    auto selected = selectedFile();
 
-    if (file == nullptr || file->path.empty())
+    if (!selected || selected->get().path.empty())
     {
         commentGeneral();
         return;
     }
 
+    const auto& file = selected->get();
+
     visualAnchor.reset();
-    pendingAnnotation = makeFileAnnotation(file->path, findNextAnnotationId(), {});
+    pendingAnnotation = makeFileAnnotation(file.path, findNextAnnotationId(), {});
     editingId = 0;
     diffCursor = 0;
-    openEditor("New comment · " + file->path + " (whole file)", {});
+    openEditor("New comment · " + file.path + " (whole file)", {});
 }
 
 void Viewer::commentGeneral()

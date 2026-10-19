@@ -186,8 +186,8 @@ auto tUnchangedLookup =
     check(annotation.start == 2);
 
     auto annotations = std::vector<Annotation> {annotation};
-    auto lookup = [&](const std::string& path) -> const FileDiff*
-    { return path == "notes.md" ? &whole : nullptr; };
+    auto lookup = [&](const std::string& path)
+    { return path == "notes.md" ? OptionalFileDiff {whole} : OptionalFileDiff {}; };
 
     check(!reanchorAll(annotations, {}, lookup));
     check(!annotations[0].stale);

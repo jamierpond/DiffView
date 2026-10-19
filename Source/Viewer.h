@@ -108,10 +108,11 @@ private:
     void say(std::string message);
     void requestQuit();
 
-    const FileDiff* selectedFile() const;
-    const FileDiff* fileAt(const std::string& path) const;
+    OptionalFileDiff selectedFile() const;
+    OptionalFileDiff findFile(const std::string& path) const;
+    OptionalFileDiff findOrReadFile(const std::string& path);
     std::vector<std::string> paths() const;
-    const FileDiff* changedFile(const std::string& path) const;
+    OptionalFileDiff changedFile(const std::string& path) const;
     std::vector<std::string> fileOrder() const;
     void rebuildTree();
     void rebuildRows();
@@ -222,11 +223,12 @@ private:
     std::vector<FileDiff> files;
 
     // The tree's modes: every file in the repo, not just the changed ones
-    // (unchanged ones read lazily into the cache); a flat list by size.
+    // (unchanged ones read by findOrReadFile, kept until the next apply); a
+    // flat list by size.
     bool allFiles = false;
     bool flatBySize = false;
     std::vector<std::string> allPaths;
-    mutable std::map<std::string, FileDiff> unchangedCache;
+    std::map<std::string, FileDiff> unchangedFiles;
     FileDiff generalFile = []
     {
         auto general = FileDiff {};

@@ -448,18 +448,21 @@ std::optional<Viewer::SearchHit> Viewer::findFrom(int row,
     }
     else
     {
-        const auto* file = selectedFile();
+        auto selected = selectedFile();
 
         for (const auto& diffRow: rows)
         {
-            if (diffRow.kind == RowKind::line && file != nullptr)
+            if (diffRow.kind == RowKind::line && selected)
                 lines.push_back(
-                    displayable(file->hunks[static_cast<std::size_t>(diffRow.hunk)]
+                    displayable(selected->get()
+                                    .hunks[static_cast<std::size_t>(diffRow.hunk)]
                                     .lines[static_cast<std::size_t>(diffRow.line)]
                                     .text));
-            else if (diffRow.kind == RowKind::hunkHeader && file != nullptr)
-                lines.push_back(displayable(
-                    file->hunks[static_cast<std::size_t>(diffRow.hunk)].header()));
+            else if (diffRow.kind == RowKind::hunkHeader && selected)
+                lines.push_back(
+                    displayable(selected->get()
+                                    .hunks[static_cast<std::size_t>(diffRow.hunk)]
+                                    .header()));
             else
                 lines.push_back(diffRow.text);
         }
@@ -694,21 +697,27 @@ void Viewer::refreshPickerItems()
         case PickerKind::files:
             for (const auto& path: fileOrder())
             {
-                const auto* file = changedFile(path);
-                items.push_back({path,
-                                 file == nullptr
-                                     ? std::string {}
-                                     : std::string(1, statusLetter(file->status))
-                                           + " +" + std::to_string(file->added)
-                                           + " -" + std::to_string(file->removed),
-                                 path});
+                auto summary = std::string {};
+
+                if (auto changed = changedFile(path))
+                {
+                    const auto& file = changed->get();
+                    summary = std::string(1, statusLetter(file.status)) + " +"
+                              + std::to_string(file.added) + " -"
+                              + std::to_string(file.removed);
+                }
+
+                items.push_back({path, summary, path});
             }
 
             picker.preview = [this](const telescope::Item& item)
             {
-                const auto* file = fileAt(item.key);
-                return file != nullptr ? previewLines(*file)
-                                       : std::vector<std::string> {};
+                auto file = findOrReadFile(item.key);
+
+                if (!file)
+                    return std::vector<std::string> {};
+
+                return previewLines(file->get());
             };
             break;
 
@@ -722,13 +731,13 @@ void Viewer::refreshPickerItems()
             picker.preview = [this](const telescope::Item& item)
             {
                 auto newline = item.key.find('\n');
-                const auto* file = fileAt(item.key.substr(0, newline));
+                auto file = findOrReadFile(item.key.substr(0, newline));
 
-                if (file == nullptr)
+                if (!file)
                     return std::vector<std::string> {};
 
                 return previewLines(
-                    *file, std::stoi(item.key.substr(newline + 1)), 12);
+                    file->get(), std::stoi(item.key.substr(newline + 1)), 12);
             };
             break;
 
@@ -874,7 +883,7 @@ void Viewer::acceptPicker()
                     break;
                 }
 
-                if (!note->path.empty() && fileAt(note->path) == nullptr)
+                if (!note->path.empty() && !findOrReadFile(note->path))
                 {
                     say(note->path + " isn't in the diff against " + base.label());
                     break;

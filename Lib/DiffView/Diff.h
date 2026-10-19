@@ -1,6 +1,8 @@
 #pragma once
 
 #include <cstdint>
+#include <functional>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -66,6 +68,8 @@ struct FileDiff
 
     std::uint64_t fingerprint = 0;
 };
+
+using OptionalFileDiff = std::optional<std::reference_wrapper<const FileDiff>>;
 
 // Expects --no-renames and a/ b/ prefixes (see git::diff).
 std::vector<FileDiff> parseDiff(std::string_view text);

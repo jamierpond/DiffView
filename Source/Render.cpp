@@ -292,13 +292,13 @@ Element Viewer::renderTree(int width, int height)
                 continue;
             }
 
-            const auto* file = changedFile(row.path);
+            auto file = changedFile(row.path);
             auto recent = tracker.isRecent(row.path, now, recentWindowMs);
-            auto letter = file != nullptr ? statusLetter(file->status) : ' ';
+            auto letter = file ? statusLetter(file->get().status) : ' ';
 
-            parts.push_back(text(std::string(1, letter) + " ")
-                            | color(file != nullptr ? statusColor(file->status)
-                                                    : Color::Default));
+            parts.push_back(
+                text(std::string(1, letter) + " ")
+                | color(file ? statusColor(file->get().status) : Color::Default));
 
             auto name = text(row.name);
 
@@ -325,12 +325,13 @@ Element Viewer::renderTree(int width, int height)
 
             parts.push_back(filler());
 
-            if (file != nullptr && !file->binary)
+            if (file && !file->get().binary)
             {
-                parts.push_back(text(" +" + std::to_string(file->added))
+                parts.push_back(text(" +" + std::to_string(file->get().added))
                                 | color(Color::Green) | dim);
-                parts.push_back(text(" -" + std::to_string(file->removed) + " ")
-                                | color(Color::Red) | dim);
+                parts.push_back(
+                    text(" -" + std::to_string(file->get().removed) + " ")
+                    | color(Color::Red) | dim);
             }
         }
 
@@ -349,7 +350,7 @@ Element Viewer::renderDiff(int width, int height)
 {
     auto lines = Elements {};
 
-    if (selectedFile() == nullptr)
+    if (!selectedFile())
         return vbox(std::move(lines)) | flex;
 
     if (!editing)
@@ -502,10 +503,12 @@ Element Viewer::renderDiff(int width, int height)
 
 std::optional<LineRange> Viewer::editorTarget() const
 {
-    const auto* file = selectedFile();
+    auto selected = selectedFile();
 
-    if (file == nullptr)
+    if (!selected)
         return std::nullopt;
+
+    const auto& file = selected->get();
 
     if (editingId != 0 || replyCommentId)
     {
@@ -513,12 +516,12 @@ std::optional<LineRange> Viewer::editorTarget() const
 
         for (const auto& note: annotations)
             if (note.id == id && !note.stale)
-                return findAnchor(note, *file);
+                return findAnchor(note, file);
 
         return std::nullopt;
     }
 
-    return pendingAnnotation ? findAnchor(*pendingAnnotation, *file) : std::nullopt;
+    return pendingAnnotation ? findAnchor(*pendingAnnotation, file) : std::nullopt;
 }
 
 int Viewer::editorHeight(int width)
@@ -620,7 +623,7 @@ Element Viewer::renderEditor(int width, int boxHeight)
 
 Element Viewer::renderRow(const DiffRow& row, int index, int width)
 {
-    const auto* file = selectedFile();
+    const auto& file = selectedFile()->get();
     auto element = Element {};
 
     auto inVisual = visualAnchor && index >= std::min(*visualAnchor, diffCursor)
@@ -639,15 +642,15 @@ Element Viewer::renderRow(const DiffRow& row, int index, int width)
     {
         case RowKind::fileHeader:
         {
-            auto title = file->path + "  " + statusLetter(file->status);
+            auto title = file.path + "  " + statusLetter(file.status);
 
-            if (file->path.empty())
+            if (file.path.empty())
                 title = "General notes";
-            else if (file->status == FileStatus::unchanged)
-                title = file->path + "  unchanged";
-            else if (!file->binary)
-                title += "  +" + std::to_string(file->added) + " -"
-                         + std::to_string(file->removed);
+            else if (file.status == FileStatus::unchanged)
+                title = file.path + "  unchanged";
+            else if (!file.binary)
+                title += "  +" + std::to_string(file.added) + " -"
+                         + std::to_string(file.removed);
 
             element = hbox({text(" "), body(title) | bold, filler()})
                       | bgcolor(Color::RGB(40, 42, 54));
@@ -659,20 +662,20 @@ Element Viewer::renderRow(const DiffRow& row, int index, int width)
             break;
 
         case RowKind::hunkHeader:
-            if (file->status == FileStatus::unchanged)
+            if (file.status == FileStatus::unchanged)
             {
                 element = text("  unchanged file") | dim;
                 break;
             }
 
             element = body(displayable(
-                          file->hunks[static_cast<std::size_t>(row.hunk)].header()))
+                          file.hunks[static_cast<std::size_t>(row.hunk)].header()))
                       | color(Color::Cyan);
             break;
 
         case RowKind::line:
         {
-            const auto& line = file->hunks[static_cast<std::size_t>(row.hunk)]
+            const auto& line = file.hunks[static_cast<std::size_t>(row.hunk)]
                                    .lines[static_cast<std::size_t>(row.line)];
             auto marker = line.kind == LineKind::added     ? "+"
                           : line.kind == LineKind::removed ? "-"
@@ -680,7 +683,7 @@ Element Viewer::renderRow(const DiffRow& row, int index, int width)
             auto content = hbox({text(marker), body(displayable(line.text))});
 
             // A whole unchanged file: one line number, no +/- column.
-            if (file->status == FileStatus::unchanged)
+            if (file.status == FileStatus::unchanged)
             {
                 element = hbox({text(lineNumber(line.newLine)) | dim,
                                 text(" │ ") | dim,
