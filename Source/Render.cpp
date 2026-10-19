@@ -353,7 +353,9 @@ Element Viewer::renderAgentPane(int width, int height)
 
     if (transcript && (isTranscriptLayoutDirty || rowWidth != transcriptWidth))
     {
-        transcriptRows = layoutTranscript(*transcript, rowWidth, expandedSubagents);
+        auto queuedMessageCount = responder ? responder->countQueuedMessages() : 0;
+        transcriptRows = layoutTranscript(
+            *transcript, rowWidth, expandedSubagents, queuedMessageCount);
         transcriptWidth = rowWidth;
         isTranscriptLayoutDirty = false;
     }
@@ -448,6 +450,7 @@ Element Viewer::renderTranscriptRow(const TranscriptRow& row, int width)
                          text(row.text) | color(Color::Red),
                          text(row.detail) | dim});
         case TranscriptRowStyle::hiddenRows:
+        case TranscriptRowStyle::queuedCount:
         case TranscriptRowStyle::result:
             return hbox({margin, text(lead + row.text) | dim});
         case TranscriptRowStyle::failedResult:

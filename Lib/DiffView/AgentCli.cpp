@@ -1,4 +1,5 @@
 #include "AgentCli.h"
+#include "Hooks.h"
 
 #include <algorithm>
 
@@ -103,6 +104,7 @@ bool hasStdinSession(const AgentCli& cli)
 }
 
 std::vector<std::string> makeAgentArguments(const AgentCli& cli,
+                                            const std::string& dvExecutable,
                                             const std::string& sessionId,
                                             const std::string& prompt)
 {
@@ -115,6 +117,12 @@ std::vector<std::string> makeAgentArguments(const AgentCli& cli,
 
     if (!sessionId.empty() && canResume(cli))
         append({cli.resumeFlag, sessionId});
+
+    if (!cli.settingsFlag.empty())
+        append({cli.settingsFlag, makeBackgroundAgentHookSettings(dvExecutable)});
+
+    if (!cli.systemPromptFlag.empty())
+        append({cli.systemPromptFlag, std::string {responderStandingOrders}});
 
     if (hasStdinSession(cli))
         return arguments;

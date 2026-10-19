@@ -9,6 +9,7 @@ add_executable(DiffViewTests
         FileTreeTests.cpp
         GeminiCliTests.cpp
         GitTests.cpp
+        HooksTests.cpp
         KeymapTests.cpp
         ListenerTests.cpp
         ReviewMarkdownTests.cpp

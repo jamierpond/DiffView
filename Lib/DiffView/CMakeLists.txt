@@ -9,6 +9,7 @@ add_library(DiffViewCore STATIC
         FileTree.cpp
         GeminiCli.cpp
         Git.cpp
+        Hooks.cpp
         Keymap.cpp
         Listener.cpp
         Responder.cpp

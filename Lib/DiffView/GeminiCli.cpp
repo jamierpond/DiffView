@@ -65,6 +65,8 @@ AgentCli makeGeminiCli()
         {},
         "-p",
         "",
+        "",
+        "",
         summariseGeminiStreamLine,
         [](std::string_view) { return false; },
     };

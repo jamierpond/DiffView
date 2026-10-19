@@ -224,6 +224,7 @@ void Responder::send(ResponderMessage message)
         return;
 
     queue.push_back(std::move(message));
+    hasQueueChanged = true;
     sendNext();
 }
 
@@ -269,6 +270,7 @@ void Responder::finish()
     }
 
     queue.clear();
+    hasQueueChanged = true;
     current.reset();
     doing.clear();
 
@@ -325,6 +327,16 @@ std::vector<std::string> Responder::takeNotices()
     return std::exchange(notices, {});
 }
 
+int Responder::countQueuedMessages() const
+{
+    return static_cast<int>(queue.size());
+}
+
+bool Responder::takeHasQueueChanged()
+{
+    return std::exchange(hasQueueChanged, false);
+}
+
 void Responder::sendNext()
 {
     if (failure || isInputClosed || current || queue.empty())
@@ -332,6 +344,7 @@ void Responder::sendNext()
 
     current = std::move(queue.front());
     queue.pop_front();
+    hasQueueChanged = true;
     doing = "starting";
     log("dv: sending " + describeMessageOrigin(*current) + ": " + current->text);
 
@@ -349,7 +362,8 @@ void Responder::sendNext()
 
 bool Responder::start(const std::string& prompt)
 {
-    auto arguments = makeAgentArguments(settings.cli, sessionId, prompt);
+    auto arguments =
+        makeAgentArguments(settings.cli, settings.dvExecutable, sessionId, prompt);
     isResuming = !sessionId.empty() && canResume(settings.cli);
     hasReportedActivity = false;
     partialLine.clear();
@@ -437,7 +451,10 @@ void Responder::handleExit(int exitCode)
     }
 
     if (current)
+    {
         queue.push_front(std::move(*current));
+        hasQueueChanged = true;
+    }
 
     current.reset();
     doing.clear();
@@ -459,6 +476,7 @@ void Responder::handleExit(int exitCode)
         log("dv: " + *failure);
         notices.push_back(*failure);
         queue.clear();
+        hasQueueChanged = true;
         return;
     }
 

@@ -79,6 +79,18 @@ std::uint64_t getTranscriptFileSize(const std::string& path)
     return size;
 }
 constexpr auto roundPollMs = std::int64_t {1000};
+
+// What a hook the responder's CLI runs calls back into: this binary, or dv on
+// the PATH when it can't be found.
+std::string findDvExecutable()
+{
+    auto path = eacp::Files::executablePath().str();
+
+    if (path.empty())
+        return "dv";
+
+    return path;
+}
 } // namespace
 
 std::int64_t nowMs()
@@ -359,6 +371,12 @@ void Viewer::pollResponder(std::int64_t now)
     for (auto& notice: responder->takeNotices())
         say(std::move(notice));
 
+    if (responder->takeHasQueueChanged())
+    {
+        isTranscriptLayoutDirty = true;
+        redraw();
+    }
+
     if (responder->getFailure() && !isResponderFailureHandled)
     {
         isResponderFailureHandled = true;
@@ -495,7 +513,8 @@ bool Viewer::claimResponder(const ResponderConfig& config)
                            store.home.str(),
                            files / (config.name + ".log"),
                            files / (config.name + responderOutputExtension),
-                           files / (config.name + ".session")},
+                           files / (config.name + ".session"),
+                           findDvExecutable()},
         startAndRegister);
     listening = findListeningAgents(directory.str());
     return true;

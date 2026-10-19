@@ -239,6 +239,24 @@ auto tTranscriptLayoutInFlight =
     check(rows[2].style == Style::toolCall && rows[2].isInFlight);
 };
 
+auto tTranscriptLayoutQueued =
+    test("Transcript/an open turn counts the messages queued behind it") = []
+{
+    constexpr auto queuedMessageCount = 2;
+    auto open = makeTranscript(prompt + toolCall);
+    auto rows = layoutTranscript(open, wideWidth, {}, queuedMessageCount);
+    using Style = TranscriptRowStyle;
+
+    check(rows.back().style == Style::queuedCount);
+    check(rows.back().lead + rows.back().text == "⋯ 2 queued");
+    check(rows[rows.size() - 2].style == Style::working);
+    check(layoutTranscript(open, wideWidth).back().style == Style::working);
+
+    auto closed = makeTranscript(prompt + answer + result);
+    check(layoutTranscript(closed, wideWidth, {}, queuedMessageCount).back().style
+          == Style::result);
+};
+
 auto tTranscriptLayoutWidth =
     test("Transcript/rows fit the width: text wraps, calls are cut") = []
 {

@@ -29,7 +29,7 @@ auto tGeminiCommand =
     using Arguments = std::vector<std::string>;
 
     check(!hasStdinSession(cli) && !canResume(cli));
-    check(makeAgentArguments(cli, "session-1", "the prompt")
+    check(makeAgentArguments(cli, "/bin/dv", "session-1", "the prompt")
           == Arguments {"gemini",
                         "--yolo",
                         "--output-format",

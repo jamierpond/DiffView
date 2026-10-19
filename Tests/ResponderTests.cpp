@@ -23,6 +23,7 @@ namespace
 {
 constexpr auto firstFakePid = 1000;
 constexpr auto crashExitCode = 1;
+constexpr auto dvExecutable = "/bin/dv";
 
 const auto claudeInit =
     std::string {R"({"type":"system","subtype":"init","session_id":"session-1"})"}
@@ -119,7 +120,8 @@ ResponderSettings makeSettings(const eacp::FilePath& dir,
             "/r/main",
             dir / "dv.log",
             dir / "dv.jsonl",
-            dir / "dv.session"};
+            dir / "dv.session",
+            dvExecutable};
 }
 
 void writeOutput(const eacp::FilePath& dir, const std::string& text)
@@ -251,12 +253,17 @@ auto tResponderOneProcess =
     auto& process = *launcher.started.front();
     check(process.launch.workingDirectory == "/r/main");
     check(process.launch.arguments
-          == makeAgentArguments(getAgentCli("claude"), {}, {}));
+          == makeAgentArguments(getAgentCli("claude"), dvExecutable, {}, {}));
     check(readMessageText(process.written) == "first");
+
+    check(responder.countQueuedMessages() == 0);
+    responder.takeHasQueueChanged();
 
     responder.send({"second", {5}});
     check(launcher.started.size() == 1);
     check(process.written.find("second") == std::string::npos);
+    check(responder.countQueuedMessages() == 1);
+    check(responder.takeHasQueueChanged() && !responder.takeHasQueueChanged());
 
     writeOutput(dir, claudeInit);
     responder.poll();
@@ -269,6 +276,7 @@ auto tResponderOneProcess =
     check(launcher.started.size() == 1);
     check(process.written.find("second") != std::string::npos);
     check(responder.findActivities().front().commentThread == 5);
+    check(responder.countQueuedMessages() == 0 && responder.takeHasQueueChanged());
     check(responder.getProcessId() == firstFakePid);
 
     responder.finish();
@@ -294,8 +302,9 @@ auto tResponderResumes =
     auto responder = Responder {makeSettings(dir), launcher.makeStart()};
     responder.send({"again", {4}});
     check(launcher.started.size() == 2);
-    check(launcher.started.back()->launch.arguments
-          == makeAgentArguments(getAgentCli("claude"), "session-1", {}));
+    check(
+        launcher.started.back()->launch.arguments
+        == makeAgentArguments(getAgentCli("claude"), dvExecutable, "session-1", {}));
 };
 
 auto tResponderFailedResume =
@@ -316,7 +325,7 @@ auto tResponderFailedResume =
 
     check(launcher.started.size() == 2);
     check(launcher.started.back()->launch.arguments
-          == makeAgentArguments(getAgentCli("claude"), {}, {}));
+          == makeAgentArguments(getAgentCli("claude"), dvExecutable, {}, {}));
     check(readMessageText(launcher.started.back()->written) == "first");
     check(!eacp::Files::exists(dir / "dv.session"));
     check(responder.takeNotices().empty() && !responder.getFailure());
@@ -369,8 +378,9 @@ auto tResponderIdleCrash =
 
     check(launcher.started.size() == 2 && responder.isRunning());
     check(launcher.started.back()->written.empty());
-    check(launcher.started.back()->launch.arguments
-          == makeAgentArguments(getAgentCli("claude"), "session-1", {}));
+    check(
+        launcher.started.back()->launch.arguments
+        == makeAgentArguments(getAgentCli("claude"), dvExecutable, "session-1", {}));
 };
 
 auto tResponderOneShot =

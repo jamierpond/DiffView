@@ -90,6 +90,8 @@ struct ResponderSettings
     // it after dv has gone.
     eacp::FilePath outputPath;
     eacp::FilePath sessionPath;
+    // What the CLI's hooks run to reach dv.
+    std::string dvExecutable;
 };
 
 struct ResponderMessage
@@ -129,6 +131,10 @@ public:
     std::vector<AgentActivity> findActivities() const;
     const std::optional<std::string>& getFailure() const;
     std::vector<std::string> takeNotices();
+    // Waiting behind the message in flight.
+    int countQueuedMessages() const;
+    // Whether the queue changed since the last call.
+    bool takeHasQueueChanged();
 
 private:
     void sendNext();
@@ -145,6 +151,7 @@ private:
     StartAgentProcess startProcess;
     std::unique_ptr<AgentProcess> process;
     std::deque<ResponderMessage> queue;
+    bool hasQueueChanged = false;
     std::optional<ResponderMessage> current;
     std::string sessionId;
     bool isResuming = false;

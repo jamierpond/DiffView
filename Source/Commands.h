@@ -38,4 +38,7 @@ struct StatusOptions
 
 int runStatus(const StatusOptions& options);
 int runShow(const StoreLayout& store, int id);
+
+// Claude Code runs it before each Agent call: the payload is the hook's stdin.
+int runBackgroundAgentHook(const std::string& payload);
 } // namespace diffview

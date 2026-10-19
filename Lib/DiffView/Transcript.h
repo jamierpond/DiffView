@@ -83,6 +83,7 @@ enum class TranscriptRowStyle
     result,
     failedResult,
     working,
+    queuedCount,
     queuedPrompt
 };
 
@@ -105,9 +106,11 @@ constexpr auto collapsedSubagentRowCount = 3;
 
 using ExpandedSubagents = std::set<std::string>;
 
-// Claude Code's look, every row at most `width` columns, indent included.
+// Claude Code's look, every row at most `width` columns, indent included. An
+// open turn says how many messages wait behind it.
 std::vector<TranscriptRow>
     layoutTranscript(const Transcript& transcript,
                      int width,
-                     const ExpandedSubagents& expandedSubagents = {});
+                     const ExpandedSubagents& expandedSubagents = {},
+                     int queuedMessageCount = 0);
 } // namespace diffview

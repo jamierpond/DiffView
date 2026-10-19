@@ -698,7 +698,8 @@ void Transcript::readLine(std::string_view line)
 std::vector<TranscriptRow>
     layoutTranscript(const Transcript& transcript,
                      int width,
-                     const ExpandedSubagents& expandedSubagents)
+                     const ExpandedSubagents& expandedSubagents,
+                     int queuedMessageCount)
 {
     auto rows = std::vector<TranscriptRow> {};
 
@@ -719,6 +720,11 @@ std::vector<TranscriptRow>
             makeRow(TranscriptRowStyle::working, thinkingLead, "Working…");
         working.isInFlight = true;
         rows.push_back(std::move(working));
+
+        if (queuedMessageCount > 0)
+            rows.push_back(makeRow(TranscriptRowStyle::queuedCount,
+                                   hiddenRowsLead,
+                                   std::to_string(queuedMessageCount) + " queued"));
     }
 
     for (const auto& queued: transcript.getQueuedPrompts())

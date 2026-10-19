@@ -1,4 +1,5 @@
 #include <AgentCli.h>
+#include <Hooks.h>
 
 #include <NanoTest/NanoTest.h>
 
@@ -8,6 +9,7 @@ using namespace diffview;
 namespace
 {
 constexpr auto worktree = "/r/main";
+constexpr auto dvExecutable = "/bin/dv";
 
 std::string makeToolUse(const std::string& name, const std::string& input)
 {
@@ -36,12 +38,31 @@ auto tClaudeCodeCommand =
                               "--input-format",
                               "stream-json",
                               "--replay-user-messages"};
+    auto responderArguments =
+        Arguments {"--settings",
+                   makeBackgroundAgentHookSettings(dvExecutable),
+                   "--append-system-prompt",
+                   std::string {responderStandingOrders}};
+    auto fresh = session;
+    fresh.insert(fresh.end(), responderArguments.begin(), responderArguments.end());
 
     check(hasStdinSession(cli) && canResume(cli));
-    check(makeAgentArguments(cli, {}, "ignored") == session);
+    check(makeAgentArguments(cli, dvExecutable, {}, "ignored") == fresh);
 
     session.insert(session.end(), {"--resume", "session-1"});
-    check(makeAgentArguments(cli, "session-1", "ignored") == session);
+    session.insert(
+        session.end(), responderArguments.begin(), responderArguments.end());
+    check(makeAgentArguments(cli, dvExecutable, "session-1", "ignored") == session);
+};
+
+auto tClaudeCodeStandingOrders = test(
+    "ClaudeCodeCli/the responder is told to keep subagents in the background") = []
+{
+    check(responderStandingOrders
+          == "You are the interface: subagents do the work in the background, you "
+             "end your turn and answer new rounds, replies and messages as they "
+             "arrive; act on subagent results when notified. Steer a running "
+             "subagent with SendMessage.");
 };
 
 auto tClaudeCodeEndOfTurn = test("ClaudeCodeCli/a result line ends a turn") = []

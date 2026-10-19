@@ -95,6 +95,8 @@ AgentCli makeClaudeCodeCli()
         {"--input-format", "stream-json", "--replay-user-messages"},
         "",
         "--resume",
+        "--settings",
+        "--append-system-prompt",
         summariseClaudeStreamLine,
         [](std::string_view line)
         { return getString(Miro::Json::getParsedValue(line), "type") == "result"; },

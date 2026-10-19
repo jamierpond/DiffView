@@ -5,6 +5,7 @@
 #include "ProcessInfo.h"
 #include "Viewer.h"
 
+#include <Hooks.h>
 #include <Review.h>
 #include <Store.h>
 #include <Responder.h>
@@ -162,6 +163,12 @@ const std::map<std::string, std::string>& commandHelp()
          "  --done       clear it, e.g. as you reply\n"
          "\n"
          "example: dv status 4 --as diffview-dev \"running the tests\"\n"},
+        {"hook",
+         "Claude Code's PreToolUse hook for dv's responder: reads the hook's\n"
+         "JSON on stdin and runs every Agent call in the background, so the\n"
+         "responder stays free to answer. dv passes it to the CLI itself.\n"
+         "\n"
+         "usage: dv hook background-agent < payload.json\n"},
         {"help",
          "usage: dv help [<command>]\n"
          "\n"
@@ -319,6 +326,16 @@ int runCommand(const std::string& command, int argc, char* argv[])
     }
 
     auto& positional = arguments.positional;
+
+    if (command == "hook")
+    {
+        if (positional.size() != 1
+            || positional.front() != diffview::backgroundAgentHookName)
+            return usageError("which hook? background-agent is the one", command);
+
+        return diffview::runBackgroundAgentHook(readStdin());
+    }
+
     auto path = arguments.values.contains("repo")
                     ? arguments.values["repo"]
                     : std::filesystem::current_path().string();

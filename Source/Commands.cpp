@@ -3,6 +3,7 @@
 #include "Viewer.h"
 
 #include <Activity.h>
+#include <Hooks.h>
 #include <Review.h>
 #include <Text.h>
 
@@ -273,6 +274,14 @@ int runStatus(const StatusOptions& options)
     eacp::Files::createDirectories(path.parentDirectory());
     writeText(path,
               formatAgentStatus({options.id, std::time(nullptr), options.text}));
+    return 0;
+}
+
+int runBackgroundAgentHook(const std::string& payload)
+{
+    if (auto answer = makeBackgroundAgentHookAnswer(payload))
+        std::fputs((*answer + "\n").c_str(), stdout);
+
     return 0;
 }
 } // namespace diffview
