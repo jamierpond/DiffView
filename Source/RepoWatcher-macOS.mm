@@ -73,7 +73,8 @@ RepoWatcher::RepoWatcher(const std::string& root, Handler onChange)
 
     auto context = FSEventStreamContext {0, native.get(), nullptr, nullptr, nullptr};
     auto rootString = CFStringCreateWithCString(nullptr, root.c_str(), kCFStringEncodingUTF8);
-    auto roots = CFArrayCreate(nullptr, (const void**) &rootString, 1, &kCFTypeArrayCallBacks);
+    auto rootValues = reinterpret_cast<const void**>(&rootString);
+    auto roots = CFArrayCreate(nullptr, rootValues, 1, &kCFTypeArrayCallBacks);
 
     native->stream = FSEventStreamCreate(nullptr,
                                          &Native::callback,

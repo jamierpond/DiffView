@@ -32,10 +32,9 @@ FileDiff focusFile()
 // Every kind of comment the format has.
 ReviewFile sampleReview()
 {
-    auto review = ReviewFile {"2026-10-16-181800",
-                              "main...",
-                              "9170e37a2e0379475705c0f3439feb76c832e44a",
-                              {}};
+    auto review = ReviewFile {.title = "2026-10-16-181800",
+                              .baseLabel = "main...",
+                              .baseSha = "9170e37a2e0379475705c0f3439feb76c832e44a"};
 
     review.comments.push_back(makeFileAnnotation(
         {}, 7, "The search UX feels off overall.\n\nLook at nvim."));
@@ -266,7 +265,7 @@ auto tUnmarkedFence =
 auto tUnchangedFile =
     test("ReviewMarkdown/a comment on an unchanged file says so") = []
 {
-    auto review = ReviewFile {"draft", "HEAD", {}, {}};
+    auto review = ReviewFile {.title = "draft", .baseLabel = "HEAD"};
     review.comments.push_back(makeAnnotation(
         unchangedFile("notes.md", "a\nb\nc\nd\n"), {1, 1}, 3, "Why?"));
 

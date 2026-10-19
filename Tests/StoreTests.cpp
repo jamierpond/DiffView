@@ -131,31 +131,35 @@ auto tMerge =
     auto main = dir / "main";
     auto perf = dir / "main-perf";
 
-    auto mainRound =
-        ReviewFile {"2026-10-16-100000",
-                    "HEAD",
-                    "abc",
-                    {makeComment(1, "main one"), makeComment(2, "main two")}};
+    auto mainRound = ReviewFile {
+        .title = "2026-10-16-100000",
+        .baseLabel = "HEAD",
+        .baseSha = "abc",
+        .comments = {makeComment(1, "main one"), makeComment(2, "main two")}};
     writeRound(main, mainRound);
 
-    auto perfRound =
-        ReviewFile {"2026-10-16-100000",
-                    "HEAD",
-                    "def",
-                    {makeComment(1, "perf one"), makeComment(5, "perf five")}};
+    auto perfRound = ReviewFile {
+        .title = "2026-10-16-100000",
+        .baseLabel = "HEAD",
+        .baseSha = "def",
+        .comments = {makeComment(1, "perf one"), makeComment(5, "perf five")}};
     perfRound.comments[0].text = "perf one ![image](.diffview/images/1-1.png)";
     writeRound(perf, perfRound);
 
-    auto perfLater = ReviewFile {
-        "2026-10-17-090000", "HEAD", "def", {makeComment(3, "perf three")}};
+    auto perfLater = ReviewFile {.title = "2026-10-17-090000",
+                                 .baseLabel = "HEAD",
+                                 .baseSha = "def",
+                                 .comments = {makeComment(3, "perf three")}};
     writeRound(perf, perfLater);
     writeText(eacp::FilePath {perf / ".diffview" / "latest.md"},
               toMarkdown(perfLater));
     writeText(eacp::FilePath {perf / ".diffview" / "images" / "1-1.png"}, "png");
     writeText(eacp::FilePath {perf / ".diffview" / "seen"}, "1 2\n5 1\n");
 
-    auto draft =
-        ReviewFile {"draft", "HEAD", "def", {makeComment(2, "perf draft two")}};
+    auto draft = ReviewFile {.title = "draft",
+                             .baseLabel = "HEAD",
+                             .baseSha = "def",
+                             .comments = {makeComment(2, "perf draft two")}};
     draft.comments[0].draft = true;
     writeText(eacp::FilePath {perf / ".diffview" / "draft.md"}, toMarkdown(draft));
 
@@ -200,8 +204,10 @@ auto tMerge =
 
 auto tRoundTagging = test("Store/a round records its worktree and base") = []
 {
-    auto round =
-        ReviewFile {"2026-10-18-120000", "main...", "abc123", {makeComment(4, "x")}};
+    auto round = ReviewFile {.title = "2026-10-18-120000",
+                             .baseLabel = "main...",
+                             .baseSha = "abc123",
+                             .comments = {makeComment(4, "x")}};
     round.worktree = "/r/main-perf";
     round.renumbering = "#1 is now #6";
 

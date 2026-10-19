@@ -20,7 +20,8 @@ include(cmake/CPM.cmake)
 CPMAddPackage(
         NAME Miro
         GITHUB_REPOSITORY eyalamirmusic/Miro
-        GIT_TAG 996af8bcfe68d8c707960663c1447197ff5dd5b9)
+        GIT_TAG 996af8bcfe68d8c707960663c1447197ff5dd5b9
+        SYSTEM YES)
 
 # Only eacp's Core is used, so its graphics stack stays unbuilt. Work against
 # a local eacp checkout with:
@@ -29,12 +30,14 @@ CPMAddPackage(
         NAME eacp
         GITHUB_REPOSITORY eyalamirmusic/eacp
         GIT_TAG b8081e15d88b8cc3031c89bd676deb5db20a038f
+        SYSTEM YES
         OPTIONS
             "EACP_BUILD_GRAPHICS OFF"
             "EACP_ENABLE_EXAMPLES OFF"
             "EACP_ENABLE_TESTS OFF")
 
 list(APPEND CMAKE_MODULE_PATH "${eacp_SOURCE_DIR}/CMake")
+include(cmake/StrictWarnings.cmake)
 
 # eacp has no terminal UI. FTXUI's own loop is not used: eacp's timer pumps it.
 CPMAddPackage(
@@ -86,13 +89,14 @@ target_link_libraries(DiffView PRIVATE
         ftxui::screen
         ftxui::dom
         ftxui::component)
-set_default_warnings_level(DiffView)
+set_strict_warnings_level(DiffView)
 
 if (NOT TARGET NanoTest)
     CPMAddPackage(
             NAME NanoTest
             GITHUB_REPOSITORY eyalamirmusic/NanoTest
-            GIT_TAG main)
+            GIT_TAG main
+            SYSTEM YES)
 endif ()
 
 enable_testing()

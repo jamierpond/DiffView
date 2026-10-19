@@ -72,7 +72,7 @@ std::string trimmedEnd(std::string text)
 
 std::string Viewer::roundsSignature() const
 {
-    const auto& root = store.directory;
+    const auto& storeDirectory = store.directory;
     auto signature = std::string {};
     auto describeFile = [](const eacp::FilePath& path)
     {
@@ -81,20 +81,20 @@ std::string Viewer::roundsSignature() const
                + std::to_string(file.modificationTime()) + "\n";
     };
 
-    for (const auto& id: listRoundIdsInOrder(root))
-        signature += describeFile(root / reviewDirectory / (id + ".md"));
+    for (const auto& id: listRoundIdsInOrder(storeDirectory))
+        signature += describeFile(storeDirectory / reviewDirectory / (id + ".md"));
 
     for (const auto& draft: listDraftFiles(store))
         signature += describeFile(draft);
 
-    return signature + eacp::Files::readFile(root / latestReviewFileName);
+    return signature + eacp::Files::readFile(storeDirectory / latestReviewFileName);
 }
 
 void Viewer::loadStore()
 {
-    const auto& root = store.directory;
+    const auto& storeDirectory = store.directory;
     auto roundFiles = readRounds(store);
-    auto latest = readReviewOrEmpty(root / latestReviewFileName);
+    auto latest = readReviewOrEmpty(storeDirectory / latestReviewFileName);
 
     for (auto& round: roundFiles)
     {
@@ -103,7 +103,7 @@ void Viewer::loadStore()
 
         if (auto resolved = resolutionsFrom(latest, round))
         {
-            writeText(root / reviewDirectory / (resolved->title + ".md"),
+            writeText(storeDirectory / reviewDirectory / (resolved->title + ".md"),
                       toMarkdown(*resolved));
             round = std::move(*resolved);
         }
@@ -173,27 +173,27 @@ void Viewer::submitReview()
         return;
     }
 
-    const auto& root = store.directory;
+    const auto& storeDirectory = store.directory;
     auto id = nextRoundId(rounds, nowMs());
     auto round = submitDraft(annotations, id, base.label(), baseSha);
     round.worktree = store.worktree.str();
     auto review = toMarkdown(round);
 
-    eacp::Files::createDirectories(root / reviewDirectory);
-    writeText(root / reviewDirectory / (id + ".md"), review);
-    writeText(root / latestReviewFileName, review);
+    eacp::Files::createDirectories(storeDirectory / reviewDirectory);
+    writeText(storeDirectory / reviewDirectory / (id + ".md"), review);
+    writeText(storeDirectory / latestReviewFileName, review);
 
     rounds.push_back(id);
     lastRoundsSignature = roundsSignature();
     saveStore();
     rebuildRows();
     say("Submitted " + std::to_string(round.comments.size()) + " comments → "
-        + (root / latestReviewFileName).str());
+        + (storeDirectory / latestReviewFileName).str());
 }
 
 void Viewer::sendReply(Annotation& note, const std::string& text)
 {
-    const auto& root = store.directory;
+    const auto& storeDirectory = store.directory;
     auto sent = mergeReviews(readRounds(store), {}).annotations;
     auto thread = std::find_if(sent.begin(),
                                sent.end(),
@@ -207,8 +207,8 @@ void Viewer::sendReply(Annotation& note, const std::string& text)
     auto round = makeReplyRound(*thread, text, time, id, base.label(), baseSha);
     round.worktree = store.worktree.str();
 
-    eacp::Files::createDirectories(root / reviewDirectory);
-    writeText(root / reviewDirectory / (id + ".md"), toMarkdown(round));
+    eacp::Files::createDirectories(storeDirectory / reviewDirectory);
+    writeText(storeDirectory / reviewDirectory / (id + ".md"), toMarkdown(round));
 
     note.replies.push_back({reviewerName, time, text, false});
     note.round = id;

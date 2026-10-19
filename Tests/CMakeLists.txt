@@ -15,20 +15,20 @@ add_executable(DiffViewTests
 target_link_libraries(DiffViewTests PRIVATE NanoTest NanoTestMain DiffViewCore)
 target_compile_definitions(DiffViewTests PRIVATE
         DIFFVIEW_GOLDEN_DIR="${CMAKE_CURRENT_SOURCE_DIR}/Golden")
-set_default_warnings_level(DiffViewTests)
+set_strict_warnings_level(DiffViewTests)
 nano_discover_tests(DiffViewTests)
 
 add_executable(TextBufferTests TextBufferTests.cpp)
 target_link_libraries(TextBufferTests PRIVATE NanoTest NanoTestMain TextBuffer)
-set_default_warnings_level(TextBufferTests)
+set_strict_warnings_level(TextBufferTests)
 nano_discover_tests(TextBufferTests)
 
 add_executable(VimEditorTests VimEditorTests.cpp)
 target_link_libraries(VimEditorTests PRIVATE NanoTest NanoTestMain VimEditor)
-set_default_warnings_level(VimEditorTests)
+set_strict_warnings_level(VimEditorTests)
 nano_discover_tests(VimEditorTests)
 
 add_executable(TelescopeTests TelescopeTests.cpp)
 target_link_libraries(TelescopeTests PRIVATE NanoTest NanoTestMain Telescope)
-set_default_warnings_level(TelescopeTests)
+set_strict_warnings_level(TelescopeTests)
 nano_discover_tests(TelescopeTests)

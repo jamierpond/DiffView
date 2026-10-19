@@ -16,11 +16,12 @@ Annotation comment(int id, const std::string& text)
 
 auto tMergeNewest = test("Review/the draft's version of a comment wins") = []
 {
-    auto first = ReviewFile {
-        "2026-10-16-100000", {}, {}, {comment(1, "v1"), comment(2, "x")}};
-    auto second = ReviewFile {"2026-10-16-110000", {}, {}, {comment(1, "v2")}};
-    auto draft =
-        ReviewFile {"draft", {}, {}, {comment(2, "edited"), comment(3, "new")}};
+    auto first = ReviewFile {.title = "2026-10-16-100000",
+                             .comments = {comment(1, "v1"), comment(2, "x")}};
+    auto second =
+        ReviewFile {.title = "2026-10-16-110000", .comments = {comment(1, "v2")}};
+    auto draft = ReviewFile {.title = "draft",
+                             .comments = {comment(2, "edited"), comment(3, "new")}};
 
     auto reviews = mergeReviews({first, second}, draft);
 
@@ -38,9 +39,9 @@ auto tMergeNewest = test("Review/the draft's version of a comment wins") = []
 
 auto tMergeIds = test("Review/comments written without an id get new ones") = []
 {
-    auto round = ReviewFile {"r", {}, {}, {comment(4, "sent")}};
-    auto draft =
-        ReviewFile {"draft", {}, {}, {comment(0, "by hand"), comment(0, "also")}};
+    auto round = ReviewFile {.title = "r", .comments = {comment(4, "sent")}};
+    auto draft = ReviewFile {
+        .title = "draft", .comments = {comment(0, "by hand"), comment(0, "also")}};
 
     auto reviews = mergeReviews({round}, draft);
 
@@ -57,8 +58,8 @@ auto tWithdrawn = test("Review/a sent withdrawal is gone, a drafted one isn't") 
     auto pending = comment(2, "y");
     pending.withdrawn = true;
 
-    auto reviews =
-        mergeReviews({{"r", {}, {}, {gone}}}, {"draft", {}, {}, {pending}});
+    auto reviews = mergeReviews({{.title = "r", .comments = {gone}}},
+                                {.title = "draft", .comments = {pending}});
 
     check(reviews.annotations.size() == 1);
     check(reviews.annotations[0].id == 2);
@@ -66,9 +67,10 @@ auto tWithdrawn = test("Review/a sent withdrawal is gone, a drafted one isn't") 
 
 auto tSubmit = test("Review/submitting freezes the draft into a round") = []
 {
-    auto annotations = mergeReviews({{"r1", {}, {}, {comment(1, "old")}}},
-                                    {"draft", {}, {}, {comment(2, "new")}})
-                           .annotations;
+    auto annotations =
+        mergeReviews({{.title = "r1", .comments = {comment(1, "old")}}},
+                     {.title = "draft", .comments = {comment(2, "new")}})
+            .annotations;
     annotations[0].text = "unchanged";
     annotations[0].draft = false;
 
@@ -182,8 +184,9 @@ auto tMergeReplies =
     drafted.replies = {said("you", "2026-10-18 10:05", "h1"),
                        said("you", "2026-10-18 10:09", "h2")};
 
-    auto reviews = mergeReviews({{"r1", {}, {}, {first}}, {"r2", {}, {}, {second}}},
-                                {"draft", {}, {}, {drafted}});
+    auto reviews = mergeReviews({{.title = "r1", .comments = {first}},
+                                 {.title = "r2", .comments = {second}}},
+                                {.title = "draft", .comments = {drafted}});
     const auto& thread = reviews.annotations[0].replies;
 
     check(thread.size() == 3);
@@ -196,8 +199,8 @@ auto tMergeOwner = test("Review/an owner, once set, is kept") = []
 {
     auto claimed = comment(1, "q");
     claimed.owner = "dev";
-    auto reviews = mergeReviews({{"r1", {}, {}, {claimed}}},
-                                {"draft", {}, {}, {comment(1, "q2")}});
+    auto reviews = mergeReviews({{.title = "r1", .comments = {claimed}}},
+                                {.title = "draft", .comments = {comment(1, "q2")}});
 
     check(reviews.annotations[0].owner == "dev");
     check(reviews.annotations[0].text == "q2");
@@ -211,9 +214,9 @@ auto tSubmitReplies =
     auto drafted = sent;
     drafted.replies.push_back(said("you", "2026-10-18 10:05", "h1"));
 
-    auto annotations =
-        mergeReviews({{"r1", {}, {}, {sent}}}, {"draft", {}, {}, {drafted}})
-            .annotations;
+    auto annotations = mergeReviews({{.title = "r1", .comments = {sent}}},
+                                    {.title = "draft", .comments = {drafted}})
+                           .annotations;
     auto round = submitDraft(annotations, "r2", {}, {});
 
     check(round.comments.size() == 1);
@@ -249,7 +252,8 @@ auto tRoundFor = test("Review/which rounds wake which agent") = []
     replied.replies[0].fresh = true;
     replied.resolved = true;
 
-    auto round = ReviewFile {"r", {}, {}, {mine, theirs, anyone, replied}};
+    auto round =
+        ReviewFile {.title = "r", .comments = {mine, theirs, anyone, replied}};
     auto listening = std::vector<std::string> {"dev", "ops"};
 
     auto forDev = routeRound(round, "dev", listening);
@@ -261,13 +265,14 @@ auto tRoundFor = test("Review/which rounds wake which agent") = []
     auto everyone = routeRound(round, {}, listening);
     check(everyone.open == 3 && everyone.replied == 1);
 
-    auto onlyOps = ReviewFile {"r", {}, {}, {theirs}};
+    auto onlyOps = ReviewFile {.title = "r", .comments = {theirs}};
     check(!routeRound(onlyOps, "dev", listening).wakes());
     check(routeRound(onlyOps, "ops", listening).wakes());
 
     auto resolvedAnyone = anyone;
     resolvedAnyone.resolved = true;
-    check(!routeRound({"r", {}, {}, {resolvedAnyone}}, "dev", listening).wakes());
+    check(!routeRound({.title = "r", .comments = {resolvedAnyone}}, "dev", listening)
+               .wakes());
 };
 
 auto tRouteUnlistenedOwner =
@@ -278,7 +283,7 @@ auto tRouteUnlistenedOwner =
     finished.replies = {said("you", "t", "still broken")};
     finished.replies[0].fresh = true;
 
-    auto round = ReviewFile {"r", {}, {}, {finished}};
+    auto round = ReviewFile {.title = "r", .comments = {finished}};
     auto onlyOps = std::vector<std::string> {"ops"};
 
     check(routeRound(round, "ops", onlyOps).wakes());
@@ -333,8 +338,8 @@ auto tRoundsUpTo = test("Review/--after drops the rounds up to it") = []
 
 auto tChangeThread = test("Review/reply and resolve claim, refuse, force") = []
 {
-    auto round =
-        ReviewFile {"r", {}, {}, {comment(1, "q"), comment(2, "@ops look")}};
+    auto round = ReviewFile {.title = "r",
+                             .comments = {comment(1, "q"), comment(2, "@ops look")}};
 
     auto change = ThreadChange {
         "dev", true, false, false, "on it", "2026-10-18 11:00", {"dev", "ops"}};
@@ -360,7 +365,7 @@ auto tChangeThread = test("Review/reply and resolve claim, refuse, force") = []
     // Unnamed agents answer but don't claim.
     auto unnamed = ThreadChange {};
     unnamed.text = "x";
-    auto open = ReviewFile {"r", {}, {}, {comment(3, "q")}};
+    auto open = ReviewFile {.title = "r", .comments = {comment(3, "q")}};
     check(!changeThread(open, 3, unnamed));
     check(open.comments[0].owner.empty());
 };
@@ -368,7 +373,7 @@ auto tChangeThread = test("Review/reply and resolve claim, refuse, force") = []
 auto tResolutionsCarryReplies =
     test("Review/a reply written into latest.md goes into the round") = []
 {
-    auto round = ReviewFile {"r", {}, {}, {comment(1, "q")}};
+    auto round = ReviewFile {.title = "r", .comments = {comment(1, "q")}};
     auto latest = round;
     latest.comments[0].replies = {said("dev", "t", "done")};
 
@@ -434,8 +439,12 @@ auto tReplyRound =
         replyNotice("2026-10-18-200101", parsed, "dev", {}, "/r/x.md")
         == "dv: reply 2026-10-18-200101 on #31 from you · for @dev · read /r/x.md");
 
-    auto merged = mergeReviews(
-        {ReviewFile {"2026-10-18-190000", "HEAD", "abc", {thread}}, parsed}, {});
+    auto merged = mergeReviews({ReviewFile {.title = "2026-10-18-190000",
+                                            .baseLabel = "HEAD",
+                                            .baseSha = "abc",
+                                            .comments = {thread}},
+                                parsed},
+                               {});
     check(merged.annotations.size() == 1);
     check(merged.annotations[0].replies.size() == 2);
     check(merged.annotations[0].round == "2026-10-18-200101");
