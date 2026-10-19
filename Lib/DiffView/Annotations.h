@@ -69,6 +69,7 @@ struct Annotation
 
     // Which file it came from, so never written into one.
     std::string round;
+    std::string worktree;
     bool draft = true;
 
     MIRO_REFLECT(id,
@@ -89,6 +90,7 @@ struct Annotation
                  updates,
                  stale,
                  round,
+                 worktree,
                  draft)
 };
 

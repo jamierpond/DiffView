@@ -49,7 +49,13 @@ struct ReviewFile
 
     bool reply = false;
 
-    MIRO_REFLECT(title, baseLabel, baseSha, comments, reply)
+    // The checkout it was reviewed in; empty in rounds from before worktrees.
+    std::string worktree;
+
+    // Set when worktree stores were merged and its ids had to change.
+    std::string renumbering;
+
+    MIRO_REFLECT(title, baseLabel, baseSha, comments, reply, worktree, renumbering)
 };
 
 // A Markdown frontend for Miro, as its XML one: Markdown to and from Miro's

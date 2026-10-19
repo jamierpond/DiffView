@@ -9,6 +9,7 @@ add_library(DiffViewCore STATIC
         Review.cpp
         ReviewMarkdown.cpp
         Search.cpp
+        Store.cpp
         Text.cpp)
 
 target_include_directories(DiffViewCore PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})

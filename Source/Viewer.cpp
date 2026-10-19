@@ -52,8 +52,8 @@ std::vector<std::string> splitWords(const std::string& text)
 
 bool isOurs(const std::string& path)
 {
-    return path == annotationDirectory
-           || path.starts_with(std::string {annotationDirectory} + "/");
+    return path == storeDirectoryName
+           || path.starts_with(std::string {storeDirectoryName} + "/");
 }
 
 } // namespace
@@ -68,6 +68,7 @@ std::int64_t nowMs()
 Viewer::Viewer(const Options& optionsToUse)
     : options(optionsToUse)
     , repo(optionsToUse.repo)
+    , store(optionsToUse.store)
     , base(optionsToUse.base)
     , pump([this] { tick(); }, eacp::Time::MS {16})
 {
@@ -85,6 +86,20 @@ Viewer::Viewer(const Options& optionsToUse)
     watcher = std::make_unique<RepoWatcher>(
         repo,
         [this](const std::vector<std::string>& changed) { onRepoChanged(changed); });
+
+    if (!isSamePath(store.home.str(), store.worktree.str()))
+    {
+        createStoreDirectory(store.directory);
+        storeWatcher = std::make_unique<RepoWatcher>(
+            store.directory.str(),
+            [this](const std::vector<std::string>&) { scheduleRefresh(120); });
+    }
+
+    for (const auto& note: options.mergeNotes)
+        message += (message.empty() ? "" : "; ") + note;
+
+    messageAt = nowMs();
+
     refresh();
 }
 
@@ -259,7 +274,7 @@ void Viewer::apply(std::vector<FileDiff> diffs, const std::string& sha)
     tracker.update(files, nowMs());
 
     reloadStoreIfChanged();
-    listening = findListeningAgents(repo);
+    listening = findListeningAgents(store.directory.str());
     unchangedCache.clear();
     auto moved =
         reanchorAll(annotations,
@@ -576,6 +591,46 @@ int Viewer::annotationAtCursor() const
         return rows[static_cast<std::size_t>(diffCursor + 1)].annotation;
 
     return 0;
+}
+
+int Viewer::findNextAnnotationId() const
+{
+    return std::max({nextAnnotationId(annotations),
+                     nextAnnotationId(otherWorktreeAnnotations),
+                     highestIdInOtherDrafts + 1});
+}
+
+std::optional<Annotation> Viewer::findAnnotationInAnyWorktree(int id) const
+{
+    for (const auto* group: {&annotations, &otherWorktreeAnnotations})
+    {
+        for (const auto& note: *group)
+        {
+            if (note.id == id)
+                return note;
+        }
+    }
+
+    return std::nullopt;
+}
+
+std::string Viewer::describeCommentPlace(const Annotation& note) const
+{
+    auto place = [&]
+    {
+        if (note.path.empty())
+            return std::string {"General"};
+
+        if (note.fileLevel)
+            return note.path + " (file)";
+
+        return note.path + ":" + lineLabel(note);
+    }();
+
+    if (isSamePath(note.worktree, store.worktree.str()))
+        return place;
+
+    return "[" + getWorktreeShortName(note.worktree) + "] " + place;
 }
 
 Annotation* Viewer::annotation(int id)

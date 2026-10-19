@@ -1,5 +1,7 @@
 #pragma once
 
+#include <Store.h>
+
 #include <optional>
 #include <string>
 
@@ -14,5 +16,5 @@ struct MonitorOptions
     std::string agent;
 };
 
-int runMonitor(const std::string& repo, const MonitorOptions& options);
+int runMonitor(const StoreLayout& store, const MonitorOptions& options);
 } // namespace diffview

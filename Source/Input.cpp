@@ -717,8 +717,11 @@ void Viewer::refreshPickerItems()
         {
             auto sorted = std::vector<const Annotation*> {};
 
-            for (const auto& note: annotations)
-                sorted.push_back(&note);
+            for (const auto* group: {&annotations, &otherWorktreeAnnotations})
+            {
+                for (const auto& note: *group)
+                    sorted.push_back(&note);
+            }
 
             std::stable_sort(sorted.begin(),
                              sorted.end(),
@@ -736,9 +739,7 @@ void Viewer::refreshPickerItems()
             for (const auto* note: sorted)
             {
                 auto first = splitLines(note->text);
-                auto where = note->path.empty() ? std::string {"General"}
-                             : note->fileLevel  ? note->path + " (file)"
-                                               : note->path + ":" + lineLabel(*note);
+                auto where = describeCommentPlace(*note);
                 auto when = note->draft ? std::string {"draft"}
                                         : "sent " + roundLabel(note->round);
 
@@ -754,9 +755,9 @@ void Viewer::refreshPickerItems()
 
             picker.preview = [this](const telescope::Item& item)
             {
-                auto* note = annotation(std::stoi(item.key));
+                auto note = findAnnotationInAnyWorktree(std::stoi(item.key));
 
-                if (note == nullptr)
+                if (!note)
                     return std::vector<std::string> {};
 
                 auto out = std::vector<std::string> {};
@@ -844,8 +845,17 @@ void Viewer::acceptPicker()
             {
                 const auto* note = annotation(std::stoi(item->key));
 
-                if (note != nullptr && !note->path.empty()
-                    && fileAt(note->path) == nullptr)
+                if (note == nullptr)
+                {
+                    auto other = findAnnotationInAnyWorktree(std::stoi(item->key));
+
+                    if (other)
+                        say("#" + item->key + " is from the worktree at "
+                            + other->worktree + ": run dv there to amend it");
+                    break;
+                }
+
+                if (!note->path.empty() && fileAt(note->path) == nullptr)
                 {
                     say(note->path + " isn't in the diff against " + base.label());
                     break;

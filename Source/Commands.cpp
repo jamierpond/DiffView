@@ -1,5 +1,5 @@
+#include "Agents.h"
 #include "Commands.h"
-#include "Store.h"
 #include "Viewer.h"
 
 #include <Review.h>
@@ -12,16 +12,11 @@
 #include <cstdio>
 #include <filesystem>
 #include <optional>
-#include <fcntl.h>
-#include <sys/file.h>
-#include <unistd.h>
 
 namespace diffview
 {
 namespace
 {
-namespace fs = std::filesystem;
-
 bool hasComment(const ReviewFile& file, int id)
 {
     return std::any_of(file.comments.begin(),
@@ -41,41 +36,16 @@ std::string describeMissing(int id)
            + " in a submitted round (dv comments lists them)";
 }
 
-class RepoLock
-{
-public:
-    explicit RepoLock(const std::string& repo)
-    {
-        auto path = fs::path {repo} / annotationDirectory / ".lock";
-        fd = open(path.c_str(), O_CREAT | O_RDWR, 0644);
-
-        if (fd >= 0)
-            flock(fd, LOCK_EX);
-    }
-
-    ~RepoLock()
-    {
-        if (fd >= 0)
-            close(fd);
-    }
-
-    RepoLock(const RepoLock&) = delete;
-    RepoLock& operator=(const RepoLock&) = delete;
-
-private:
-    int fd = -1;
-};
-
 int changeAndWrite(const ThreadOptions& options, bool resolve)
 {
-    auto root = eacp::FilePath {options.repo};
+    const auto& root = options.store.directory;
 
     if (!eacp::Files::isDirectory(root / reviewDirectory))
-        return fail("no review rounds in " + options.repo
+        return fail("no review rounds in " + root.str()
                     + " yet (nothing has been submitted)");
 
-    auto lock = RepoLock {options.repo};
-    auto rounds = readRounds(root);
+    auto lock = StoreLock {root};
+    auto rounds = readRounds(options.store);
     auto at =
         std::find_if(rounds.rbegin(),
                      rounds.rend(),
@@ -83,7 +53,9 @@ int changeAndWrite(const ThreadOptions& options, bool resolve)
 
     if (at == rounds.rend())
     {
-        if (hasComment(readReviewOrEmpty(root / draftFileName), options.id))
+        if (hasComment(
+                readReviewOrEmpty(options.store.worktreeDirectory / draftFileName),
+                options.id))
             return fail("#" + std::to_string(options.id)
                         + " is still in the reviewer's draft, not sent to you");
 
@@ -108,6 +80,7 @@ int changeAndWrite(const ThreadOptions& options, bool resolve)
     change.resolve = resolve;
     change.text = options.text;
     change.time = formatReplyTime(nowMs());
+    change.listening = findListeningAgents(root.str());
 
     if (auto error = changeThread(round, options.id, change))
         return fail(*error);
@@ -126,7 +99,7 @@ int changeAndWrite(const ThreadOptions& options, bool resolve)
     return 0;
 }
 
-std::string formatLocation(const Annotation& comment)
+std::string formatPlace(const Annotation& comment)
 {
     if (comment.path.empty())
         return "General";
@@ -135,6 +108,25 @@ std::string formatLocation(const Annotation& comment)
         return comment.path + " (whole file)";
 
     return comment.path + ":" + lineLabel(comment);
+}
+
+std::string getOtherWorktreeName(const StoreLayout& store, const Annotation& comment)
+{
+    if (comment.worktree.empty()
+        || isSamePath(comment.worktree, store.worktree.str()))
+        return {};
+
+    return getWorktreeShortName(comment.worktree);
+}
+
+std::string formatLocation(const StoreLayout& store, const Annotation& comment)
+{
+    auto worktree = getOtherWorktreeName(store, comment);
+
+    if (worktree.empty())
+        return formatPlace(comment);
+
+    return "[" + worktree + "] " + formatPlace(comment);
 }
 
 std::string pad(const std::string& text, int width)
@@ -172,8 +164,9 @@ int runResolve(const ThreadOptions& options)
 
 int runComments(const ListOptions& options)
 {
-    auto comments = mergeReviews(readRounds(options.repo), {}).annotations;
+    auto comments = mergeReviews(readRounds(options.store), {}).annotations;
     auto rows = std::vector<std::array<std::string, 5>> {};
+    auto listening = findListeningAgents(options.store.directory.str());
 
     for (const auto& comment: comments)
     {
@@ -182,7 +175,10 @@ int runComments(const ListOptions& options)
         if (options.openOnly && comment.resolved)
             continue;
 
-        if (!options.agent.empty() && !owner.empty() && owner != options.agent)
+        auto listeningOwner = findListeningOwner(comment, listening);
+
+        if (!options.agent.empty() && !listeningOwner.empty()
+            && listeningOwner != options.agent)
             continue;
 
         auto lines = splitLines(comment.text);
@@ -200,7 +196,7 @@ int runComments(const ListOptions& options)
         rows.push_back({"#" + std::to_string(comment.id),
                         comment.resolved ? "resolved" : "open",
                         owner.empty() ? "-" : "@" + owner,
-                        formatLocation(comment),
+                        formatLocation(options.store, comment),
                         about});
     }
 
@@ -225,9 +221,9 @@ int runComments(const ListOptions& options)
     return 0;
 }
 
-int runShow(const std::string& repo, int id)
+int runShow(const StoreLayout& store, int id)
 {
-    auto comments = mergeReviews(readRounds(repo), {}).annotations;
+    auto comments = mergeReviews(readRounds(store), {}).annotations;
     auto comment = find(comments, id);
 
     if (!comment)
@@ -237,7 +233,15 @@ int runShow(const std::string& repo, int id)
     shown.owner = findOwner(shown);
     shown.updates.clear();
     std::printf("%s", printComment(shown).c_str());
-    std::printf("(round %s)\n", comment->round.c_str());
+    auto worktree = getOtherWorktreeName(store, *comment);
+
+    if (worktree.empty())
+        std::printf("(round %s)\n", comment->round.c_str());
+    else
+        std::printf("(round %s, reviewed in the worktree %s at %s)\n",
+                    comment->round.c_str(),
+                    worktree.c_str(),
+                    comment->worktree.c_str());
     return 0;
 }
 } // namespace diffview

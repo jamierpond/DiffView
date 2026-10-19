@@ -151,12 +151,13 @@ auto tNewRounds =
 auto tRoundNotice =
     test("Review/the monitor's line names the round, the counts and the file") = []
 {
-    check(roundNotice("2026-10-17-142300", {3, 0}, {}, "/r/.diffview/latest.md")
+    check(roundNotice("2026-10-17-142300", {3, 0}, {}, {}, "/r/.diffview/latest.md")
           == "dv: review round 2026-10-17-142300 submitted · 3 open · read "
              "/r/.diffview/latest.md");
-    check(roundNotice("2026-10-17-142300", {1, 2}, "dev", "/r/.diffview/latest.md")
-          == "dv: review round 2026-10-17-142300 submitted · for @dev · 1 open · "
-             "2 with new replies · read /r/.diffview/latest.md");
+    check(
+        roundNotice("2026-10-17-142300", {1, 2}, "dev", {}, "/r/.diffview/latest.md")
+        == "dv: review round 2026-10-17-142300 submitted · for @dev · 1 open · "
+           "2 with new replies · read /r/.diffview/latest.md");
 };
 
 namespace
@@ -249,23 +250,45 @@ auto tRoundFor = test("Review/which rounds wake which agent") = []
     replied.resolved = true;
 
     auto round = ReviewFile {"r", {}, {}, {mine, theirs, anyone, replied}};
+    auto listening = std::vector<std::string> {"dev", "ops"};
 
-    auto forDev = routeRound(round, "dev");
+    auto forDev = routeRound(round, "dev", listening);
     check(forDev.open == 2 && forDev.replied == 1 && forDev.wakes());
 
-    auto forOps = routeRound(round, "ops");
+    auto forOps = routeRound(round, "ops", listening);
     check(forOps.open == 2 && forOps.replied == 1);
 
-    auto everyone = routeRound(round, {});
+    auto everyone = routeRound(round, {}, listening);
     check(everyone.open == 3 && everyone.replied == 1);
 
     auto onlyOps = ReviewFile {"r", {}, {}, {theirs}};
-    check(!routeRound(onlyOps, "dev").wakes());
-    check(routeRound(onlyOps, "ops").wakes());
+    check(!routeRound(onlyOps, "dev", listening).wakes());
+    check(routeRound(onlyOps, "ops", listening).wakes());
 
     auto resolvedAnyone = anyone;
     resolvedAnyone.resolved = true;
-    check(!routeRound({"r", {}, {}, {resolvedAnyone}}, "dev").wakes());
+    check(!routeRound({"r", {}, {}, {resolvedAnyone}}, "dev", listening).wakes());
+};
+
+auto tRouteUnlistenedOwner =
+    test("Review/a thread whose owner isn't listening wakes every agent") = []
+{
+    auto finished = comment(35, "q");
+    finished.owner = "dev";
+    finished.replies = {said("you", "t", "still broken")};
+    finished.replies[0].fresh = true;
+
+    auto round = ReviewFile {"r", {}, {}, {finished}};
+    auto onlyOps = std::vector<std::string> {"ops"};
+
+    check(routeRound(round, "ops", onlyOps).wakes());
+    check(!routeRound(round, "ops", {"dev", "ops"}).wakes());
+
+    auto change = ThreadChange {
+        "ops", true, false, false, "taking it", "2026-10-18 21:00", onlyOps};
+    check(!changeThread(round, 35, change));
+    check(round.comments[0].owner == "ops");
+    check(round.comments[0].replies.back().author == "ops");
 };
 
 auto tRoundsUpTo = test("Review/--after drops the rounds up to it") = []
@@ -283,8 +306,8 @@ auto tChangeThread = test("Review/reply and resolve claim, refuse, force") = []
     auto round =
         ReviewFile {"r", {}, {}, {comment(1, "q"), comment(2, "@ops look")}};
 
-    auto change =
-        ThreadChange {"dev", true, false, false, "on it", "2026-10-18 11:00"};
+    auto change = ThreadChange {
+        "dev", true, false, false, "on it", "2026-10-18 11:00", {"dev", "ops"}};
     check(!changeThread(round, 1, change));
     check(round.comments[0].owner == "dev");
     check(round.comments[0].replies.size() == 1);
@@ -374,10 +397,11 @@ auto tReplyRound =
     check(parsed.reply && parsed.title == "2026-10-18-200101");
     check(parsed.comments[0].replies[1].fresh);
 
-    check(routeRound(parsed, "dev").wakes());
-    check(!routeRound(parsed, "other").wakes());
+    auto listening = std::vector<std::string> {"dev", "other"};
+    check(routeRound(parsed, "dev", listening).wakes());
+    check(!routeRound(parsed, "other", listening).wakes());
     check(
-        replyNotice("2026-10-18-200101", parsed, "dev", "/r/x.md")
+        replyNotice("2026-10-18-200101", parsed, "dev", {}, "/r/x.md")
         == "dv: reply 2026-10-18-200101 on #31 from you · for @dev · read /r/x.md");
 
     auto merged = mergeReviews(

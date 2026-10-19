@@ -1,5 +1,4 @@
 #include "Clipboard.h"
-#include "Store.h"
 #include "Viewer.h"
 
 #include <Text.h>
@@ -73,23 +72,28 @@ std::string trimmedEnd(std::string text)
 
 std::string Viewer::roundsSignature() const
 {
-    auto root = eacp::FilePath {repo};
+    const auto& root = store.directory;
     auto signature = std::string {};
+    auto describeFile = [](const eacp::FilePath& path)
+    {
+        auto file = eacp::File {path};
+        return path.str() + ":" + std::to_string(file.size()) + ":"
+               + std::to_string(file.modificationTime()) + "\n";
+    };
 
     for (const auto& id: listRoundIdsInOrder(root))
-    {
-        auto file = eacp::File {root / reviewDirectory / (id + ".md")};
-        signature += id + ":" + std::to_string(file.size()) + ":"
-                     + std::to_string(file.modificationTime()) + "\n";
-    }
+        signature += describeFile(root / reviewDirectory / (id + ".md"));
+
+    for (const auto& draft: listDraftFiles(store))
+        signature += describeFile(draft);
 
     return signature + eacp::Files::readFile(root / latestReviewFileName);
 }
 
 void Viewer::loadStore()
 {
-    auto root = eacp::FilePath {repo};
-    auto roundFiles = readRounds(root);
+    const auto& root = store.directory;
+    auto roundFiles = readRounds(store);
     auto latest = readReviewOrEmpty(root / latestReviewFileName);
 
     for (auto& round: roundFiles)
@@ -105,10 +109,23 @@ void Viewer::loadStore()
         }
     }
 
-    lastDraftText = eacp::Files::readFile(root / draftFileName);
-    auto merged = mergeReviews(roundFiles, fromMarkdown(lastDraftText));
+    lastDraftText = eacp::Files::readFile(store.worktreeDirectory / draftFileName);
+    auto draft = fromMarkdown(lastDraftText);
+    draft.worktree = store.worktree.str();
+    highestIdInOtherDrafts = findHighestIdInOtherDrafts(store);
+    auto merged = mergeReviews(roundFiles, draft, highestIdInOtherDrafts);
 
-    annotations = std::move(merged.annotations);
+    annotations.clear();
+    otherWorktreeAnnotations.clear();
+
+    for (auto& note: merged.annotations)
+    {
+        if (isSamePath(note.worktree, store.worktree.str()))
+            annotations.push_back(std::move(note));
+        else
+            otherWorktreeAnnotations.push_back(std::move(note));
+    }
+
     rounds = std::move(merged.rounds);
     lastRoundsSignature = roundsSignature();
     pinUnseenThreads();
@@ -119,7 +136,7 @@ void Viewer::loadStore()
 
 bool Viewer::reloadStoreIfChanged()
 {
-    auto draftText = eacp::Files::readFile(eacp::FilePath {repo} / draftFileName);
+    auto draftText = eacp::Files::readFile(store.worktreeDirectory / draftFileName);
 
     if (draftText == lastDraftText && roundsSignature() == lastRoundsSignature)
         return false;
@@ -136,18 +153,13 @@ void Viewer::saveStore()
     if (text == lastDraftText)
         return;
 
-    auto dir = eacp::FilePath {repo} / annotationDirectory;
-
-    if (draftCount(annotations) == 0 && !eacp::Files::exists(dir))
+    if (draftCount(annotations) == 0
+        && !eacp::Files::exists(store.worktreeDirectory))
         return;
 
-    eacp::Files::createDirectories(dir);
-
-    // Ignores itself, so an agent's `git add -A` never sweeps it up.
-    if (!eacp::Files::exists(dir / ".gitignore"))
-        writeText(dir / ".gitignore", "*\n");
-
-    writeText(eacp::FilePath {repo} / draftFileName, text);
+    createStoreDirectory(store.directory);
+    eacp::Files::createDirectories(store.worktreeDirectory);
+    writeText(store.worktreeDirectory / draftFileName, text);
     lastDraftText = text;
 }
 
@@ -161,9 +173,10 @@ void Viewer::submitReview()
         return;
     }
 
-    auto root = eacp::FilePath {repo};
+    const auto& root = store.directory;
     auto id = nextRoundId(rounds, nowMs());
     auto round = submitDraft(annotations, id, base.label(), baseSha);
+    round.worktree = store.worktree.str();
     auto review = toMarkdown(round);
 
     eacp::Files::createDirectories(root / reviewDirectory);
@@ -174,14 +187,14 @@ void Viewer::submitReview()
     lastRoundsSignature = roundsSignature();
     saveStore();
     rebuildRows();
-    say("Submitted " + std::to_string(round.comments.size())
-        + " comments → .diffview/latest.md");
+    say("Submitted " + std::to_string(round.comments.size()) + " comments → "
+        + (root / latestReviewFileName).str());
 }
 
 void Viewer::sendReply(Annotation& note, const std::string& text)
 {
-    auto root = eacp::FilePath {repo};
-    auto sent = mergeReviews(readRounds(root), {}).annotations;
+    const auto& root = store.directory;
+    auto sent = mergeReviews(readRounds(store), {}).annotations;
     auto thread = std::find_if(sent.begin(),
                                sent.end(),
                                [&](const Annotation& a) { return a.id == note.id; });
@@ -192,6 +205,7 @@ void Viewer::sendReply(Annotation& note, const std::string& text)
     auto id = nextRoundId(rounds, nowMs());
     auto time = formatReplyTime(nowMs());
     auto round = makeReplyRound(*thread, text, time, id, base.label(), baseSha);
+    round.worktree = store.worktree.str();
 
     eacp::Files::createDirectories(root / reviewDirectory);
     writeText(root / reviewDirectory / (id + ".md"), toMarkdown(round));
@@ -209,7 +223,7 @@ void Viewer::sendReply(Annotation& note, const std::string& text)
     rounds.push_back(id);
     lastRoundsSignature = roundsSignature();
 
-    auto owner = findOwner(note);
+    auto owner = findListeningOwner(note, listening);
     auto to = owner.empty() ? std::string {"every agent"} : "@" + owner;
     say("Sent reply on #" + std::to_string(note.id) + " → " + to);
 }
@@ -228,7 +242,7 @@ bool Viewer::hasUnseenAgentReply(const Annotation& note) const
 
 void Viewer::pinUnseenThreads()
 {
-    auto seen = eacp::Files::readFile(eacp::FilePath {repo} / seenFileName);
+    auto seen = eacp::Files::readFile(store.worktreeDirectory / seenFileName);
 
     for (const auto& line: splitLines(seen))
         seenThreads.insert(line);
@@ -246,7 +260,7 @@ void Viewer::markSeen(const Annotation& note)
         return;
 
     seenThreads.insert(threadKey(note));
-    eacp::Files::appendFile(eacp::FilePath {repo} / seenFileName,
+    eacp::Files::appendFile(store.worktreeDirectory / seenFileName,
                             threadKey(note) + "\n");
 }
 
@@ -314,8 +328,7 @@ void Viewer::annotateAtCursor(bool wholeHunk)
         return;
     }
 
-    pendingAnnotation =
-        makeAnnotation(*file, *range, nextAnnotationId(annotations), {});
+    pendingAnnotation = makeAnnotation(*file, *range, findNextAnnotationId(), {});
     editingId = 0;
     openEditor("New comment · " + file->path + ":" + lineLabel(*pendingAnnotation),
                {});
@@ -332,8 +345,7 @@ void Viewer::commentOnFile()
     }
 
     visualAnchor.reset();
-    pendingAnnotation =
-        makeFileAnnotation(file->path, nextAnnotationId(annotations), {});
+    pendingAnnotation = makeFileAnnotation(file->path, findNextAnnotationId(), {});
     editingId = 0;
     diffCursor = 0;
     openEditor("New comment · " + file->path + " (whole file)", {});
@@ -342,7 +354,7 @@ void Viewer::commentOnFile()
 void Viewer::commentGeneral()
 {
     visualAnchor.reset();
-    pendingAnnotation = makeFileAnnotation({}, nextAnnotationId(annotations), {});
+    pendingAnnotation = makeFileAnnotation({}, findNextAnnotationId(), {});
     editingId = 0;
     select({});
     diffCursor = 0;
@@ -423,7 +435,7 @@ bool Viewer::commitEditor()
         for (const auto& path: candidates)
         {
             if (std::find(linked.begin(), linked.end(), path) == linked.end())
-                eacp::Files::removeFile(eacp::FilePath {repo} / path);
+                eacp::Files::removeFile(store.home / path);
         }
     };
 
@@ -521,7 +533,7 @@ void Viewer::closeEditor(bool)
     for (const auto& path: pastedImages)
     {
         if (std::find(linked.begin(), linked.end(), path) == linked.end())
-            eacp::Files::removeFile(eacp::FilePath {repo} / path);
+            eacp::Files::removeFile(store.home / path);
     }
 
     auto id = editingId != 0 ? editingId : replyCommentId.value_or(0);
@@ -558,9 +570,9 @@ void Viewer::pasteIntoEditor()
             if (pendingAnnotation)
                 return pendingAnnotation->id;
 
-            return nextAnnotationId(annotations);
+            return findNextAnnotationId();
         }();
-        auto dir = eacp::FilePath {repo} / imageDirectory;
+        auto dir = store.home / imageDirectory;
         eacp::Files::createDirectories(dir);
 
         auto name = std::string {};
@@ -621,7 +633,7 @@ void Viewer::removeImages(const Annotation& note)
     for (const auto& text: texts)
     {
         for (const auto& path: imagesIn(text))
-            eacp::Files::removeFile(eacp::FilePath {repo} / path);
+            eacp::Files::removeFile(store.home / path);
     }
 }
 

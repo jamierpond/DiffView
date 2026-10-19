@@ -20,6 +20,9 @@ constexpr auto unchangedNote = std::string_view {"unchanged file"};
 constexpr auto updatedFrom = std::string_view {"updated from review "};
 constexpr auto replyMark = std::string_view {"#### reply"};
 constexpr auto freshMark = std::string_view {"new"};
+constexpr auto worktreeOpening = std::string_view {"Reviewed in the worktree at `"};
+constexpr auto renumberingOpening =
+    std::string_view {"Ids changed when the worktree stores were merged: "};
 
 const Json::Value* field(const Json::Value& object, std::string_view key)
 {
@@ -635,6 +638,14 @@ std::string printMarkdown(const Miro::JSON& review)
     auto against = "diffed against `" + baseLabel + "`"
                    + (baseSha.empty() ? "" : " at " + baseSha);
 
+    auto provenance = std::string {};
+
+    if (auto worktree = stringField(review, "worktree"); !worktree.empty())
+        provenance += std::string {worktreeOpening} + worktree + "`.\n";
+
+    if (auto renumbering = stringField(review, "renumbering"); !renumbering.empty())
+        provenance += std::string {renumberingOpening} + renumbering + ".\n";
+
     if (title == "draft" || title.empty())
     {
         // For the person writing it, not an agent: it hasn't been sent.
@@ -648,6 +659,7 @@ std::string printMarkdown(const Miro::JSON& review)
         out += "# DiffView reply · " + title + "\n\n";
         out += "A reply the reviewer sent on one thread, on this repo's changes "
                + against + ".\n";
+        out += provenance;
         out += "The thread is below in full; `new` marks the reply. Answer with "
                "`dv reply <id> \"text\"`; `dv resolve <id>` only once the work "
                "is done.\n\n";
@@ -656,6 +668,7 @@ std::string printMarkdown(const Miro::JSON& review)
     {
         out += "# DiffView review · " + title + "\n\n";
         out += "Review comments on this repo's changes, " + against + ".\n";
+        out += provenance;
         out += "Each `### path:lines · status · #id` heading is one comment: "
                "working-tree line numbers, `(old)` the base's, `(whole file)` the "
                "whole file.\n";
@@ -705,6 +718,8 @@ Miro::JSON parseMarkdown(std::string_view input)
     review["baseLabel"] = "";
     review["baseSha"] = "";
     review["reply"] = false;
+    review["worktree"] = "";
+    review["renumbering"] = "";
 
     auto lines = splitLines(input);
 
@@ -750,6 +765,22 @@ Miro::JSON parseMarkdown(std::string_view input)
 
                 if (line.starts_with("# DiffView reply · "))
                     review["reply"] = true;
+
+                if (line.starts_with(worktreeOpening))
+                {
+                    auto path = line.substr(worktreeOpening.size());
+                    review["worktree"] = path.substr(0, path.rfind('`'));
+                }
+
+                if (line.starts_with(renumberingOpening))
+                {
+                    auto note = line.substr(renumberingOpening.size());
+
+                    if (note.ends_with("."))
+                        note.pop_back();
+
+                    review["renumbering"] = note;
+                }
 
                 if (auto open = line.find("diffed against `");
                     open != std::string::npos)

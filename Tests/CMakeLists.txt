@@ -10,6 +10,7 @@ add_executable(DiffViewTests
         ReviewMarkdownTests.cpp
         ReviewTests.cpp
         SearchTests.cpp
+        StoreTests.cpp
         TextTests.cpp)
 target_link_libraries(DiffViewTests PRIVATE NanoTest NanoTestMain DiffViewCore)
 target_compile_definitions(DiffViewTests PRIVATE

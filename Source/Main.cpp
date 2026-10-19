@@ -3,6 +3,7 @@
 #include "Viewer.h"
 
 #include <Review.h>
+#include <Store.h>
 
 #include <eacp/Core/App/App.h>
 
@@ -201,6 +202,23 @@ std::optional<int> parseId(const std::string& text)
     return std::stoi(digits);
 }
 
+std::optional<diffview::StoreLayout> openStore(const std::string& root)
+{
+    auto store = diffview::findStore(root);
+
+    if (!store)
+        std::fprintf(
+            stderr, "dv: can't find the git directories of %s\n", root.c_str());
+
+    return store;
+}
+
+void printMergeNotes(const std::vector<std::string>& notes)
+{
+    for (const auto& note: notes)
+        std::fprintf(stderr, "dv: %s\n", note.c_str());
+}
+
 std::string readStdin()
 {
     return {std::istreambuf_iterator<char> {std::cin},
@@ -257,6 +275,13 @@ int runCommand(const std::string& command, int argc, char* argv[])
         return 1;
     }
 
+    auto store = openStore(*root);
+
+    if (!store)
+        return 1;
+
+    printMergeNotes(diffview::mergeWorktreeStores(*store));
+
     if (command == "monitor")
     {
         if (!positional.empty())
@@ -269,7 +294,7 @@ int runCommand(const std::string& command, int argc, char* argv[])
         if (arguments.values.contains("after"))
             options.after = arguments.values["after"];
 
-        return diffview::runMonitor(*root, options);
+        return diffview::runMonitor(*store, options);
     }
 
     if (command == "comments")
@@ -277,7 +302,7 @@ int runCommand(const std::string& command, int argc, char* argv[])
         if (!positional.empty())
             return usageError("unexpected " + positional.front(), command);
 
-        return diffview::runComments({*root, agent, arguments.flags["--open"]});
+        return diffview::runComments({*store, agent, arguments.flags["--open"]});
     }
 
     if (positional.empty())
@@ -297,7 +322,7 @@ int runCommand(const std::string& command, int argc, char* argv[])
         if (!positional.empty())
             return usageError("unexpected " + positional.front(), command);
 
-        return diffview::runShow(*root, *id);
+        return diffview::runShow(*store, *id);
     }
 
     auto text = arguments.values["message"];
@@ -309,7 +334,7 @@ int runCommand(const std::string& command, int argc, char* argv[])
         text = readStdin();
 
     auto options = diffview::ThreadOptions {
-        *root, *id, agent, arguments.flags["--force"], text};
+        *store, *id, agent, arguments.flags["--force"], text};
 
     return command == "reply" ? diffview::runReply(options)
                               : diffview::runResolve(options);
@@ -362,6 +387,13 @@ int main(int argc, char* argv[])
         return 1;
     }
 
+    auto store = openStore(*root);
+
+    if (!store)
+        return 1;
+
     options.repo = *root;
+    options.store = *store;
+    options.mergeNotes = diffview::mergeWorktreeStores(*store);
     return eacp::Apps::run<diffview::Viewer>(options);
 }

@@ -1,6 +1,7 @@
 #include "Agents.h"
 
 #include <Review.h>
+#include <Store.h>
 
 #include <algorithm>
 #include <array>
@@ -18,23 +19,43 @@ namespace
 {
 auto registered = std::array<char, 4096> {};
 
+// An agent between `dv monitor --once` runs is still working its threads.
+constexpr auto listeningGraceSeconds = std::time_t {600};
+
 bool isAlive(pid_t pid)
 {
     constexpr auto checkOnly = 0;
     return pid > 0 && (kill(pid, checkOnly) == 0 || errno == EPERM);
 }
+
+bool isListening(const std::filesystem::path& registration)
+{
+    auto in = std::ifstream {registration};
+    auto word = std::string {};
+    auto pid = pid_t {0};
+
+    if (!(in >> word >> pid) || word != "pid")
+        return false;
+
+    if (isAlive(pid))
+        return true;
+
+    auto stopped = std::time_t {0};
+
+    if (!(in >> word >> stopped) || word != "stopped")
+        return false;
+
+    return std::time(nullptr) - stopped < listeningGraceSeconds;
+}
 } // namespace
 
-void registerAgent(const std::string& repo, const std::string& name)
+void registerAgent(const std::string& store, const std::string& name)
 {
-    auto dir = std::filesystem::path {repo} / agentDirectory;
+    createStoreDirectory(store);
+
+    auto dir = std::filesystem::path {store} / agentDirectory;
     auto error = std::error_code {};
     std::filesystem::create_directories(dir, error);
-
-    auto own = std::filesystem::path {repo} / annotationDirectory / ".gitignore";
-
-    if (!std::filesystem::exists(own))
-        std::ofstream {own} << "*\n";
 
     auto path = (dir / name).string();
     std::snprintf(registered.data(), registered.size(), "%s", path.c_str());
@@ -55,6 +76,16 @@ void registerAgent(const std::string& repo, const std::string& name)
                     });
 }
 
+void markAgentStopped()
+{
+    if (registered[0] == 0)
+        return;
+
+    std::ofstream {registered.data()} << "pid 0\nstopped " << std::time(nullptr)
+                                      << "\n";
+    registered[0] = 0;
+}
+
 void unregisterAgent()
 {
     if (registered[0] != 0)
@@ -63,10 +94,10 @@ void unregisterAgent()
     registered[0] = 0;
 }
 
-std::vector<std::string> findListeningAgents(const std::string& repo)
+std::vector<std::string> findListeningAgents(const std::string& store)
 {
     auto names = std::vector<std::string> {};
-    auto dir = std::filesystem::path {repo} / agentDirectory;
+    auto dir = std::filesystem::path {store} / agentDirectory;
     auto error = std::error_code {};
 
     if (!std::filesystem::is_directory(dir, error))
@@ -74,11 +105,7 @@ std::vector<std::string> findListeningAgents(const std::string& repo)
 
     for (const auto& entry: std::filesystem::directory_iterator {dir, error})
     {
-        auto in = std::ifstream {entry.path()};
-        auto word = std::string {};
-        auto pid = pid_t {0};
-
-        if (in >> word >> pid && word == "pid" && isAlive(pid))
+        if (isListening(entry.path()))
             names.push_back(entry.path().filename().string());
     }
 

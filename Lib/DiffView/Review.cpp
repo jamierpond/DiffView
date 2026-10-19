@@ -111,11 +111,13 @@ bool hasFresh(const Annotation& comment)
 }
 } // namespace
 
-Reviews mergeReviews(const std::vector<ReviewFile>& rounds, const ReviewFile& draft)
+Reviews mergeReviews(const std::vector<ReviewFile>& rounds,
+                     const ReviewFile& draft,
+                     int reservedUpTo)
 {
     auto reviews = Reviews {};
     auto byId = std::map<int, Annotation> {};
-    auto nextId = 1;
+    auto nextId = reservedUpTo + 1;
 
     for (const auto& round: rounds)
         for (const auto& comment: round.comments)
@@ -134,6 +136,7 @@ Reviews mergeReviews(const std::vector<ReviewFile>& rounds, const ReviewFile& dr
                 comment.id = nextId++;
 
             comment.round = round.title;
+            comment.worktree = round.worktree;
             comment.draft = false;
 
             for (auto& reply: comment.replies)
@@ -156,6 +159,7 @@ Reviews mergeReviews(const std::vector<ReviewFile>& rounds, const ReviewFile& dr
 
         auto sent = byId.find(comment.id);
         comment.round = sent != byId.end() ? sent->second.round : std::string {};
+        comment.worktree = draft.worktree;
         comment.draft = true;
 
         for (auto& reply: comment.replies)
@@ -217,13 +221,26 @@ std::vector<std::string> keepRoundsUpTo(std::vector<std::string> ids,
     return ids;
 }
 
-RoundRoute routeRound(const ReviewFile& round, const std::string& agent)
+std::string findListeningOwner(const Annotation& comment,
+                               const std::vector<std::string>& listening)
+{
+    auto owner = findOwner(comment);
+
+    if (std::find(listening.begin(), listening.end(), owner) == listening.end())
+        return {};
+
+    return owner;
+}
+
+RoundRoute routeRound(const ReviewFile& round,
+                      const std::string& agent,
+                      const std::vector<std::string>& listening)
 {
     auto counts = RoundRoute {};
 
     for (const auto& comment: round.comments)
     {
-        auto owner = findOwner(comment);
+        auto owner = findListeningOwner(comment, listening);
         auto named = false;
 
         for (const auto& reply: comment.replies)
@@ -246,9 +263,13 @@ RoundRoute routeRound(const ReviewFile& round, const std::string& agent)
 std::string roundNotice(const std::string& id,
                         const RoundRoute& counts,
                         const std::string& agent,
+                        const std::string& worktree,
                         const std::string& path)
 {
     auto line = "dv: review round " + id + " submitted";
+
+    if (!worktree.empty())
+        line += " in " + worktree;
 
     if (!agent.empty())
         line += " · for @" + agent;
@@ -264,9 +285,13 @@ std::string roundNotice(const std::string& id,
 std::string replyNotice(const std::string& id,
                         const ReviewFile& round,
                         const std::string& agent,
+                        const std::string& worktree,
                         const std::string& path)
 {
     auto line = "dv: reply " + id;
+
+    if (!worktree.empty())
+        line += " in " + worktree;
 
     if (!round.comments.empty())
     {
@@ -377,12 +402,13 @@ std::optional<std::string>
         return "no comment #" + std::to_string(id);
 
     auto owner = findOwner(*found);
+    auto listeningOwner = findListeningOwner(*found, change.listening);
 
-    if (!owner.empty() && owner != change.from && !change.force)
+    if (!listeningOwner.empty() && owner != change.from && !change.force)
         return "#" + std::to_string(id) + " belongs to @" + owner
                + "; pass --force to answer it anyway";
 
-    if (owner.empty() && change.named)
+    if (listeningOwner.empty() && change.named)
         found->owner = change.from;
     else if (found->owner.empty())
         found->owner = owner;

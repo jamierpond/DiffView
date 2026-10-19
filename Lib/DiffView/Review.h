@@ -11,16 +11,18 @@
 
 namespace diffview
 {
-constexpr auto annotationDirectory = ".diffview";
+constexpr auto storeDirectoryName = ".diffview";
 
 // The Markdown files are the only store. latest.md is a copy of the newest
-// round, not a link: every agent and tool can read a plain file.
-constexpr auto draftFileName = ".diffview/draft.md";
-constexpr auto reviewDirectory = ".diffview/reviews";
-constexpr auto latestReviewFileName = ".diffview/latest.md";
+// round, not a link: every agent and tool can read a plain file. Names are
+// inside the store, except images: comments link them from the main worktree.
+constexpr auto draftFileName = "draft.md";
+constexpr auto reviewDirectory = "reviews";
+constexpr auto latestReviewFileName = "latest.md";
 constexpr auto imageDirectory = ".diffview/images";
-constexpr auto agentDirectory = ".diffview/agents";
-constexpr auto seenFileName = ".diffview/seen";
+constexpr auto agentDirectory = "agents";
+constexpr auto seenFileName = "seen";
+constexpr auto worktreeDirectoryName = "worktrees";
 
 // "2026-10-16-153012": sorts as it reads, so file order is time order.
 std::string roundId(std::int64_t epochMs);
@@ -44,7 +46,10 @@ struct Reviews
     bool renumbered = false;
 };
 
-Reviews mergeReviews(const std::vector<ReviewFile>& rounds, const ReviewFile& draft);
+// `reservedUpTo`: ids other worktrees' drafts already hold.
+Reviews mergeReviews(const std::vector<ReviewFile>& rounds,
+                     const ReviewFile& draft,
+                     int reservedUpTo = 0);
 
 std::optional<std::size_t> findPendingReply(const Annotation& comment);
 
@@ -68,17 +73,25 @@ struct RoundRoute
     bool wakes() const { return open > 0 || replied > 0; }
 };
 
-RoundRoute routeRound(const ReviewFile& round, const std::string& agent);
+// A thread whose owner isn't listening is routed as nobody's.
+RoundRoute routeRound(const ReviewFile& round,
+                      const std::string& agent,
+                      const std::vector<std::string>& listening);
+
+std::string findListeningOwner(const Annotation& comment,
+                               const std::vector<std::string>& listening);
 
 // One line per submitted round, for an agent's monitor to wake on.
 std::string roundNotice(const std::string& id,
                         const RoundRoute& counts,
                         const std::string& agent,
+                        const std::string& worktree,
                         const std::string& path);
 
 std::string replyNotice(const std::string& id,
                         const ReviewFile& round,
                         const std::string& agent,
+                        const std::string& worktree,
                         const std::string& path);
 
 ReviewFile makeReplyRound(Annotation thread,
@@ -105,6 +118,7 @@ struct ThreadChange
     bool resolve = false;
     std::string text;
     std::string time;
+    std::vector<std::string> listening;
 };
 
 std::optional<std::string>

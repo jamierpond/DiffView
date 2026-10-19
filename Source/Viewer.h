@@ -8,6 +8,7 @@
 #include <Git.h>
 #include <Keymap.h>
 #include <Review.h>
+#include <Store.h>
 #include <Telescope.h>
 #include <VimEditor.h>
 
@@ -34,6 +35,8 @@ std::int64_t nowMs();
 struct Options
 {
     std::string repo;
+    StoreLayout store;
+    std::vector<std::string> mergeNotes;
     git::BaseSpec base;
 };
 
@@ -117,6 +120,9 @@ private:
     void restoreCursor(const CursorKey& key);
     int annotationAtCursor() const;
     Annotation* annotation(int id);
+    int findNextAnnotationId() const;
+    std::optional<Annotation> findAnnotationInAnyWorktree(int id) const;
+    std::string describeCommentPlace(const Annotation& note) const;
     std::optional<LineRange> hunkRange(int row) const;
     int openCount() const;
     std::vector<Annotation> shownAnnotations() const;
@@ -203,6 +209,7 @@ private:
 
     Options options;
     std::string repo;
+    StoreLayout store;
     git::BaseSpec base;
     std::string baseSha;
 
@@ -223,7 +230,11 @@ private:
     ChangeTracker tracker;
     bool loaded = false;
 
+    // This worktree's; other worktrees' anchor in their own checkouts, so
+    // they are only listed.
     std::vector<Annotation> annotations;
+    std::vector<Annotation> otherWorktreeAnnotations;
+    int highestIdInOtherDrafts = 0;
     std::vector<std::string> rounds;
     std::vector<std::string> listening;
 
@@ -294,6 +305,7 @@ private:
     std::unique_ptr<ftxui::Loop> loop;
 
     std::unique_ptr<RepoWatcher> watcher;
+    std::unique_ptr<RepoWatcher> storeWatcher;
     eacp::Threads::Timer pump;
 };
 } // namespace diffview
