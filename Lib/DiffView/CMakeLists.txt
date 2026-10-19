@@ -1,16 +1,20 @@
 add_library(DiffViewCore STATIC
         Activity.cpp
+        AgentCli.cpp
         Annotations.cpp
         ChangeTracker.cpp
+        ClaudeCodeCli.cpp
         Diff.cpp
         DiffRows.cpp
         FileTree.cpp
+        GeminiCli.cpp
         Git.cpp
         Keymap.cpp
         Review.cpp
         ReviewMarkdown.cpp
         Search.cpp
         Store.cpp
+        StreamEvents.cpp
         Text.cpp
         Wake.cpp)
 

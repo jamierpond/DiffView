@@ -3,9 +3,11 @@ add_executable(DiffViewTests
         ActivityTests.cpp
         AnnotationsTests.cpp
         ChangeTrackerTests.cpp
+        ClaudeCodeCliTests.cpp
         DiffRowsTests.cpp
         DiffTests.cpp
         FileTreeTests.cpp
+        GeminiCliTests.cpp
         GitTests.cpp
         KeymapTests.cpp
         ReviewMarkdownTests.cpp

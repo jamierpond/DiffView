@@ -102,32 +102,41 @@ every listening agent, and whoever answers it takes it over.
 ### Waking an agent nobody is listening for
 
 When you send a round or a reply and no agent is listening, dv starts the
-owner's Claude Code session again, detached, in this worktree: `claude
---dangerously-skip-permissions -p --resume <session> "<the monitor line> Handle
-it with dv … as <name>, then exit."`, falling back to a fresh `claude -p` if
-the resume fails. Headless, nobody can answer a permission prompt, so without
-the flag the woken agent can't run `dv` at all. The session
-is the one the agent last ran `dv monitor --as <name>` from
-(`.diffview/sessions/<name>`). A session that is still open isn't resumed
-(two writers on one transcript); a fresh one is started and the status bar
-says so. Output goes to `.diffview/wakes/` (a linked worktree's to
-`.diffview/worktrees/<name>/wakes/`) as Claude's JSON event stream
-(`--output-format stream-json --verbose`), between a `dv-wake pid …
-threads …` line and a `dv-wake-exit <status>` one. While the wake runs, the
-UI follows its log and shows what it is doing at the bottom of the thread
-and in the status bar: `⠋ @dev is working · running dv show 46`, `·
-thinking`, `· editing Source/Foo.cpp`. The row goes when it exits, after
-showing `✗ … failed · exit 1` for a few seconds if it failed. Unowned
-threads wake no one.
+owner's agent session again, detached, in this worktree, in the CLI the agent
+ran `dv monitor --as <name>` from (`.diffview/sessions/<name>`): for Claude
+Code, `claude --dangerously-skip-permissions -p --resume <session> "<the
+monitor line> Handle it with dv … as <name>, then exit."`, falling back to a
+fresh `claude -p` if the resume fails. Headless, nobody can answer a
+permission prompt, so without the flag the woken agent can't run `dv` at all.
+A session that is still open isn't resumed (two writers on one transcript); a
+fresh one is started and the status bar says so. Output goes to
+`.diffview/wakes/` (a linked worktree's to `.diffview/worktrees/<name>/wakes/`)
+as the CLI's JSON event stream, between a `dv-wake pid … cli … threads …` line
+and a `dv-wake-exit <status>` one. While the wake runs, the UI follows its log
+and shows what it is doing at the bottom of the thread and in the status bar:
+`⠋ @dev is working · running dv show 46`, `· thinking`, `· editing
+Source/Foo.cpp`. The row goes when it exits, after showing `✗ … failed · exit
+1` for a few seconds if it failed. Unowned threads wake no one.
+
+| CLI | detected by | woken as | resumes |
+| --- | --- | --- | --- |
+| `claude` (Claude Code and compatible) | `CLAUDECODE` | `claude --dangerously-skip-permissions -p --output-format stream-json --verbose` | by `CLAUDE_CODE_SESSION_ID` |
+| `gemini` (Gemini CLI) | `GEMINI_CLI` | `gemini --yolo --output-format stream-json -p` | no: Gemini doesn't expose its session id, so wakes start fresh |
+
+Another CLI is one adapter in `Lib/DiffView` (see `ClaudeCodeCli.cpp`,
+`GeminiCli.cpp`: its commands, environment variables and a parser from its
+event stream to one line of status) and one line in the registry in
+`AgentCli.cpp`.
 
 Set it in `~/.config/diffview/config`, or per repo in `.diffview/config`
 (the repo's wins, as with git):
 
 ```
 wake = resume   # resume | fresh | off
+agent = claude  # claude | gemini: for agents whose CLI dv doesn't know
 wakeCommand = claude --dangerously-skip-permissions
-# run by /bin/sh as `<wakeCommand> -p --output-format stream-json --verbose
-# [--resume <id>] <prompt>`; yours replaces it whole
+# replaces the configured agent CLI's command; run by /bin/sh as
+# `<wakeCommand> <its headless flags> [--resume <id>] <prompt>`
 ```
 
 ### The files are the store

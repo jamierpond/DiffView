@@ -2,131 +2,16 @@
 #include "Text.h"
 #include "Wake.h"
 
-#include <Miro/Json.h>
-
 #include <charconv>
 #include <utility>
-#include <map>
 
 namespace diffview
 {
 namespace
 {
-using Miro::Json::Value;
-
-constexpr auto maxSummaryLength = 60;
 constexpr auto threadKey = std::string_view {"thread"};
 constexpr auto updatedKey = std::string_view {"updated"};
 constexpr auto doingKey = std::string_view {"doing"};
-
-struct ToolSummary
-{
-    std::string_view verb;
-    std::string_view argument;
-};
-
-const Value& getField(const Value& value, std::string_view key)
-{
-    static const auto missing = Value {};
-
-    if (!value.isObject())
-        return missing;
-
-    if (const auto* found = Miro::Json::find(value.asObject(), key))
-        return *found;
-
-    return missing;
-}
-
-std::string getString(const Value& value, std::string_view key)
-{
-    const auto& field = getField(value, key);
-
-    if (!field.isString())
-        return {};
-
-    return field.asString();
-}
-
-std::string shorten(std::string_view text)
-{
-    auto lines = splitLines(trim(text));
-
-    if (lines.empty())
-        return {};
-
-    const auto& first = lines.front();
-
-    if (codepointCount(first) <= maxSummaryLength && lines.size() == 1)
-        return first;
-
-    return wrap(first, maxSummaryLength - 1).front() + "…";
-}
-
-std::string makeRelative(const std::string& path, const std::string& worktree)
-{
-    auto prefix = worktree + "/";
-
-    if (!worktree.empty() && path.starts_with(prefix))
-        return path.substr(prefix.size());
-
-    return path;
-}
-
-std::string summariseToolUse(const Value& block, const std::string& worktree)
-{
-    static const auto tools = std::map<std::string, ToolSummary, std::less<>> {
-        {"Bash", {"running", "command"}},
-        {"Read", {"reading", "file_path"}},
-        {"Edit", {"editing", "file_path"}},
-        {"MultiEdit", {"editing", "file_path"}},
-        {"Write", {"writing", "file_path"}},
-        {"NotebookEdit", {"editing", "notebook_path"}},
-        {"Grep", {"searching for", "pattern"}},
-        {"Glob", {"finding", "pattern"}},
-        {"Agent", {"delegating:", "description"}},
-        {"Task", {"delegating:", "description"}},
-        {"WebFetch", {"fetching", "url"}},
-        {"WebSearch", {"searching the web for", "query"}},
-    };
-
-    auto name = getString(block, "name");
-    auto found = tools.find(name);
-
-    if (found == tools.end())
-        return shorten("using " + name);
-
-    const auto& [verb, key] = found->second;
-    auto argument = makeRelative(getString(getField(block, "input"), key), worktree);
-
-    return shorten(std::string {verb} + " " + argument);
-}
-
-std::optional<std::string> summariseAssistant(const Value& event,
-                                              const std::string& worktree)
-{
-    const auto& content = getField(getField(event, "message"), "content");
-
-    if (!content.isArray() || content.asArray().empty())
-        return std::nullopt;
-
-    const auto& block = content.asArray().back();
-    auto type = getString(block, "type");
-
-    if (type == "tool_use")
-        return summariseToolUse(block, worktree);
-
-    if (type == "thinking" || type == "redacted_thinking")
-        return "thinking";
-
-    if (type == "text")
-    {
-        if (auto said = shorten(getString(block, "text")); !said.empty())
-            return said;
-    }
-
-    return std::nullopt;
-}
 
 int parseNumber(std::string_view text)
 {
@@ -154,7 +39,8 @@ std::vector<std::string> splitWords(std::string_view text)
     return words;
 }
 
-// "dv-wake pid 123 agent dev threads 4 7": pairs, then the threads to the end.
+// "dv-wake pid 123 agent dev cli claude threads 4 7": pairs, then the threads
+// to the end.
 void readWakeHeader(WakeProgress& progress, std::string_view line)
 {
     auto words = splitWords(line);
@@ -173,6 +59,8 @@ void readWakeHeader(WakeProgress& progress, std::string_view line)
             progress.pid = parseNumber(words[i + 1]);
         else if (words[i] == "agent")
             progress.agent = words[i + 1];
+        else if (words[i] == "cli")
+            progress.cli = words[i + 1];
     }
 }
 
@@ -187,28 +75,11 @@ void readWakeLine(WakeProgress& progress,
         progress.exitCode = parseNumber(line.substr(exitPrefix.size()));
     else if (line.starts_with(headerPrefix))
         readWakeHeader(progress, line);
-    else if (auto doing = summariseStreamEvent(line, worktree))
+    else if (auto doing =
+                 getAgentCli(progress.cli).summariseStreamLine(line, worktree))
         progress.doing = *doing;
 }
 } // namespace
-
-std::optional<std::string> summariseStreamEvent(std::string_view line,
-                                                const std::string& worktree)
-{
-    auto event = Miro::Json::getParsedValue(line);
-    auto type = getString(event, "type");
-
-    if (type == "assistant")
-        return summariseAssistant(event, worktree);
-
-    if (type == "user")
-        return "thinking";
-
-    if (type == "system" && getString(event, "subtype") == "init")
-        return "starting";
-
-    return std::nullopt;
-}
 
 void readWakeLog(WakeProgress& progress,
                  std::string_view text,

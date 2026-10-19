@@ -19,9 +19,9 @@ ReviewFile makeRoundOwnedBy(const std::string& owner)
     return {"2026-10-18-210000", "HEAD", "abc", {comment}};
 }
 
-std::map<std::string, KnownSession> makeSessions(bool isClaudeAlive)
+std::map<std::string, KnownSession> makeSessions(bool isAgentAlive)
 {
-    return {{"dev", {{"session-1", 4242, "/r/main"}, isClaudeAlive}}};
+    return {{"dev", {{"claude", "session-1", 4242, "/r/main"}, isAgentAlive}}};
 }
 } // namespace
 
@@ -49,7 +49,7 @@ auto tWakeResume =
     auto launch = makeWakeLaunch(decisions[0], {}, "prompt", "/r/main", "/r/log");
     check(launch.arguments.size() == 8);
     check(launch.arguments[2]
-          == "echo dv-wake pid $$ agent \"$2\" threads $3; "
+          == "echo dv-wake pid $$ agent \"$2\" cli claude threads $3; "
              "claude --dangerously-skip-permissions -p --output-format stream-json "
              "--verbose --resume \"$4\" \"$1\" || "
              "claude --dangerously-skip-permissions -p --output-format stream-json "
@@ -70,7 +70,7 @@ auto tWakeOpenSession =
     auto launch = makeWakeLaunch(decisions[0], {}, "prompt", "/r/main", "/r/log");
     check(launch.arguments.size() == 7
           && launch.arguments[2]
-                 == "echo dv-wake pid $$ agent \"$2\" threads $3; "
+                 == "echo dv-wake pid $$ agent \"$2\" cli claude threads $3; "
                     "claude --dangerously-skip-permissions -p --output-format "
                     "stream-json --verbose \"$1\"; echo dv-wake-exit $?");
 };
@@ -108,13 +108,52 @@ auto tWakeConfig = test("Wake/the repo's config overrides the user's") = []
     check(user.mode == WakeMode::fresh && user.command == "/bin/stub --flag");
     check(repo.mode == WakeMode::off && repo.command == "/bin/stub --flag");
     check(parseWakeConfig("wake = sideways\n", {}).mode == WakeMode::resume);
+    check(parseWakeConfig("agent = gemini\n", {}).agentCli == "gemini");
+    check(parseWakeConfig("agent = cursor\n", {}).agentCli == "claude");
 };
 
 auto tAgentSession = test("Wake/an agent's session reads back") = []
 {
-    auto session =
-        parseAgentSession(formatAgentSession({"abc-123", 77, "/r/main perf"}));
+    auto session = parseAgentSession(
+        formatAgentSession({"gemini", "abc-123", 77, "/r/main perf"}));
 
-    check(session.sessionId == "abc-123" && session.claudePid == 77);
+    check(session.agentCli == "gemini");
+    check(session.sessionId == "abc-123" && session.agentPid == 77);
     check(session.worktree == "/r/main perf");
+};
+
+auto tWakeGeminiFresh =
+    test("Wake/a Gemini agent with no session id is woken fresh in Gemini") = []
+{
+    auto sessions = std::map<std::string, KnownSession> {
+        {"dev", {{"gemini", {}, 0, "/r/main"}, false}}};
+    auto decisions =
+        decideWakes(makeRoundOwnedBy("dev"), {}, sessions, WakeMode::resume);
+
+    check(decisions[0].kind == WakeKind::freshWithoutSession
+          && decisions[0].agentCli == "gemini");
+
+    auto launch = makeWakeLaunch(decisions[0], {}, "prompt", "/r/main", "/r/log");
+    check(launch.arguments.size() == 7
+          && launch.arguments[2]
+                 == "echo dv-wake pid $$ agent \"$2\" cli gemini threads $3; "
+                    "gemini --yolo --output-format stream-json -p \"$1\"; "
+                    "echo dv-wake-exit $?");
+};
+
+auto tWakeCommandOverride =
+    test("Wake/wakeCommand replaces only the configured agent CLI's command") = []
+{
+    auto config = parseWakeConfig("agent = gemini\nwakeCommand = /bin/stub\n", {});
+    auto decisions = decideWakes(
+        makeRoundOwnedBy("dev"), {}, makeSessions(false), WakeMode::resume);
+    auto claude =
+        makeWakeLaunch(decisions[0], config, "prompt", "/r/main", "/r/log");
+    auto unknown = WakeDecision {WakeKind::freshWithoutSession, "ops", {}, {35}, {}};
+    auto gemini = makeWakeLaunch(unknown, config, "prompt", "/r/main", "/r/log");
+
+    check(claude.arguments[2].find("; claude --dangerously-skip-permissions -p")
+          != std::string::npos);
+    check(gemini.arguments[2].find("; /bin/stub --output-format stream-json -p")
+          != std::string::npos);
 };

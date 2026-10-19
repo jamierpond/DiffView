@@ -9,8 +9,9 @@ namespace diffview
 {
 namespace
 {
+constexpr auto agentCliKey = std::string_view {"cli"};
 constexpr auto sessionKey = std::string_view {"session"};
-constexpr auto claudePidKey = std::string_view {"claude-pid"};
+constexpr auto agentPidKey = std::string_view {"agent-pid"};
 constexpr auto worktreeKey = std::string_view {"worktree"};
 
 std::optional<std::pair<std::string, std::string>> splitAt(const std::string& line,
@@ -67,20 +68,24 @@ WakeDecision decideWake(const std::string& agent,
                         WakeMode mode)
 {
     if (mode == WakeMode::off)
-        return {WakeKind::off, agent, {}, threads};
-
-    if (mode == WakeMode::fresh)
-        return {WakeKind::fresh, agent, {}, threads};
+        return {WakeKind::off, agent, {}, threads, {}};
 
     auto known = sessions.find(agent);
+    auto isKnown = known != sessions.end();
+    auto session = isKnown ? known->second.session : AgentSession {};
+    auto wake = [&](WakeKind kind, const std::string& sessionId)
+    { return WakeDecision {kind, agent, sessionId, threads, session.agentCli}; };
 
-    if (known == sessions.end() || known->second.session.sessionId.empty())
-        return {WakeKind::freshWithoutSession, agent, {}, threads};
+    if (mode == WakeMode::fresh)
+        return wake(WakeKind::fresh, {});
 
-    if (known->second.isClaudeAlive)
-        return {WakeKind::freshBesideOpenSession, agent, {}, threads};
+    if (session.sessionId.empty())
+        return wake(WakeKind::freshWithoutSession, {});
 
-    return {WakeKind::resumed, agent, known->second.session.sessionId, threads};
+    if (known->second.isAgentAlive)
+        return wake(WakeKind::freshBesideOpenSession, {});
+
+    return wake(WakeKind::resumed, session.sessionId);
 }
 
 std::string describeWake(const WakeDecision& decision)
@@ -120,6 +125,8 @@ WakeConfig parseWakeConfig(const std::string& text, WakeConfig config)
 
         if (key == "wake")
             config.mode = parseWakeMode(value).value_or(config.mode);
+        else if (key == "agent" && isKnownAgentCli(value))
+            config.agentCli = value;
         else if (key == "wakeCommand" && !value.empty())
             config.command = value;
     }
@@ -129,8 +136,9 @@ WakeConfig parseWakeConfig(const std::string& text, WakeConfig config)
 
 std::string formatAgentSession(const AgentSession& session)
 {
-    return std::string {sessionKey} + " " + session.sessionId + "\n"
-           + std::string {claudePidKey} + " " + std::to_string(session.claudePid)
+    return std::string {agentCliKey} + " " + session.agentCli + "\n"
+           + std::string {sessionKey} + " " + session.sessionId + "\n"
+           + std::string {agentPidKey} + " " + std::to_string(session.agentPid)
            + "\n" + std::string {worktreeKey} + " " + session.worktree + "\n";
 }
 
@@ -147,10 +155,12 @@ AgentSession parseAgentSession(const std::string& text)
 
         const auto& [key, value] = *field;
 
-        if (key == sessionKey)
+        if (key == agentCliKey)
+            session.agentCli = value;
+        else if (key == sessionKey)
             session.sessionId = value;
-        else if (key == claudePidKey)
-            session.claudePid = parseNumber(value);
+        else if (key == agentPidKey)
+            session.agentPid = parseNumber(value);
         else if (key == worktreeKey)
             session.worktree = value;
     }
@@ -169,7 +179,7 @@ std::vector<WakeDecision>
     for (const auto& agent: listening)
     {
         if (routeRound(round, agent, listening).wakes())
-            decisions.push_back({WakeKind::listening, agent, {}, {}});
+            decisions.push_back({WakeKind::listening, agent, {}, {}, {}});
     }
 
     if (!listening.empty())
@@ -232,22 +242,28 @@ WakeLaunch makeWakeLaunch(const WakeDecision& decision,
     for (auto thread: decision.threads)
         threads += (threads.empty() ? "" : " ") + std::to_string(thread);
 
-    auto claude = config.command + " -p --output-format stream-json --verbose";
-    auto fresh = claude + " \"$1\"";
+    auto cliName = decision.agentCli.empty() ? config.agentCli : decision.agentCli;
+    const auto& cli = getAgentCli(cliName);
+    auto command = cli.unattendedCommand;
+
+    if (cli.name == config.agentCli && !config.command.empty())
+        command = config.command;
+
+    auto fresh = makeAgentCommand(cli, command, "\"$1\"", {});
     auto run = fresh;
 
-    if (decision.kind == WakeKind::resumed)
-        run = claude + " --resume \"$4\" \"$1\" || " + fresh;
+    if (decision.kind == WakeKind::resumed && canResume(cli))
+        run = makeAgentCommand(cli, command, "\"$1\"", "\"$4\"") + " || " + fresh;
 
     auto script = "echo " + std::string {wakeHeaderWord}
-                  + " pid $$ agent \"$2\" threads $3; " + run + "; echo "
-                  + std::string {wakeExitWord} + " $?";
+                  + " pid $$ agent \"$2\" cli " + cli.name + " threads $3; " + run
+                  + "; echo " + std::string {wakeExitWord} + " $?";
     auto launch = WakeLaunch {
         worktree,
         logPath,
         {"/bin/sh", "-c", script, "dv-wake", prompt, decision.agent, threads}};
 
-    if (decision.kind == WakeKind::resumed)
+    if (decision.kind == WakeKind::resumed && canResume(cli))
         launch.arguments.push_back(decision.sessionId);
 
     return launch;

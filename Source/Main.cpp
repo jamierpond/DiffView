@@ -76,12 +76,13 @@ constexpr auto usage =
     "every command sees the whole repo from any of them.\n"
     "\n"
     "Nobody listening: a send resumes the owner's last `dv monitor` session\n"
-    "with `claude --dangerously-skip-permissions -p --resume`, adding\n"
-    "`--output-format stream-json --verbose`; the UI shows what it is doing\n"
-    "under the thread from its log in .diffview/wakes/.\n"
+    "headless in the agent CLI it ran in (claude, gemini), with every\n"
+    "permission granted; the UI shows what it is doing under the thread from\n"
+    "its log in .diffview/wakes/.\n"
     "~/.config/diffview/config or .diffview/config:\n"
     "  wake = resume|fresh|off\n"
-    "  wakeCommand = claude --dangerously-skip-permissions\n";
+    "  agent = claude|gemini        for agents with no known CLI\n"
+    "  wakeCommand = claude --dangerously-skip-permissions   replaces agent's\n";
 
 const std::map<std::string, std::string>& commandHelp()
 {
@@ -248,9 +249,9 @@ std::optional<diffview::StoreLayout> openStore(const std::string& root)
     return store;
 }
 
-std::string readEnvironment(const char* name)
+std::string readEnvironment(const std::string& name)
 {
-    const auto* value = std::getenv(name);
+    const auto* value = std::getenv(name.c_str());
 
     if (value == nullptr)
         return {};
@@ -258,12 +259,19 @@ std::string readEnvironment(const char* name)
     return value;
 }
 
-diffview::AgentSession readClaudeSession(const diffview::StoreLayout& store)
+diffview::AgentSession readAgentSession(const diffview::StoreLayout& store)
 {
     auto session = diffview::AgentSession {};
-    session.sessionId = readEnvironment("CLAUDE_CODE_SESSION_ID");
-    session.claudePid = std::atoi(readEnvironment("CLAUDE_PID").c_str());
     session.worktree = store.worktree.str();
+    auto cli = diffview::detectAgentCli(readEnvironment);
+
+    if (!cli)
+        return session;
+
+    auto pidText = readEnvironment(cli->processIdVariable);
+    session.agentCli = cli->name;
+    session.sessionId = readEnvironment(cli->sessionIdVariable);
+    session.agentPid = std::atoi(pidText.c_str());
     return session;
 }
 
@@ -359,7 +367,7 @@ int runCommand(const std::string& command, int argc, char* argv[])
         auto options = diffview::MonitorOptions {};
         options.once = arguments.flags["--once"];
         options.agent = agent;
-        options.session = readClaudeSession(*store);
+        options.session = readAgentSession(*store);
 
         if (arguments.values.contains("after"))
             options.after = arguments.values["after"];

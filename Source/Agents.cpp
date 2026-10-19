@@ -70,7 +70,7 @@ void registerAgent(const std::string& store,
 {
     createStoreDirectory(store);
 
-    if (!session.sessionId.empty())
+    if (!session.agentCli.empty())
         writeText(eacp::FilePath {store} / sessionDirectory / name,
                   formatAgentSession(session));
 
@@ -142,7 +142,7 @@ std::map<std::string, KnownSession> readKnownSessions(const std::string& store)
          eacp::Files::listFiles(eacp::FilePath {store} / sessionDirectory))
     {
         auto session = parseAgentSession(eacp::Files::readFile(path));
-        sessions[path.fileName()] = {session, isAlive(session.claudePid)};
+        sessions[path.fileName()] = {session, isAlive(session.agentPid)};
     }
 
     return sessions;
