@@ -395,7 +395,7 @@ std::optional<ReviewFile> resolutionsFrom(const ReviewFile& latest,
 }
 
 std::optional<std::string>
-    changeCommentThread(ReviewFile& round, int id, const CommentThreadChange& change)
+    changeThread(ReviewFile& round, int id, const ThreadChange& change)
 {
     auto found = std::find_if(round.comments.begin(),
                               round.comments.end(),

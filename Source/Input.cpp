@@ -116,9 +116,6 @@ bool Viewer::onEvent(const ftxui::Event& event)
     if (prompt != Prompt::none)
         return onPromptEvent(key);
 
-    if (focus == Pane::agent && isAgentPaneShown)
-        return onAgentInputEvent(event);
-
     if (key == "C-c")
     {
         keys.reset();
@@ -139,45 +136,25 @@ void Viewer::run(const Command& command)
     switch (command.action)
     {
         case Action::down:
-            if (focus == Pane::agent)
-                scrollTranscript(count);
-            else
-                focus == Pane::tree ? moveTree(count) : moveCursor(count);
+            focus == Pane::tree ? moveTree(count) : moveCursor(count);
             break;
         case Action::up:
-            if (focus == Pane::agent)
-                scrollTranscript(-count);
-            else
-                focus == Pane::tree ? moveTree(-count) : moveCursor(-count);
+            focus == Pane::tree ? moveTree(-count) : moveCursor(-count);
             break;
         case Action::top:
-            if (focus == Pane::agent)
-                scrollTranscript(-static_cast<int>(transcriptRows.size()));
-            else
-                focus == Pane::tree ? moveTree(-1000000) : jumpToRow(0);
+            focus == Pane::tree ? moveTree(-1000000) : jumpToRow(0);
             break;
         case Action::bottom:
-            if (focus == Pane::agent)
-                followTranscript();
-            else
-                focus == Pane::tree ? moveTree(1000000)
-                                    : jumpToRow(static_cast<int>(rows.size()) - 1);
+            focus == Pane::tree ? moveTree(1000000)
+                                : jumpToRow(static_cast<int>(rows.size()) - 1);
             break;
         case Action::halfPageDown:
-            if (focus == Pane::agent)
-                scrollTranscript(count * std::max(1, transcriptHeight / 2));
-            else
-                focus == Pane::tree
-                    ? moveTree(count * std::max(1, treeHeight / 2))
-                    : moveCursor(count * std::max(1, diffHeight / 2));
+            focus == Pane::tree ? moveTree(count * std::max(1, treeHeight / 2))
+                                : moveCursor(count * std::max(1, diffHeight / 2));
             break;
         case Action::halfPageUp:
-            if (focus == Pane::agent)
-                scrollTranscript(-count * std::max(1, transcriptHeight / 2));
-            else
-                focus == Pane::tree
-                    ? moveTree(-count * std::max(1, treeHeight / 2))
-                    : moveCursor(-count * std::max(1, diffHeight / 2));
+            focus == Pane::tree ? moveTree(-count * std::max(1, treeHeight / 2))
+                                : moveCursor(-count * std::max(1, diffHeight / 2));
             break;
         case Action::focusTree:
             focus = Pane::tree;
@@ -190,10 +167,7 @@ void Viewer::run(const Command& command)
                 focus = Pane::diff;
             break;
         case Action::togglePane:
-            cycleFocus();
-            break;
-        case Action::toggleAgentPane:
-            toggleAgentPane();
+            focus = focus == Pane::tree ? Pane::diff : Pane::tree;
             break;
         case Action::open:
             if (focus == Pane::tree
@@ -214,12 +188,6 @@ void Viewer::run(const Command& command)
                     focus = Pane::diff;
                 }
             }
-            else if (focus == Pane::diff
-                     && isCursorOn(RowKind::collapsedCommentThread))
-                setCommentThreadView(annotationAtCursor(),
-                                     CommentThreadView::recent);
-            else if (focus == Pane::diff && isCursorOn(RowKind::earlierReplies))
-                setCommentThreadView(annotationAtCursor(), CommentThreadView::all);
             else if (focus == Pane::diff)
             {
                 if (const auto* note = annotation(annotationAtCursor());
@@ -339,21 +307,6 @@ void Viewer::run(const Command& command)
             break;
         case Action::pickComments:
             openPicker(PickerKind::comments);
-            break;
-        case Action::toggleFold:
-            toggleFoldAtCursor();
-            break;
-        case Action::closeFold:
-            setCommentThreadView(annotationAtCursor(), CommentThreadView::collapsed);
-            break;
-        case Action::openFold:
-            setCommentThreadView(annotationAtCursor(), CommentThreadView::all);
-            break;
-        case Action::closeAllFolds:
-            setEveryCommentThreadView(CommentThreadView::collapsed);
-            break;
-        case Action::openAllFolds:
-            setEveryCommentThreadView(CommentThreadView::recent);
             break;
         case Action::help:
             modal = Modal::help;

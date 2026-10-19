@@ -284,9 +284,9 @@ auto tRouteUnlistenedOwner =
     check(routeRound(round, "ops", onlyOps).wakes());
     check(!routeRound(round, "ops", {"dev", "ops"}).wakes());
 
-    auto change = CommentThreadChange {
+    auto change = ThreadChange {
         "ops", true, false, false, "taking it", "2026-10-18 21:00", onlyOps};
-    check(!changeCommentThread(round, 35, change));
+    check(!changeThread(round, 35, change));
     check(round.comments[0].owner == "ops");
     check(round.comments[0].replies.back().author == "ops");
 };
@@ -331,20 +331,19 @@ auto tRoundsUpTo = test("Review/--after drops the rounds up to it") = []
     check(kept[1] == "2026-10-16-120000");
 };
 
-auto tChangeCommentThread =
-    test("Review/reply and resolve claim, refuse, force") = []
+auto tChangeThread = test("Review/reply and resolve claim, refuse, force") = []
 {
     auto round =
         ReviewFile {"r", {}, {}, {comment(1, "q"), comment(2, "@ops look")}};
 
-    auto change = CommentThreadChange {
+    auto change = ThreadChange {
         "dev", true, false, false, "on it", "2026-10-18 11:00", {"dev", "ops"}};
-    check(!changeCommentThread(round, 1, change));
+    check(!changeThread(round, 1, change));
     check(round.comments[0].owner == "dev");
     check(round.comments[0].replies.size() == 1);
     check(round.comments[0].replies[0].author == "dev");
 
-    auto refused = changeCommentThread(round, 2, change);
+    auto refused = changeThread(round, 2, change);
     check(refused && refused->find("@ops") != std::string::npos
           && refused->find("--force") != std::string::npos);
     check(round.comments[1].replies.empty());
@@ -352,17 +351,17 @@ auto tChangeCommentThread =
     change.force = true;
     change.resolve = true;
     change.text.clear();
-    check(!changeCommentThread(round, 2, change));
+    check(!changeThread(round, 2, change));
     check(round.comments[1].resolved && round.comments[1].owner == "ops");
     check(round.comments[1].replies.empty());
 
-    check(changeCommentThread(round, 9, change).has_value());
+    check(changeThread(round, 9, change).has_value());
 
     // Unnamed agents answer but don't claim.
-    auto unnamed = CommentThreadChange {};
+    auto unnamed = ThreadChange {};
     unnamed.text = "x";
     auto open = ReviewFile {"r", {}, {}, {comment(3, "q")}};
-    check(!changeCommentThread(open, 3, unnamed));
+    check(!changeThread(open, 3, unnamed));
     check(open.comments[0].owner.empty());
 };
 

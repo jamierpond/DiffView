@@ -85,17 +85,6 @@ no `S`: it becomes a one-thread round, `.diffview/reviews/<id>.md` headed
 `new`, and wakes the agent the thread belongs to (every agent, if nobody's).
 latest.md stays the last full round. New comments still wait for `S`.
 
-A reply on a resolved or withdrawn thread reopens it (`open, reopened`).
-
-A long thread shows its comment and only its last 5 replies, under a dim
-`⋯ 36 earlier replies · Enter to show all` row; Enter there, or `zo`, shows
-them all. `za` folds a thread to one line, `▸ #48 · you: huh? you should… ·
-3 replies` in its owner's colour, and back; `zc` folds it, `zM` folds every
-thread and `zR` unfolds them all. A folded thread still shows `· 1 new` for
-agents' replies since it was folded, and the working row's spinner. Enter on
-it unfolds it. Folding isn't resolving: it is this worktree's view only,
-kept beside the seen state (`.diffview/folds`).
-
 A resolved thread whose newest reply is an agent's stays open in the diff
 until the cursor has been on it (`.diffview/seen` remembers), so an answer
 isn't folded away before you read it.
@@ -104,59 +93,7 @@ isn't folded away before you read it.
 after the status. An unaddressed thread is everyone's until an agent
 answers it, which claims it. An agent can't answer another's thread without
 `--force`. Agents waiting with `dv monitor --as <name>` show in the status
-bar (`◉ @name`) while their monitor runs. After a `--once` monitor exits
-the agent is busy acting on it, and still counts as listening while the
-`claude` or `gemini` process it ran under lives (`dv monitor` records it);
-sends wait in the store for its next `--once --after`. A thread whose owner
-isn't listening is everyone's again: it wakes every listening agent, and
-whoever answers it takes it over.
-
-### The responder: dv's own agent
-
-Whatever no listening agent will take goes to dv's own agent, the
-responder (`@dv`): unowned threads when nobody is listening, threads whose
-owner isn't listening, and every thread it owns. Agents you run with `dv
-monitor --as <name>` keep their threads as before.
-
-The UI starts it on the first send that needs it: one agent CLI session,
-headless, with every permission granted (nobody is there to answer a
-prompt), for Claude Code `claude --dangerously-skip-permissions -p
---input-format stream-json --output-format stream-json --verbose`. Each send
-for it is written to its stdin as a user message, the line `dv monitor --as
-dv` would print plus "Handle it with dv comments/show/reply/resolve as dv.",
-so it keeps its context from one to the next; sends that arrive while it
-works wait their turn. It runs in the main worktree: one responder per
-repo, and Claude Code resumes sessions by working directory. While it runs
-it is registered as listening, so agents and `dv comments` see `@dv`, and
-any other dv open on the repo leaves the sends to it.
-
-The UI shows what it is doing at the bottom of the thread and in the status
-bar, straight from its output: `⠋ @dv is working · running dv show 46`, `·
-thinking`, `· editing Source/Foo.cpp`. Its output and what dv did with it go
-to `.diffview/responder/dv.log`; its session id to `dv.session`, and the
-next dv resumes that session (a new one if it can't be resumed). It is
-stopped when dv quits, and can't outlive it: its stdin is a pipe from dv,
-and it ends when that closes. If it crashes it is restarted once, with the
-message it was working on, and the status bar says so; a second crash
-stops it, shown in red in the status bar until dv restarts.
-
-| CLI | session | resumes |
-| --- | --- | --- |
-| `claude` (Claude Code and compatible) | one process, messages on stdin | by session id |
-| `gemini` (Gemini CLI) | can't read messages once started: a fresh `gemini --yolo --output-format stream-json -p <message>` per send, one at a time | no |
-
-Another CLI is one adapter in `Lib/DiffView` (see `ClaudeCodeCli.cpp`,
-`GeminiCli.cpp`: its command, flags and a parser from its event stream to
-one line of status) and one line in the registry in `AgentCli.cpp`.
-
-Set it in `~/.config/diffview/config`, or per repo in `.diffview/config`
-(the repo's wins, as with git):
-
-```
-responder = on       # on | off
-agent = claude       # claude | gemini
-responderName = dv
-```
+bar (`◉ @name`).
 
 ### The files are the store
 
@@ -235,7 +172,6 @@ around the working directory) and `dv <command> --help` has an example.
 | `dv show <id>` | One thread: the code block, the comment, every reply |
 | `dv reply <id> [-m] "<text>"` | Answer (text from stdin if not given) |
 | `dv resolve <id> ["<note>"]` | Resolve, with an optional closing note |
-| `dv status <id> "<text>"` / `--done` | Say what you're doing on a thread; the UI shows it live under it |
 
 The loop: run the `monitor` as a background shell task, so it costs nothing
 while nobody reviews (a watcher tool that times out would be re-armed all
@@ -257,35 +193,10 @@ so nothing slips in between. With `--as`, rounds holding nothing for you
 (only other agents' threads) are skipped; without it every round counts.
 Plain `dv monitor` still streams a line per round until killed.
 
-While working a thread, `dv status <id> --as dev "running the tests"`
-shows `⠋ @dev is working · running the tests` under it in the UI. It lives
-in `.diffview/status/<name>`, one per agent, and goes with `dv status <id>
---done` or after five minutes without an update.
-
 `.diffview` has its own `.gitignore` (`*`), so none of it shows up in `git
 status`, the diff, or an agent's `git add -A`. Images pasted into comments
-live in `.diffview/images/`, linked relative to the main worktree.
-
-### Worktrees
-
-There is one `.diffview` per repo, laid out as git lays out `.git` for
-worktrees. It lives in the main worktree and holds what the repo shares:
-rounds, threads and their ids, the agents listening, `latest.md` (the
-newest full round from any worktree). A linked worktree's own state, its
-draft and what you've seen, is in `.diffview/worktrees/<name>/`, as git
-keeps its HEAD and index in `.git/worktrees/<name>/`; the main worktree's
-is in `.diffview/` itself. Each round says which worktree it was reviewed
-in.
-
-`dv comments`, `show`, `reply`, `resolve` and `monitor` work from any
-worktree and see the whole repo; threads from another worktree are labelled
-`[name]`. The UI anchors only its own worktree's comments (the lines are in
-that checkout) and lists the others in `Space pc`.
-
-A linked worktree's own `.diffview` from an older dv is merged into the
-shared one the first time dv runs in the repo, and removed. Ids another
-worktree already uses are renumbered, and the round says so ("Ids changed
-when the worktree stores were merged: #3 is now #41").
+live in `.diffview/images/`. Files from older versions (`annotations.md`,
+`annotations.json`) are imported once and kept, renamed.
 
 ## Build
 

@@ -1,4 +1,3 @@
-#include "Agents.h"
 #include "Clipboard.h"
 #include "Viewer.h"
 
@@ -10,7 +9,6 @@
 
 #include <algorithm>
 #include <cctype>
-#include <ctime>
 
 namespace diffview
 {
@@ -61,8 +59,6 @@ std::string editorKey(const ftxui::Event& event)
 
     return {};
 }
-
-constexpr auto agentInputScrollRows = 1;
 
 std::string trimmedEnd(std::string text)
 {
@@ -132,7 +128,7 @@ void Viewer::loadStore()
 
     rounds = std::move(merged.rounds);
     lastRoundsSignature = roundsSignature();
-    pinUnseenCommentThreads();
+    pinUnseenThreads();
 
     if (merged.renumbered)
         saveStore();
@@ -192,7 +188,7 @@ void Viewer::submitReview()
     saveStore();
     rebuildRows();
     say("Submitted " + std::to_string(round.comments.size()) + " comments → "
-        + routeToAgents(round));
+        + (root / latestReviewFileName).str());
 }
 
 void Viewer::sendReply(Annotation& note, const std::string& text)
@@ -212,8 +208,7 @@ void Viewer::sendReply(Annotation& note, const std::string& text)
     round.worktree = store.worktree.str();
 
     eacp::Files::createDirectories(root / reviewDirectory);
-    auto path = root / reviewDirectory / (id + ".md");
-    writeText(path, toMarkdown(round));
+    writeText(root / reviewDirectory / (id + ".md"), toMarkdown(round));
 
     note.replies.push_back({reviewerName, time, text, false});
     note.round = id;
@@ -233,30 +228,12 @@ void Viewer::sendReply(Annotation& note, const std::string& text)
     rounds.push_back(id);
     lastRoundsSignature = roundsSignature();
 
-    say("Sent reply on #" + std::to_string(note.id) + " → " + routeToAgents(round));
+    auto owner = findListeningOwner(note, listening);
+    auto to = owner.empty() ? std::string {"every agent"} : "@" + owner;
+    say("Sent reply on #" + std::to_string(note.id) + " → " + to);
 }
 
-std::string Viewer::routeToAgents(const ReviewFile& round)
-{
-    listening = findListeningAgents(store.directory.str());
-    auto config = options.readResponderConfig();
-    auto name = std::string {};
-
-    if (config.isEnabled)
-        name = responder ? responder->getName() : config.name;
-
-    auto route = routeSend(round, listening, name);
-    deliverNewRounds();
-
-    if (responder && responder->getFailure()
-        && !route.responderCommentThreads.empty())
-        return describeSendRoute({route.listeners, {}}, name) + " (@" + name
-               + " stopped)";
-
-    return describeSendRoute(route, name);
-}
-
-std::string Viewer::commentThreadKey(const Annotation& note)
+std::string Viewer::threadKey(const Annotation& note)
 {
     return std::to_string(note.id) + " " + std::to_string(note.replies.size());
 }
@@ -265,22 +242,20 @@ bool Viewer::hasUnseenAgentReply(const Annotation& note) const
 {
     return note.resolved && !note.withdrawn && !note.replies.empty()
            && note.replies.back().author != reviewerName
-           && !seenCommentThreads.contains(commentThreadKey(note));
+           && !seenThreads.contains(threadKey(note));
 }
 
-void Viewer::pinUnseenCommentThreads()
+void Viewer::pinUnseenThreads()
 {
     auto seen = eacp::Files::readFile(store.worktreeDirectory / seenFileName);
 
     for (const auto& line: splitLines(seen))
-        seenCommentThreads.insert(line);
-
-    loadCommentThreadFolds();
+        seenThreads.insert(line);
 
     for (const auto& note: annotations)
     {
         if (hasUnseenAgentReply(note))
-            pinnedCommentThreads.insert(note.id);
+            pinnedThreads.insert(note.id);
     }
 }
 
@@ -289,57 +264,9 @@ void Viewer::markSeen(const Annotation& note)
     if (!hasUnseenAgentReply(note))
         return;
 
-    seenCommentThreads.insert(commentThreadKey(note));
+    seenThreads.insert(threadKey(note));
     eacp::Files::appendFile(store.worktreeDirectory / seenFileName,
-                            commentThreadKey(note) + "\n");
-}
-
-void Viewer::loadCommentThreadFolds()
-{
-    commentThreadFolds = parseCommentThreadFolds(
-        eacp::Files::readFile(store.worktreeDirectory / foldsFileName));
-}
-
-void Viewer::setCommentThreadView(int id, CommentThreadView view)
-{
-    const auto* note = annotation(id);
-
-    if (note == nullptr)
-        return;
-
-    if (view == CommentThreadView::recent)
-        commentThreadFolds.erase(id);
-    else
-        commentThreadFolds[id] = {view, note->replies.size()};
-
-    eacp::Files::createDirectories(store.worktreeDirectory);
-    writeText(store.worktreeDirectory / foldsFileName,
-              formatCommentThreadFolds(commentThreadFolds));
-    rebuildRows();
-}
-
-void Viewer::setEveryCommentThreadView(CommentThreadView view)
-{
-    for (const auto& note: annotations)
-        setCommentThreadView(note.id, view);
-}
-
-bool Viewer::isCursorOn(RowKind kind) const
-{
-    if (diffCursor < 0 || diffCursor >= static_cast<int>(rows.size()))
-        return false;
-
-    return rows[static_cast<std::size_t>(diffCursor)].kind == kind;
-}
-
-void Viewer::toggleFoldAtCursor()
-{
-    auto id = annotationAtCursor();
-
-    if (findFold(commentThreadFolds, id).view == CommentThreadView::collapsed)
-        setCommentThreadView(id, CommentThreadView::recent);
-    else
-        setCommentThreadView(id, CommentThreadView::collapsed);
+                            threadKey(note) + "\n");
 }
 
 void Viewer::annotateAtCursor(bool wholeHunk)
@@ -615,7 +542,6 @@ void Viewer::closeEditor(bool)
     }
 
     auto id = editingId != 0 ? editingId : replyCommentId.value_or(0);
-    auto wasReplying = replyCommentId.has_value();
     editing = false;
     editingId = 0;
     replyCommentId.reset();
@@ -626,18 +552,9 @@ void Viewer::closeEditor(bool)
     if (id == 0)
         return;
 
-    if (wasReplying)
-    {
-        moveCursorToEndOfCommentThread(id);
-        return;
-    }
-
-    if (isCursorInCommentThread(id))
-        return;
-
     for (std::size_t i = 0; i < rows.size(); ++i)
     {
-        if (isCommentThreadStart(rows[i]) && rows[i].annotation == id)
+        if (rows[i].kind == RowKind::annotationTop && rows[i].annotation == id)
         {
             diffCursor = static_cast<int>(i);
             break;
@@ -645,52 +562,41 @@ void Viewer::closeEditor(bool)
     }
 }
 
-bool Viewer::isCursorInCommentThread(int id) const
-{
-    if (diffCursor < 0 || diffCursor >= static_cast<int>(rows.size()))
-        return false;
-
-    return rows[static_cast<std::size_t>(diffCursor)].annotation == id;
-}
-
-void Viewer::moveCursorToEndOfCommentThread(int id)
-{
-    for (std::size_t i = 0; i < rows.size(); ++i)
-    {
-        if (rows[i].annotation == id && rows[i].kind == RowKind::annotationText)
-            diffCursor = static_cast<int>(i);
-    }
-}
-
 void Viewer::pasteIntoEditor()
-{
-    auto findCommentId = [&]
-    {
-        if (editingId != 0)
-            return editingId;
-        if (replyCommentId)
-            return *replyCommentId;
-        if (pendingAnnotation)
-            return pendingAnnotation->id;
-
-        return findNextAnnotationId();
-    };
-
-    if (auto path = pasteFromClipboard(
-            editor, [&] { return std::to_string(findCommentId()); }))
-        pastedImages.push_back(*path);
-}
-
-std::optional<std::string>
-    Viewer::pasteFromClipboard(vim::Editor& target,
-                               const std::function<std::string()>& findImageStem)
 {
     if (auto png = clipboard::imagePng())
     {
-        auto path = writePastedImage(store.home, findImageStem(), *png);
-        target.insertText(makeImageLink(path));
+        auto id = [&]
+        {
+            if (editingId != 0)
+                return editingId;
+            if (replyCommentId)
+                return *replyCommentId;
+            if (pendingAnnotation)
+                return pendingAnnotation->id;
+
+            return findNextAnnotationId();
+        }();
+        auto dir = store.home / imageDirectory;
+        eacp::Files::createDirectories(dir);
+
+        auto name = std::string {};
+
+        for (auto n = 1;; ++n)
+        {
+            name = std::to_string(id) + "-" + std::to_string(n) + ".png";
+
+            if (!eacp::Files::exists(dir / name))
+                break;
+        }
+
+        writeText(dir / name, *png);
+
+        auto path = std::string {imageDirectory} + "/" + name;
+        pastedImages.push_back(path);
+        editor.insertText("![image](" + path + ")");
         say("Pasted image " + path);
-        return path;
+        return;
     }
 
     auto text = eacp::Clipboard::getText();
@@ -698,178 +604,10 @@ std::optional<std::string>
     if (text.empty())
     {
         say("Clipboard is empty");
-        return std::nullopt;
-    }
-
-    target.insertText(text);
-    return std::nullopt;
-}
-
-// The agent pane's input is a vim buffer like the reply editor's. Around it:
-// Tab or Esc in normal mode leaves (the draft stays), Enter sends, and the
-// transcript scrolls with the arrows in insert mode or j k Ctrl-U Ctrl-D G in
-// normal mode, where za unfolds the subagent block in view.
-bool Viewer::onAgentInputEvent(const ftxui::Event& event)
-{
-    using ftxui::Event;
-
-    if (event == Event::Custom)
-        return false;
-
-    auto mode = agentInput.mode();
-    auto isInsert = mode == vim::Mode::insert;
-    auto isNormal = mode == vim::Mode::normal;
-    auto halfPage = std::max(1, transcriptHeight / 2);
-
-    if (event == Event::Tab)
-    {
-        cycleFocus();
-        return true;
-    }
-
-    if (event == Event::F1)
-    {
-        modal = Modal::help;
-        return true;
-    }
-
-    if (event == Event::Return && (isInsert || isNormal))
-    {
-        sendAgentInput();
-        return true;
-    }
-
-    if (event == Event::PageUp)
-    {
-        scrollTranscript(-halfPage);
-        return true;
-    }
-
-    if (event == Event::PageDown)
-    {
-        scrollTranscript(halfPage);
-        return true;
-    }
-
-    if (isInsert && event == Event::ArrowUp)
-    {
-        scrollTranscript(-agentInputScrollRows);
-        return true;
-    }
-
-    if (isInsert && event == Event::ArrowDown)
-    {
-        scrollTranscript(agentInputScrollRows);
-        return true;
-    }
-
-    if (isNormal && event == Event::Character("a") && isTranscriptFoldKeyPending)
-    {
-        isTranscriptFoldKeyPending = false;
-        toggleSubagentBlockInView();
-        return true;
-    }
-
-    isTranscriptFoldKeyPending = false;
-
-    if (isNormal && event == Event::Character("z"))
-    {
-        isTranscriptFoldKeyPending = true;
-        return true;
-    }
-
-    if (isNormal)
-    {
-        if (event == Event::CtrlU)
-        {
-            scrollTranscript(-halfPage);
-            return true;
-        }
-
-        if (event == Event::CtrlD)
-        {
-            scrollTranscript(halfPage);
-            return true;
-        }
-
-        if (event == Event::Character("j") || event == Event::ArrowDown)
-        {
-            scrollTranscript(agentInputScrollRows);
-            return true;
-        }
-
-        if (event == Event::Character("k") || event == Event::ArrowUp)
-        {
-            scrollTranscript(-agentInputScrollRows);
-            return true;
-        }
-
-        if (event == Event::Character("G"))
-        {
-            followTranscript();
-            return true;
-        }
-
-        if (event == Event::CtrlC)
-        {
-            requestQuit();
-            return true;
-        }
-
-        if (event == Event::Escape)
-        {
-            focus = Pane::diff;
-            return true;
-        }
-    }
-
-    auto key = editorKey(event);
-
-    if (key.empty())
-        return true;
-
-    switch (agentInput.feed(key))
-    {
-        case vim::Outcome::none:
-            break;
-        case vim::Outcome::save:
-        case vim::Outcome::saveAndClose:
-            sendAgentInput();
-            break;
-        case vim::Outcome::close:
-            focus = Pane::diff;
-            break;
-        case vim::Outcome::discard:
-            agentInput.setText({});
-            say("Discarded");
-            break;
-        case vim::Outcome::paste:
-            pasteIntoAgentInput();
-            break;
-    }
-
-    return true;
-}
-
-void Viewer::sendAgentInput()
-{
-    auto typed = trim(agentInput.text());
-
-    if (typed.empty())
         return;
+    }
 
-    agentInput.setText({});
-
-    if (agentInput.mode() != vim::Mode::insert)
-        agentInput.feed("i");
-
-    sendTypedMessage(typed);
-}
-
-void Viewer::pasteIntoAgentInput()
-{
-    pasteFromClipboard(agentInput,
-                       [] { return "chat-" + std::to_string(std::time(nullptr)); });
+    editor.insertText(text);
 }
 
 void Viewer::editAtCursor()
@@ -882,9 +620,6 @@ void Viewer::editAtCursor()
         say("No comment here");
         return;
     }
-
-    if (findFold(commentThreadFolds, id).view == CommentThreadView::collapsed)
-        setCommentThreadView(id, CommentThreadView::recent);
 
     editingId = id;
     replyCommentId.reset();
@@ -963,9 +698,6 @@ void Viewer::replyAtCursor()
         say("No comment here");
         return;
     }
-
-    if (findFold(commentThreadFolds, id).view == CommentThreadView::collapsed)
-        setCommentThreadView(id, CommentThreadView::recent);
 
     auto pending = findPendingReply(*note);
     replyCommentId = id;

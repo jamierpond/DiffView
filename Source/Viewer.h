@@ -1,6 +1,5 @@
 #pragma once
 
-#include "Agents.h"
 #include "RepoWatcher.h"
 
 #include <ChangeTracker.h>
@@ -8,11 +7,9 @@
 #include <FileTree.h>
 #include <Git.h>
 #include <Keymap.h>
-#include <Responder.h>
 #include <Review.h>
 #include <Store.h>
 #include <Telescope.h>
-#include <Transcript.h>
 #include <VimEditor.h>
 
 #include <eacp/Core/Threads/Async.h>
@@ -22,7 +19,6 @@
 #include <ftxui/component/component.hpp>
 #include <ftxui/component/loop.hpp>
 
-#include <functional>
 #include <map>
 #include <memory>
 #include <optional>
@@ -33,7 +29,6 @@
 namespace diffview
 {
 constexpr auto recentWindowMs = std::int64_t {10000};
-constexpr auto spinnerFrameMs = std::int64_t {80};
 
 std::int64_t nowMs();
 
@@ -42,12 +37,6 @@ struct Options
     std::string repo;
     StoreLayout store;
     std::vector<std::string> mergeNotes;
-    std::function<ResponderConfig()> readResponderConfig = []
-    { return ResponderConfig {}; };
-    StartAgentProcess startAgentProcess = [](const AgentLaunch&)
-    { return std::unique_ptr<AgentProcess> {}; };
-    PostToInbox postToInbox = [](const InboxAddress&, const std::string&)
-    { return false; };
     git::BaseSpec base;
 };
 
@@ -63,8 +52,7 @@ private:
     enum class Pane
     {
         tree,
-        diff,
-        agent
+        diff
     };
 
     // The comment editor isn't one: it is drawn inline (`editing`).
@@ -99,7 +87,7 @@ private:
         int oldLine = 0;
         std::string text;
         int annotation = 0;
-        int commentThreadOffset = 0;
+        int threadOffset = 0;
         int hunk = -1;
     };
 
@@ -112,29 +100,7 @@ private:
 
     // Viewer.cpp
     void tick();
-    void pollActivities(std::int64_t now);
-    void pollResponder(std::int64_t now);
-    void pollTranscript(std::int64_t now);
-    void readTranscriptTail();
-    void toggleAgentPane();
-    void cycleFocus();
-    void scrollTranscript(int delta);
-    void followTranscript();
-    void toggleSubagentBlockInView();
-    bool onAgentInputEvent(const ftxui::Event& event);
-    void sendAgentInput();
-    void pasteIntoAgentInput();
-    void sendTypedMessage(const std::string& text);
-    void postTypedMessageToAgent(const TypedMessageRoute& route,
-                                 const std::string& text);
-    void withdrawTypedMessages(const std::vector<std::string>& typed);
-    bool hasTranscriptSpinner() const;
-    void deliverNewRounds();
-    bool isPreviousResponderFinishing(const ResponderConfig& config) const;
-    bool claimResponder(const ResponderConfig& config);
-    void finishResponder();
     void onRepoChanged(const std::vector<std::string>& paths);
-    void onStoreChanged(const std::vector<std::string>& paths);
     void scheduleRefresh(int delayMs);
     eacp::Threads::Async<void> refresh();
     void apply(std::vector<FileDiff> diffs, const std::string& sha);
@@ -155,7 +121,6 @@ private:
     int annotationAtCursor() const;
     Annotation* annotation(int id);
     int findNextAnnotationId() const;
-    std::string routeToAgents(const ReviewFile& round);
     std::optional<Annotation> findAnnotationInAnyWorktree(int id) const;
     std::string describeCommentPlace(const Annotation& note) const;
     std::optional<LineRange> hunkRange(int row) const;
@@ -183,15 +148,10 @@ private:
     void saveStore();
     void submitReview();
     void sendReply(Annotation& note, const std::string& text);
-    static std::string commentThreadKey(const Annotation& note);
+    static std::string threadKey(const Annotation& note);
     bool hasUnseenAgentReply(const Annotation& note) const;
-    void pinUnseenCommentThreads();
+    void pinUnseenThreads();
     void markSeen(const Annotation& note);
-    void loadCommentThreadFolds();
-    void setCommentThreadView(int id, CommentThreadView view);
-    void setEveryCommentThreadView(CommentThreadView view);
-    void toggleFoldAtCursor();
-    bool isCursorOn(RowKind kind) const;
     void annotateAtCursor(bool wholeHunk);
     void commentOnFile();
     void commentGeneral();
@@ -199,14 +159,7 @@ private:
     bool onEditorEvent(const ftxui::Event& event);
     bool commitEditor();
     void closeEditor(bool keepPastedImages);
-    bool isCursorInCommentThread(int id) const;
-    void moveCursorToEndOfCommentThread(int id);
     void pasteIntoEditor();
-    // An image is written as <stem>-<n>.png and linked; text goes in as it is.
-    // The image's path when there was one.
-    std::optional<std::string>
-        pasteFromClipboard(vim::Editor& target,
-                           const std::function<std::string()>& findImageStem);
     void editAtCursor();
     void deleteAtCursor();
     void toggleResolvedAtCursor();
@@ -239,17 +192,12 @@ private:
     ftxui::Element render();
     ftxui::Element renderTree(int width, int height);
     ftxui::Element renderDiff(int width, int height);
-    ftxui::Element renderAgentPane(int width, int height);
-    ftxui::Element renderTranscriptRow(const TranscriptRow& row, int width);
-    ftxui::Elements renderAgentInput(int width);
     ftxui::Element renderRow(const DiffRow& row, int index, int width);
-    ftxui::Element renderCommentThreadRow(const DiffRow& row,
-                                          const Annotation& note,
-                                          int index,
-                                          ftxui::Element shown);
+    ftxui::Element renderThreadRow(const DiffRow& row,
+                                   const Annotation& note,
+                                   int index,
+                                   ftxui::Element shown);
     ftxui::Element renderStatus();
-    ftxui::Element renderActivity(const AgentActivity& activity);
-    std::optional<AgentActivity> findActivityOn(int thread) const;
     ftxui::Element renderPrompt();
     ftxui::Element renderModal();
     ftxui::Element renderPicker();
@@ -290,48 +238,14 @@ private:
     std::vector<std::string> rounds;
     std::vector<std::string> listening;
 
-    std::optional<Responder> responder;
-    std::vector<std::string> deliveredRounds;
-    // Held while the previous responder's CLI finishes, then sent.
-    std::vector<std::string> roundsAwaitingResponder;
-    bool isWaitingForPreviousResponder = false;
-    std::int64_t lastRoundPoll = 0;
-    bool isResponderFailureHandled = false;
-    std::vector<AgentActivity> activities;
-    std::int64_t lastActivityPoll = 0;
-    std::int64_t lastSpinnerRedraw = 0;
-    // Read once per render, so every spinner shows the same frame.
-    std::int64_t frameTime = 0;
-
-    // The responder's stream, read from its file: any dv can show it, not just
-    // the one running it.
-    bool isAgentPaneShown = true;
-    std::optional<Transcript> transcript;
-    std::string transcriptAgentName;
-    std::string transcriptPath;
-    std::uint64_t transcriptOffset = 0;
-    std::int64_t lastTranscriptPoll = 0;
-    std::vector<TranscriptRow> transcriptRows;
-    bool isTranscriptLayoutDirty = true;
-    int transcriptWidth = 0;
-    int transcriptTop = 0;
-    int transcriptHeight = 20;
-    bool isFollowingTranscript = true;
-    ExpandedSubagents expandedSubagents;
-    bool isTranscriptFoldKeyPending = false;
-    // Always open along the pane's bottom edge; a draft survives leaving it.
-    vim::Editor agentInput;
-    std::vector<std::string> typedAwaitingResponder;
-
     // What the files said when last read or written, to tell our own writes
     // from a hand edit.
     std::string lastDraftText;
     std::string lastRoundsSignature;
     bool showResolved = false;
 
-    std::set<std::string> seenCommentThreads;
-    std::set<int> pinnedCommentThreads;
-    CommentThreadFolds commentThreadFolds;
+    std::set<std::string> seenThreads;
+    std::set<int> pinnedThreads;
 
     std::set<std::string> collapsed;
     std::vector<TreeRow> treeRows;
@@ -346,7 +260,7 @@ private:
     int treeHeight = 20;
     int wrapWidth = 60;
 
-    Pane focus = Pane::agent;
+    Pane focus = Pane::tree;
     KeyParser keys;
     std::optional<int> visualAnchor;
     Modal modal = Modal::none;

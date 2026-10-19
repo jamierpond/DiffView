@@ -10,6 +10,39 @@
 
 namespace diffview
 {
+namespace
+{
+std::string getOtherWorktreeName(const StoreLayout& store, const ReviewFile& round)
+{
+    auto worktree = round.worktree.empty() ? store.home.str() : round.worktree;
+
+    if (isSamePath(worktree, store.worktree.str()))
+        return {};
+
+    return getWorktreeShortName(worktree);
+}
+
+std::string describeRound(const StoreLayout& store,
+                          const std::string& id,
+                          const ReviewFile& round,
+                          const RoundRoute& counts,
+                          const std::string& agent)
+{
+    auto own = (store.directory / reviewDirectory / (id + ".md")).str();
+    auto worktree = getOtherWorktreeName(store, round);
+
+    if (round.reply)
+        return replyNotice(id, round, agent, worktree, own);
+
+    auto latest = store.directory / latestReviewFileName;
+
+    if (readReviewOrEmpty(latest).title == id)
+        return roundNotice(id, counts, agent, worktree, latest.str());
+
+    return roundNotice(id, counts, agent, worktree, own);
+}
+} // namespace
+
 // A one-second poll: the native watcher needs eacp's run loop, and a review
 // round is a person pressing a key.
 int runMonitor(const StoreLayout& store, const MonitorOptions& options)
@@ -21,7 +54,7 @@ int runMonitor(const StoreLayout& store, const MonitorOptions& options)
         seen = keepRoundsUpTo(seen, *options.after);
 
     if (!options.agent.empty())
-        registerAgent(root.str(), options.agent, options.agentPid, options.inbox);
+        registerAgent(root.str(), options.agent);
 
     auto listening = std::vector<std::string> {};
 
@@ -42,8 +75,7 @@ int runMonitor(const StoreLayout& store, const MonitorOptions& options)
             if (!options.agent.empty() && !counts.wakes())
                 continue;
 
-            auto line = describeRoundForAgent(
-                store, store.worktree.str(), id, round, counts, options.agent);
+            auto line = describeRound(store, id, round, counts, options.agent);
             std::printf("%s\n", line.c_str());
             std::fflush(stdout);
             woke = true;
@@ -53,7 +85,7 @@ int runMonitor(const StoreLayout& store, const MonitorOptions& options)
 
         if (woke && options.once)
         {
-            markAgentBusy();
+            markAgentStopped();
             return 0;
         }
 

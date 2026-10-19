@@ -1,25 +1,17 @@
 # One test binary per library under Lib/.
 add_executable(DiffViewTests
-        ActivityTests.cpp
         AnnotationsTests.cpp
         ChangeTrackerTests.cpp
-        ClaudeCodeCliTests.cpp
         DiffRowsTests.cpp
         DiffTests.cpp
         FileTreeTests.cpp
-        GeminiCliTests.cpp
         GitTests.cpp
-        HooksTests.cpp
-        InboxTests.cpp
         KeymapTests.cpp
-        ListenerTests.cpp
         ReviewMarkdownTests.cpp
-        ResponderTests.cpp
         ReviewTests.cpp
         SearchTests.cpp
         StoreTests.cpp
-        TextTests.cpp
-        TranscriptTests.cpp)
+        TextTests.cpp)
 target_link_libraries(DiffViewTests PRIVATE NanoTest NanoTestMain DiffViewCore)
 target_compile_definitions(DiffViewTests PRIVATE
         DIFFVIEW_GOLDEN_DIR="${CMAKE_CURRENT_SOURCE_DIR}/Golden")

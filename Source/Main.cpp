@@ -1,23 +1,13 @@
-#include <AgentProcess.h>
-#include "Agents.h"
 #include "Commands.h"
 #include "Monitor.h"
-#include "ProcessInfo.h"
 #include "Viewer.h"
 
-#include <Hooks.h>
-#include <Inbox.h>
 #include <Review.h>
 #include <Store.h>
-#include <Responder.h>
-
-#include <eacp/Core/Utils/Files.h>
 
 #include <eacp/Core/App/App.h>
 
-#include <csignal>
 #include <cstdio>
-#include <cstdlib>
 #include <filesystem>
 #include <iostream>
 #include <iterator>
@@ -49,7 +39,6 @@ constexpr auto usage =
     "  show       print one thread with its code\n"
     "  reply      answer a thread\n"
     "  resolve    close a thread\n"
-    "  status     say what you're doing on a thread, live in the UI\n"
     "  help       this, or `dv help <command>`\n"
     "\n"
     "For coding agents: the human watches your edits in dv and comments line by\n"
@@ -64,33 +53,15 @@ constexpr auto usage =
     "  3. `dv comments --as <you> --open`, `dv show <id>` for each\n"
     "  4. act, then `dv reply <id> \"what you did\"`; `dv resolve <id>` only\n"
     "     once the work is done. A question gets a reply and stays open:\n"
-    "     resolving folds the thread away from the human. While you work,\n"
-    "     `dv status <id> \"running the tests\"` shows under the thread;\n"
-    "     `dv status <id> --done` once you reply.\n"
+    "     resolving folds the thread away from the human.\n"
     "  5. re-arm with --after set to the id in that line\n"
     "\n"
     "Addressing: `@name` in a comment gives its thread to that agent; an\n"
     "unaddressed thread wakes every agent and belongs to the first to answer\n"
     "it. Another agent's thread is refused unless --force. Without --as you\n"
     "hear every round. The owner shows in the heading: `### a.cpp:12 · open ·\n"
-    "@name · #7`. A thread whose owner isn't listening is everyone's: any agent\n"
-    "may answer it and takes it over. Rounds are Markdown in .diffview/reviews/;\n"
-    "latest.md is the newest.\n"
-    "\n"
-    "Worktrees share one .diffview, in the main worktree (as they share .git);\n"
-    "every command sees the whole repo from any of them.\n"
-    "\n"
-    "dv's own agent, the responder (@dv), takes what no listening agent will:\n"
-    "the UI starts one headless agent CLI session for the repo on the first\n"
-    "send that needs it, with every permission granted, hands it each such\n"
-    "send on its stdin, and shows what it is doing under the thread. Quitting\n"
-    "dv closes its stdin: it finishes what it was given and ends on its own;\n"
-    "the next dv waits for it, then resumes its session. Its log, stream and\n"
-    "session id are in .diffview/responder/.\n"
-    "~/.config/diffview/config or .diffview/config:\n"
-    "  responder = on|off\n"
-    "  agent = claude|gemini\n"
-    "  responderName = dv\n";
+    "@name · #7`. Rounds are Markdown in .diffview/reviews/; latest.md is the\n"
+    "newest.\n";
 
 const std::map<std::string, std::string>& commandHelp()
 {
@@ -105,8 +76,7 @@ const std::map<std::string, std::string>& commandHelp()
          "                   already there (exits at once with --once)\n"
          "  --as <name>      only rounds with something for you: threads you own\n"
          "                   or nobody does, or that name you; also shows you as\n"
-         "                   listening in the UI, and after --once as busy while\n"
-         "                   the claude/gemini process it runs under lives\n"
+         "                   listening in the UI\n"
          "\n"
          "Each line names the round to pass to the next --after:\n"
          "  dv: review round 2026-10-17-142300 submitted · for @dev · 2 open · "
@@ -151,30 +121,6 @@ const std::map<std::string, std::string>& commandHelp()
          "usage: dv resolve <id> [[-m] <note>] [--as <name>] [--force] [--repo <dir>]\n"
          "\n"
          "example: dv resolve 4 --as diffview-dev \"Renamed in 3f2a1c.\"\n"},
-        {"status",
-         "Say what you're doing on a thread. The UI shows it under the thread\n"
-         "with a spinner, and in its status bar, until you clear it or a few\n"
-         "minutes pass without an update. One per agent: a new one replaces it.\n"
-         "dv's responder needn't: the UI reads its output.\n"
-         "\n"
-         "usage: dv status <id> [-m] <text> [--as <name>] [--repo <dir>]\n"
-         "       dv status <id> --done [--as <name>] [--repo <dir>]\n"
-         "\n"
-         "  --as <name>  who is working (default: agent)\n"
-         "  --done       clear it, e.g. as you reply\n"
-         "\n"
-         "example: dv status 4 --as diffview-dev \"running the tests\"\n"},
-        {"hook",
-         "Claude Code's PreToolUse hook for dv's responder: reads the hook's\n"
-         "JSON on stdin and runs every Agent call in the background, so the\n"
-         "responder stays free to answer. dv passes it to the CLI itself.\n"
-         "\n"
-         "register-inbox is its SessionStart hook: it records the session's\n"
-         "inbox socket (CLAUDE_CODE_MESSAGING_SOCKET) in the responder's\n"
-         "registration, so dv posts to it mid-turn.\n"
-         "\n"
-         "usage: dv hook background-agent < payload.json\n"
-         "       dv hook register-inbox --as <name> < payload.json\n"},
         {"help",
          "usage: dv help [<command>]\n"
          "\n"
@@ -229,8 +175,7 @@ std::optional<std::string>
 
             arguments.values[found->second] = argv[++i];
         }
-        else if (arg == "--once" || arg == "--force" || arg == "--open"
-                 || arg == "--done")
+        else if (arg == "--once" || arg == "--force" || arg == "--open")
             arguments.flags[arg] = true;
         else if (arg == "--")
         {
@@ -267,39 +212,6 @@ std::optional<diffview::StoreLayout> openStore(const std::string& root)
             stderr, "dv: can't find the git directories of %s\n", root.c_str());
 
     return store;
-}
-
-std::string readEnvironment(const std::string& name)
-{
-    const auto* value = std::getenv(name.c_str());
-
-    if (value == nullptr)
-        return {};
-
-    return value;
-}
-
-// What Claude Code gives its hooks and Bash commands.
-diffview::InboxAddress readInboxFromEnvironment()
-{
-    return {readEnvironment("CLAUDE_CODE_MESSAGING_SOCKET"),
-            readEnvironment("CLAUDE_CODE_MESSAGING_TOKEN")};
-}
-
-// As git reads ~/.config/git/config, then the repo's: the repo's wins.
-diffview::ResponderConfig readResponderConfig(const diffview::StoreLayout& store)
-{
-    auto configHome = readEnvironment("XDG_CONFIG_HOME");
-
-    if (configHome.empty())
-        configHome = readEnvironment("HOME") + "/.config";
-
-    auto user = eacp::Files::readFile(eacp::FilePath {configHome} / "diffview"
-                                      / diffview::configFileName);
-    auto repo = eacp::Files::readFile(store.directory / diffview::configFileName);
-
-    return diffview::parseResponderConfig(repo,
-                                          diffview::parseResponderConfig(user, {}));
 }
 
 void printMergeNotes(const std::vector<std::string>& notes)
@@ -339,21 +251,6 @@ int runCommand(const std::string& command, int argc, char* argv[])
     }
 
     auto& positional = arguments.positional;
-
-    auto isRegisterInboxHook =
-        command == "hook" && positional.size() == 1
-        && positional.front() == diffview::registerInboxHookName;
-
-    if (command == "hook" && !isRegisterInboxHook)
-    {
-        if (positional.size() != 1
-            || positional.front() != diffview::backgroundAgentHookName)
-            return usageError("which hook? background-agent or register-inbox",
-                              command);
-
-        return diffview::runBackgroundAgentHook(readStdin());
-    }
-
     auto path = arguments.values.contains("repo")
                     ? arguments.values["repo"]
                     : std::filesystem::current_path().string();
@@ -386,42 +283,14 @@ int runCommand(const std::string& command, int argc, char* argv[])
 
     printMergeNotes(diffview::mergeWorktreeStores(*store));
 
-    if (isRegisterInboxHook)
-    {
-        if (agent.empty())
-            return usageError("whose inbox? give --as <name>", command);
-
-        readStdin();
-        return diffview::runRegisterInboxHook(
-            *store,
-            agent,
-            diffview::findAgentCliAncestor(static_cast<int>(getppid()),
-                                           diffview::readProcessInfo),
-            readInboxFromEnvironment());
-    }
-
     if (command == "monitor")
     {
         if (!positional.empty())
             return usageError("unexpected " + positional.front(), command);
 
-        if (!agent.empty()
-            && diffview::isRunningResponder(store->directory.str(), agent))
-        {
-            std::fprintf(
-                stderr,
-                "dv: @%s is dv's responder: dv writes each send for it to its "
-                "stdin, so it never needs dv monitor\n",
-                agent.c_str());
-            return 1;
-        }
-
         auto options = diffview::MonitorOptions {};
         options.once = arguments.flags["--once"];
         options.agent = agent;
-        options.agentPid = diffview::findAgentCliAncestor(
-            static_cast<int>(getppid()), diffview::readProcessInfo);
-        options.inbox = readInboxFromEnvironment();
 
         if (arguments.values.contains("after"))
             options.after = arguments.values["after"];
@@ -462,20 +331,10 @@ int runCommand(const std::string& command, int argc, char* argv[])
     for (const auto& word: positional)
         text += (text.empty() ? "" : " ") + word;
 
-    if (command == "status")
-    {
-        auto isDone = arguments.flags["--done"];
-
-        if (isDone == !text.empty())
-            return usageError("give the text, or --done to clear it", command);
-
-        return diffview::runStatus({*store, *id, agent, text, isDone});
-    }
-
     if (command == "reply" && text.empty() && isatty(STDIN_FILENO) == 0)
         text = readStdin();
 
-    auto options = diffview::CommentThreadOptions {
+    auto options = diffview::ThreadOptions {
         *store, *id, agent, arguments.flags["--force"], text};
 
     return command == "reply" ? diffview::runReply(options)
@@ -537,12 +396,5 @@ int main(int argc, char* argv[])
     options.repo = *root;
     options.store = *store;
     options.mergeNotes = diffview::mergeWorktreeStores(*store);
-    options.readResponderConfig = [store = *store]
-    { return readResponderConfig(store); };
-    options.startAgentProcess = diffview::startPipedAgentProcess;
-    options.postToInbox = diffview::postToInbox;
-
-    // A write to a responder that just died must not take dv with it.
-    std::signal(SIGPIPE, SIG_IGN);
     return eacp::Apps::run<diffview::Viewer>(options);
 }

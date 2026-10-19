@@ -2,8 +2,6 @@
 #include "Commands.h"
 #include "Viewer.h"
 
-#include <Activity.h>
-#include <Hooks.h>
 #include <Review.h>
 #include <Text.h>
 
@@ -12,7 +10,6 @@
 #include <algorithm>
 #include <array>
 #include <cstdio>
-#include <ctime>
 #include <filesystem>
 #include <optional>
 
@@ -39,7 +36,7 @@ std::string describeMissing(int id)
            + " in a submitted round (dv comments lists them)";
 }
 
-int changeAndWrite(const CommentThreadOptions& options, bool resolve)
+int changeAndWrite(const ThreadOptions& options, bool resolve)
 {
     const auto& root = options.store.directory;
 
@@ -76,7 +73,7 @@ int changeAndWrite(const CommentThreadOptions& options, bool resolve)
             round = std::move(*synced);
     }
 
-    auto change = CommentThreadChange {};
+    auto change = ThreadChange {};
     change.from = options.agent.empty() ? "agent" : options.agent;
     change.named = !options.agent.empty();
     change.force = options.force;
@@ -85,7 +82,7 @@ int changeAndWrite(const CommentThreadOptions& options, bool resolve)
     change.time = formatReplyTime(nowMs());
     change.listening = findListeningAgents(root.str());
 
-    if (auto error = changeCommentThread(round, options.id, change))
+    if (auto error = changeThread(round, options.id, change))
         return fail(*error);
 
     auto text = toMarkdown(round);
@@ -152,7 +149,7 @@ std::optional<Annotation> find(const std::vector<Annotation>& comments, int id)
 }
 } // namespace
 
-int runReply(const CommentThreadOptions& options)
+int runReply(const ThreadOptions& options)
 {
     if (trim(options.text).empty())
         return fail("nothing to say: give the text, -m <text>, or pipe it in");
@@ -160,7 +157,7 @@ int runReply(const CommentThreadOptions& options)
     return changeAndWrite(options, false);
 }
 
-int runResolve(const CommentThreadOptions& options)
+int runResolve(const ThreadOptions& options)
 {
     return changeAndWrite(options, true);
 }
@@ -245,63 +242,6 @@ int runShow(const StoreLayout& store, int id)
                     comment->round.c_str(),
                     worktree.c_str(),
                     comment->worktree.c_str());
-    return 0;
-}
-
-int runStatus(const StatusOptions& options)
-{
-    auto rounds = readRounds(options.store);
-    auto isSent =
-        std::any_of(rounds.begin(),
-                    rounds.end(),
-                    [&](const ReviewFile& r) { return hasComment(r, options.id); });
-
-    if (!isSent)
-        return fail(describeMissing(options.id));
-
-    auto agent = options.agent.empty() ? std::string {"agent"} : options.agent;
-    auto path = options.store.directory / statusDirectory / agent;
-
-    if (options.isDone)
-    {
-        if (parseAgentStatus(eacp::Files::readFile(path)).commentThread
-            == options.id)
-            eacp::Files::removeFile(path);
-
-        return 0;
-    }
-
-    eacp::Files::createDirectories(path.parentDirectory());
-    writeText(path,
-              formatAgentStatus({options.id, std::time(nullptr), options.text}));
-    return 0;
-}
-
-int runBackgroundAgentHook(const std::string& payload)
-{
-    if (auto answer = makeBackgroundAgentHookAnswer(payload))
-        std::fputs((*answer + "\n").c_str(), stdout);
-
-    return 0;
-}
-
-int runRegisterInboxHook(const StoreLayout& store,
-                         const std::string& agent,
-                         std::optional<int> agentPid,
-                         const InboxAddress& inbox)
-{
-    if (!hasInboxSocket(inbox))
-    {
-        std::fputs("dv: no CLAUDE_CODE_MESSAGING_SOCKET: messages wait for stdin\n",
-                   stderr);
-        return 0;
-    }
-
-    if (!recordAgentInbox(store.directory.str(), agent, agentPid, inbox))
-        std::fprintf(stderr,
-                     "dv: @%s isn't registered: its inbox isn't kept\n",
-                     agent.c_str());
-
     return 0;
 }
 } // namespace diffview

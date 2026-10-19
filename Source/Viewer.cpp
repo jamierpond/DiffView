@@ -11,13 +11,11 @@
 
 #include <algorithm>
 #include <chrono>
-#include <ctime>
 #include <filesystem>
 #include <fstream>
 #include <map>
 #include <set>
 #include <sstream>
-#include <unistd.h>
 
 namespace diffview
 {
@@ -58,39 +56,6 @@ bool isOurs(const std::string& path)
            || path.starts_with(std::string {storeDirectoryName} + "/");
 }
 
-bool isActivityFileInRepo(const std::string& path)
-{
-    auto store = std::string {storeDirectoryName} + "/";
-    return path.starts_with(store) && isActivityFile(path.substr(store.size()));
-}
-
-constexpr auto activityPollMs = std::int64_t {250};
-constexpr auto transcriptPollMs = std::int64_t {250};
-constexpr auto transcriptTailBytes = std::uint64_t {1024 * 1024};
-
-std::uint64_t getTranscriptFileSize(const std::string& path)
-{
-    auto error = std::error_code {};
-    auto size = std::filesystem::file_size(path, error);
-
-    if (error)
-        return 0;
-
-    return size;
-}
-constexpr auto roundPollMs = std::int64_t {1000};
-
-// What a hook the responder's CLI runs calls back into: this binary, or dv on
-// the PATH when it can't be found.
-std::string findDvExecutable()
-{
-    auto path = eacp::Files::executablePath().str();
-
-    if (path.empty())
-        return "dv";
-
-    return path;
-}
 } // namespace
 
 std::int64_t nowMs()
@@ -118,9 +83,6 @@ Viewer::Viewer(const Options& optionsToUse)
     loop = std::make_unique<ftxui::Loop>(&screen, root);
 
     loadStore();
-    deliveredRounds = listRoundIdsInOrder(store.directory);
-    isWaitingForPreviousResponder = isFinishingResponder(
-        store.directory.str(), options.readResponderConfig().name);
     watcher = std::make_unique<RepoWatcher>(
         repo,
         [this](const std::vector<std::string>& changed) { onRepoChanged(changed); });
@@ -130,23 +92,18 @@ Viewer::Viewer(const Options& optionsToUse)
         createStoreDirectory(store.directory);
         storeWatcher = std::make_unique<RepoWatcher>(
             store.directory.str(),
-            [this](const std::vector<std::string>& changed)
-            { onStoreChanged(changed); });
+            [this](const std::vector<std::string>&) { scheduleRefresh(120); });
     }
 
     for (const auto& note: options.mergeNotes)
         message += (message.empty() ? "" : "; ") + note;
 
     messageAt = nowMs();
-    agentInput.feed("i");
 
     refresh();
 }
 
-Viewer::~Viewer()
-{
-    finishResponder();
-}
+Viewer::~Viewer() = default;
 
 void Viewer::tick()
 {
@@ -168,434 +125,6 @@ void Viewer::tick()
         lastRecentRedraw = now;
         redraw();
     }
-
-    pollResponder(now);
-    pollActivities(now);
-    pollTranscript(now);
-}
-
-void Viewer::pollTranscript(std::int64_t now)
-{
-    if (!isAgentPaneShown)
-        return;
-
-    if (transcript && hasTranscriptSpinner()
-        && now - lastSpinnerRedraw >= spinnerFrameMs)
-    {
-        lastSpinnerRedraw = now;
-        redraw();
-    }
-
-    if (now - lastTranscriptPoll < transcriptPollMs)
-        return;
-
-    lastTranscriptPoll = now;
-    readTranscriptTail();
-}
-
-bool Viewer::hasTranscriptSpinner() const
-{
-    return transcript->isTurnOpen() || transcript->hasRunningSubagent()
-           || !transcript->getQueuedPrompts().empty();
-}
-
-// Opened partway into a long stream, it starts at the first whole line of the
-// last transcriptTailBytes.
-void Viewer::readTranscriptTail()
-{
-    if (!transcript)
-    {
-        transcriptAgentName =
-            responder ? responder->getName() : options.readResponderConfig().name;
-        auto path = store.directory / responderDirectory
-                    / (transcriptAgentName + responderOutputExtension);
-        transcriptPath = path.str();
-        transcript.emplace(store.home.str());
-        transcriptOffset = 0;
-    }
-
-    auto size = getTranscriptFileSize(transcriptPath);
-
-    if (size < transcriptOffset)
-    {
-        transcript.emplace(store.home.str());
-        transcriptOffset = 0;
-        isTranscriptLayoutDirty = true;
-    }
-
-    if (size == transcriptOffset)
-        return;
-
-    auto isStartingMidStream = transcriptOffset == 0 && size > transcriptTailBytes;
-
-    if (isStartingMidStream)
-        transcriptOffset = size - transcriptTailBytes;
-
-    auto text =
-        readFileFromByteOffset(eacp::FilePath {transcriptPath}, transcriptOffset);
-    transcriptOffset += text.size();
-
-    if (isStartingMidStream)
-    {
-        auto firstLineEnd = text.find('\n');
-        text.erase(
-            0, firstLineEnd == std::string::npos ? text.size() : firstLineEnd + 1);
-    }
-
-    transcript->append(text);
-    isTranscriptLayoutDirty = true;
-    redraw();
-}
-
-void Viewer::toggleAgentPane()
-{
-    if (isAgentPaneShown)
-    {
-        isAgentPaneShown = false;
-        return;
-    }
-
-    isAgentPaneShown = true;
-    focus = Pane::agent;
-    followTranscript();
-    readTranscriptTail();
-}
-
-void Viewer::cycleFocus()
-{
-    switch (focus)
-    {
-        case Pane::tree:
-            focus = Pane::diff;
-            return;
-        case Pane::diff:
-            focus = isAgentPaneShown ? Pane::agent : Pane::tree;
-            return;
-        case Pane::agent:
-            focus = Pane::tree;
-            return;
-    }
-}
-
-// Scrolling down to the end follows the tail again.
-void Viewer::scrollTranscript(int delta)
-{
-    auto lastTop =
-        std::max(0, static_cast<int>(transcriptRows.size()) - transcriptHeight);
-    transcriptTop = std::clamp(transcriptTop + delta, 0, lastTop);
-    isFollowingTranscript = delta > 0 && transcriptTop == lastTop;
-}
-
-void Viewer::followTranscript()
-{
-    isFollowingTranscript = true;
-}
-
-// The pane has no cursor: za folds the last subagent block that starts above
-// the bottom of the view.
-void Viewer::toggleSubagentBlockInView()
-{
-    auto viewEnd = std::min(static_cast<int>(transcriptRows.size()),
-                            transcriptTop + transcriptHeight);
-
-    for (auto i = viewEnd - 1; i >= 0; --i)
-    {
-        const auto& id =
-            transcriptRows[static_cast<std::size_t>(i)].subagentToolUseId;
-
-        if (id.empty())
-            continue;
-
-        if (!expandedSubagents.erase(id))
-            expandedSubagents.insert(id);
-
-        isTranscriptLayoutDirty = true;
-        return;
-    }
-
-    say("No subagent here");
-}
-
-// To the responder through the same path as a round: it waits for a
-// finishing responder, and starts one (resuming its session) when none is
-// running. "@name " sends it to that agent's inbox instead.
-void Viewer::sendTypedMessage(const std::string& text)
-{
-    auto responderName =
-        responder ? responder->getName() : options.readResponderConfig().name;
-    auto route = routeTypedMessage(
-        text, responderName, listListeningAgentsWithInboxes(store.directory.str()));
-
-    switch (route.destination)
-    {
-        case TypedMessageDestination::responder:
-            if (!transcript)
-                readTranscriptTail();
-
-            transcript->addQueuedPrompt(text);
-            isTranscriptLayoutDirty = true;
-            typedAwaitingResponder.push_back(text);
-            followTranscript();
-            deliverNewRounds();
-            return;
-
-        case TypedMessageDestination::agentInbox:
-            postTypedMessageToAgent(route, text);
-            return;
-
-        case TypedMessageDestination::agentWithoutInbox:
-            say("@" + route.agent
-                + " has no inbox socket (its dv monitor predates it, or its CLI "
-                  "isn't Claude Code): nothing sent");
-            return;
-
-        case TypedMessageDestination::unknownAgent:
-            say("No agent @" + route.agent + " is listening: nothing sent");
-            return;
-    }
-}
-
-void Viewer::postTypedMessageToAgent(const TypedMessageRoute& route,
-                                     const std::string& text)
-{
-    if (!options.postToInbox(route.inbox, route.text))
-    {
-        say("Couldn't reach @" + route.agent + "'s inbox " + route.inbox.socketPath
-            + ": nothing sent");
-        return;
-    }
-
-    if (!transcript)
-        readTranscriptTail();
-
-    transcript->addSentPrompt(text);
-    isTranscriptLayoutDirty = true;
-    followTranscript();
-    say("Sent to @" + route.agent + "'s session inbox");
-}
-
-void Viewer::pollActivities(std::int64_t now)
-{
-    if (now - lastActivityPoll >= activityPollMs)
-    {
-        lastActivityPoll = now;
-        auto wasActive = !activities.empty();
-        activities =
-            responder ? responder->findActivities() : std::vector<AgentActivity> {};
-
-        for (auto& status: findStatusActivities(store.directory / statusDirectory,
-                                                std::time(nullptr)))
-        {
-            auto isShown = std::any_of(activities.begin(),
-                                       activities.end(),
-                                       [&](const AgentActivity& shown)
-                                       {
-                                           return shown.agent == status.agent
-                                                  && shown.commentThread
-                                                         == status.commentThread;
-                                       });
-
-            if (!isShown)
-                activities.push_back(std::move(status));
-        }
-
-        if (wasActive && activities.empty())
-            redraw();
-    }
-
-    if (!activities.empty() && now - lastSpinnerRedraw >= spinnerFrameMs)
-    {
-        lastSpinnerRedraw = now;
-        redraw();
-    }
-}
-
-void Viewer::pollResponder(std::int64_t now)
-{
-    if (now - lastRoundPoll >= roundPollMs)
-    {
-        lastRoundPoll = now;
-        deliverNewRounds();
-    }
-
-    if (!responder)
-        return;
-
-    responder->poll();
-
-    for (auto& notice: responder->takeNotices())
-        say(std::move(notice));
-
-    if (responder->takeHasQueueChanged())
-    {
-        isTranscriptLayoutDirty = true;
-        redraw();
-    }
-
-    if (responder->getFailure() && !isResponderFailureHandled)
-    {
-        isResponderFailureHandled = true;
-        unregisterResponder(store.directory.str(), responder->getName());
-        listening = findListeningAgents(store.directory.str());
-    }
-
-    if (responder->isFinishing() && !responder->isRunning())
-    {
-        unregisterResponder(store.directory.str(), responder->getName());
-        responder.reset();
-        listening = findListeningAgents(store.directory.str());
-    }
-}
-
-// Every dv watches for rounds, from any worktree; the one running the
-// responder hands it what no listening agent takes, and the first to need
-// one starts it.
-void Viewer::deliverNewRounds()
-{
-    auto current = listRoundIdsInOrder(store.directory);
-    auto fresh = newRounds(deliveredRounds, current);
-    deliveredRounds = std::move(current);
-    roundsAwaitingResponder.insert(
-        roundsAwaitingResponder.end(), fresh.begin(), fresh.end());
-
-    if (roundsAwaitingResponder.empty() && typedAwaitingResponder.empty()
-        && !isWaitingForPreviousResponder)
-        return;
-
-    auto config = options.readResponderConfig();
-
-    if (!config.isEnabled)
-    {
-        finishResponder();
-
-        if (!typedAwaitingResponder.empty())
-            say("@" + config.name + " is off (responder = off): nothing sent");
-
-        roundsAwaitingResponder.clear();
-        withdrawTypedMessages(std::exchange(typedAwaitingResponder, {}));
-        isWaitingForPreviousResponder = false;
-        return;
-    }
-
-    auto wasWaiting = std::exchange(isWaitingForPreviousResponder,
-                                    isPreviousResponderFinishing(config));
-
-    if (wasWaiting || isWaitingForPreviousResponder)
-        redraw();
-
-    if (isWaitingForPreviousResponder)
-        return;
-
-    listening = findListeningAgents(store.directory.str());
-
-    for (const auto& id: std::exchange(roundsAwaitingResponder, {}))
-    {
-        auto round =
-            readReviewOrEmpty(store.directory / reviewDirectory / (id + ".md"));
-        auto name = responder ? responder->getName() : config.name;
-        auto route = routeSend(round, listening, name);
-
-        if (route.responderCommentThreads.empty() || !claimResponder(config))
-            continue;
-
-        auto everyone = listening;
-        everyone.push_back(name);
-        auto notice = describeRoundForAgent(store,
-                                            store.home.str(),
-                                            id,
-                                            round,
-                                            routeRound(round, name, everyone),
-                                            name);
-        responder->send(
-            {makeResponderMessage(notice, name), route.responderCommentThreads, {}});
-    }
-
-    for (const auto& typed: std::exchange(typedAwaitingResponder, {}))
-    {
-        if (!claimResponder(config))
-        {
-            say("@" + config.name + " runs in another dv: type to it there");
-            withdrawTypedMessages({typed});
-            continue;
-        }
-
-        responder->send(makeTypedResponderMessage(typed));
-    }
-}
-
-void Viewer::withdrawTypedMessages(const std::vector<std::string>& typed)
-{
-    for (const auto& text: typed)
-        transcript->withdrawQueuedPrompt(text);
-
-    isTranscriptLayoutDirty = true;
-}
-
-bool Viewer::isPreviousResponderFinishing(const ResponderConfig& config) const
-{
-    if (responder)
-        return responder->isFinishing();
-
-    return isFinishingResponder(store.directory.str(), config.name);
-}
-
-// In the main worktree: one responder for the repo, and the CLI keys the
-// sessions it can resume by working directory.
-bool Viewer::claimResponder(const ResponderConfig& config)
-{
-    if (responder)
-        return true;
-
-    const auto& directory = store.directory;
-    createStoreDirectory(directory);
-    auto lock = StoreLock {directory};
-    auto holder = findListenerProcessId(directory.str(), config.name);
-
-    if (holder && *holder != getpid())
-        return false;
-
-    registerResponder(directory.str(), config.name, std::nullopt);
-    auto files = directory / responderDirectory;
-    auto startAndRegister = [this, name = config.name](const AgentLaunch& launch)
-    {
-        auto process = options.startAgentProcess(launch);
-
-        if (process)
-            registerResponder(store.directory.str(), name, process->getProcessId());
-
-        return process;
-    };
-    responder.emplace(
-        ResponderSettings {
-            config.name,
-            getAgentCli(config.agentCli),
-            store.home.str(),
-            files / (config.name + ".log"),
-            files / (config.name + responderOutputExtension),
-            files / (config.name + ".session"),
-            findDvExecutable(),
-            [this, name = config.name](int agentPid)
-            { return findAgentProcessInbox(store.directory.str(), name, agentPid); },
-            options.postToInbox},
-        startAndRegister);
-    listening = findListeningAgents(directory.str());
-    return true;
-}
-
-// Its registration stays while its CLI finishes, so the next responder
-// waits for it.
-void Viewer::finishResponder()
-{
-    if (!responder)
-        return;
-
-    responder->finish();
-
-    if (responder->isRunning())
-        return;
-
-    unregisterResponder(store.directory.str(), responder->getName());
-    responder.reset();
 }
 
 void Viewer::onRepoChanged(const std::vector<std::string>& changed)
@@ -603,22 +132,10 @@ void Viewer::onRepoChanged(const std::vector<std::string>& changed)
     auto relevant = changed.empty();
 
     for (const auto& path: changed)
-        if (git::affectsDiff(path) && !isActivityFileInRepo(path))
+        if (git::affectsDiff(path))
             relevant = true;
 
     if (relevant)
-        scheduleRefresh(120);
-}
-
-void Viewer::onStoreChanged(const std::vector<std::string>& changed)
-{
-    auto isOnlyActivity =
-        !changed.empty()
-        && std::all_of(changed.begin(),
-                       changed.end(),
-                       [](const std::string& path) { return isActivityFile(path); });
-
-    if (!isOnlyActivity)
         scheduleRefresh(120);
 }
 
@@ -986,8 +503,8 @@ Viewer::CursorKey Viewer::cursorKey() const
     key.hunk = row.hunk;
 
     if (row.annotation != 0)
-        key.commentThreadOffset =
-            findOffsetInCommentThread(rows, static_cast<std::size_t>(diffCursor));
+        key.threadOffset =
+            findOffsetInThread(rows, static_cast<std::size_t>(diffCursor));
 
     if (row.kind == RowKind::line)
     {
@@ -1017,8 +534,7 @@ void Viewer::restoreCursor(const CursorKey& key)
 
     if (key.annotation != 0)
     {
-        if (auto row = findRowInCommentThread(
-                rows, key.annotation, key.commentThreadOffset))
+        if (auto row = findRowInThread(rows, key.annotation, key.threadOffset))
         {
             diffCursor = *row;
             return;
@@ -1152,7 +668,7 @@ std::optional<LineRange> Viewer::hunkRange(int rowIndex) const
 
 std::vector<DiffRow> Viewer::rowsFor(const FileDiff& file) const
 {
-    auto built = buildRows(file, shownAnnotations(), commentThreadFolds, wrapWidth);
+    auto built = buildRows(file, shownAnnotations(), wrapWidth);
 
     auto hidden = std::count_if(annotations.begin(),
                                 annotations.end(),
@@ -1160,7 +676,7 @@ std::vector<DiffRow> Viewer::rowsFor(const FileDiff& file) const
                                 {
                                     return a.path == file.path && a.resolved
                                            && !a.withdrawn && !showResolved
-                                           && !pinnedCommentThreads.contains(a.id);
+                                           && !pinnedThreads.contains(a.id);
                                 });
 
     if (hidden > 0)
@@ -1178,8 +694,7 @@ std::vector<Annotation> Viewer::shownAnnotations() const
 
     for (const auto& note: annotations)
         if (!note.withdrawn
-            && (showResolved || !note.resolved
-                || pinnedCommentThreads.contains(note.id)))
+            && (showResolved || !note.resolved || pinnedThreads.contains(note.id)))
             shown.push_back(note);
 
     return shown;
@@ -1308,7 +823,7 @@ void Viewer::stepAnnotation(int direction, int count)
         {
             const auto& row = rows[static_cast<std::size_t>(i)];
 
-            if (isCommentThreadStart(row)
+            if (row.kind == RowKind::annotationTop
                 && (direction > 0
                     || rows[static_cast<std::size_t>(diffCursor)].annotation
                            != row.annotation))
@@ -1346,7 +861,7 @@ void Viewer::stepAnnotation(int direction, int count)
             auto target = -1;
 
             for (auto i = 0; i < static_cast<int>(rows.size()); ++i)
-                if (isCommentThreadStart(rows[static_cast<std::size_t>(i)]))
+                if (rows[static_cast<std::size_t>(i)].kind == RowKind::annotationTop)
                 {
                     target = i;
 
@@ -1400,7 +915,7 @@ void Viewer::jumpToAnnotation(int id)
     focus = Pane::diff;
 
     for (std::size_t i = 0; i < rows.size(); ++i)
-        if (isCommentThreadStart(rows[i]) && rows[i].annotation == id)
+        if (rows[i].kind == RowKind::annotationTop && rows[i].annotation == id)
         {
             diffCursor = static_cast<int>(i);
             break;

@@ -213,19 +213,3 @@ auto tRoundTagging = test("Store/a round records its worktree and base") = []
     auto merged = mergeReviews({parsed}, {});
     check(merged.annotations[0].worktree == "/r/main-perf");
 };
-
-auto tStorePastedImage =
-    test("Store/a pasted image takes the first free <stem>-<n>.png") = []
-{
-    auto dir = fs::temp_directory_path() / "DiffViewTests" / "StorePastedImage";
-    fs::remove_all(dir);
-    auto home = eacp::FilePath {dir.string()};
-
-    check(writePastedImage(home, "4", "png one") == ".diffview/images/4-1.png");
-    check(writePastedImage(home, "4", "png two") == ".diffview/images/4-2.png");
-    check(writePastedImage(home, "chat-7", "png")
-          == ".diffview/images/chat-7-1.png");
-    check(eacp::Files::readFile(home / ".diffview/images/4-2.png") == "png two");
-    check(makeImageLink(".diffview/images/4-1.png")
-          == "![image](.diffview/images/4-1.png)");
-};

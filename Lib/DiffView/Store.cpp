@@ -6,8 +6,6 @@
 
 #include <algorithm>
 #include <filesystem>
-#include <fstream>
-#include <iterator>
 #include <map>
 #include <set>
 #include <fcntl.h>
@@ -614,67 +612,6 @@ void writeText(const eacp::FilePath& path, std::string_view text)
     auto bytes =
         std::span {reinterpret_cast<const std::uint8_t*>(text.data()), text.size()};
     eacp::Files::writeFileAtomically(path, bytes);
-}
-
-std::string writePastedImage(const eacp::FilePath& home,
-                             const std::string& stem,
-                             std::string_view png)
-{
-    auto dir = home / imageDirectory;
-    eacp::Files::createDirectories(dir);
-
-    auto name = std::string {};
-
-    for (auto n = 1;; ++n)
-    {
-        name = stem + "-" + std::to_string(n) + ".png";
-
-        if (!eacp::Files::exists(dir / name))
-            break;
-    }
-
-    writeText(dir / name, png);
-    return std::string {imageDirectory} + "/" + name;
-}
-
-std::string makeImageLink(const std::string& path)
-{
-    return "![image](" + path + ")";
-}
-
-std::string readFileFromByteOffset(const eacp::FilePath& path, std::uint64_t offset)
-{
-    auto in = std::ifstream {path.str(), std::ios::binary};
-    in.seekg(static_cast<std::streamoff>(offset));
-
-    if (!in)
-        return {};
-
-    return {std::istreambuf_iterator<char> {in}, std::istreambuf_iterator<char> {}};
-}
-
-std::string describeRoundForAgent(const StoreLayout& store,
-                                  const std::string& fromWorktree,
-                                  const std::string& id,
-                                  const ReviewFile& round,
-                                  const RoundRoute& counts,
-                                  const std::string& agent)
-{
-    auto roundWorktree = round.worktree.empty() ? store.home.str() : round.worktree;
-    auto worktree = isSamePath(roundWorktree, fromWorktree)
-                        ? std::string {}
-                        : getWorktreeShortName(roundWorktree);
-    auto own = (store.directory / reviewDirectory / (id + ".md")).str();
-
-    if (round.reply)
-        return replyNotice(id, round, agent, worktree, own);
-
-    auto latest = store.directory / latestReviewFileName;
-
-    if (readReviewOrEmpty(latest).title == id)
-        return roundNotice(id, counts, agent, worktree, latest.str());
-
-    return roundNotice(id, counts, agent, worktree, own);
 }
 
 std::vector<eacp::FilePath> listDraftFiles(const StoreLayout& store)

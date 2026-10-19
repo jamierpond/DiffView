@@ -49,12 +49,6 @@ enum class Action
     pickFiles,
     grepDiffs,
     pickComments,
-    toggleAgentPane,
-    toggleFold,
-    closeFold,
-    openFold,
-    closeAllFolds,
-    openAllFolds,
     help,
     quit,
     cancel

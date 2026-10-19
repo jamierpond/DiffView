@@ -4,7 +4,6 @@
 
 #include <eacp/Core/Utils/FilePath.h>
 
-#include <cstdint>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -55,26 +54,6 @@ std::vector<ReviewFile> readRounds(const StoreLayout& store);
 ReviewFile readReviewOrEmpty(const eacp::FilePath& path);
 
 void writeText(const eacp::FilePath& path, std::string_view text);
-
-// Writes pasted PNG bytes into home's image directory as <stem>-<n>.png, the
-// first n not taken, and returns the path a comment links it by.
-std::string writePastedImage(const eacp::FilePath& home,
-                             const std::string& stem,
-                             std::string_view png);
-
-std::string makeImageLink(const std::string& path);
-
-// eacp's Files only reads whole files.
-std::string readFileFromByteOffset(const eacp::FilePath& path, std::uint64_t offset);
-
-// The line `dv monitor --as <agent>` prints for a round, naming its worktree
-// when it isn't `fromWorktree`.
-std::string describeRoundForAgent(const StoreLayout& store,
-                                  const std::string& fromWorktree,
-                                  const std::string& id,
-                                  const ReviewFile& round,
-                                  const RoundRoute& counts,
-                                  const std::string& agent);
 
 std::vector<eacp::FilePath> listDraftFiles(const StoreLayout& store);
 
