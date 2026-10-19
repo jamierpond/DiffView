@@ -7,6 +7,7 @@
 #include <ftxui/screen/terminal.hpp>
 
 #include <algorithm>
+#include <array>
 
 namespace diffview
 {
@@ -31,6 +32,92 @@ Color statusColor(FileStatus status)
     }
 
     return Color::Yellow;
+}
+
+// "you" speaks in the comment box's yellow; each agent keeps one colour,
+// picked by its name, clear of the diff's green and red.
+Color authorColor(const std::string& author)
+{
+    if (author == reviewerName)
+        return Color::Yellow;
+
+    static const auto palette = std::array<Color, 6> {Color::Cyan,
+                                                      Color::Magenta,
+                                                      Color::BlueLight,
+                                                      Color::RGB(255, 175, 95),
+                                                      Color::RGB(175, 135, 255),
+                                                      Color::RGB(95, 215, 175)};
+    auto hash = std::uint32_t {2166136261u};
+
+    for (auto c: author)
+        hash = (hash ^ static_cast<unsigned char>(c)) * 16777619u;
+
+    return palette[hash % palette.size()];
+}
+
+std::string describePlace(const Annotation& note)
+{
+    if (note.path.empty())
+        return "general";
+    if (note.fileLevel)
+        return "whole file";
+
+    return lineLabel(note);
+}
+
+std::string describeThread(const Annotation& note)
+{
+    auto label =
+        "┌─ comment #" + std::to_string(note.id) + " · " + describePlace(note);
+
+    if (note.draft)
+        label += " · draft";
+    else
+        label += " · submitted " + roundLabel(note.round).substr(6);
+
+    if (auto owner = findOwner(note); !owner.empty())
+        label += " · @" + owner;
+    if (note.resolved)
+        label += " · resolved";
+    if (note.stale)
+        label += " · stale: its lines left the diff";
+
+    return label;
+}
+
+// The comment itself (-1) is the reviewer's, with no time of its own.
+std::string findAuthor(const Annotation& note, int reply)
+{
+    if (reply < 0)
+        return reviewerName;
+
+    const auto& author = note.replies[static_cast<std::size_t>(reply)].author;
+    return author.empty() ? "?" : author;
+}
+
+std::string describeWhen(const Annotation& note, int reply)
+{
+    if (reply < 0)
+        return {};
+
+    const auto& said = note.replies[static_cast<std::size_t>(reply)];
+    auto when = std::string {};
+
+    // "2026-10-18 19:56" without the year.
+    if (said.time.size() > 5)
+        when = "  " + said.time.substr(5);
+    if (said.fresh)
+        when += " · draft";
+
+    return when;
+}
+
+std::string describeKeys(const Annotation& note)
+{
+    if (note.replies.empty())
+        return " Enter edit · R reply";
+
+    return " Enter reply · c edit";
 }
 
 // A dark background rather than inverted, so +/- colours stay readable.
@@ -612,78 +699,11 @@ Element Viewer::renderRow(const DiffRow& row, int index, int width)
         case RowKind::annotationText:
         case RowKind::replyHeader:
         case RowKind::annotationBottom:
-        {
-            auto* note = annotation(row.annotation);
-            auto accent = note == nullptr || note->resolved ? Color::GrayDark
-                          : note->stale                     ? Color::Red
-                                                            : Color::Yellow;
-
-            if (row.kind == RowKind::annotationTop)
-            {
-                auto label =
-                    std::string {"┌─ comment #"} + std::to_string(row.annotation);
-
-                if (note != nullptr)
-                {
-                    label += " · "
-                             + (note->path.empty() ? std::string {"general"}
-                                : note->fileLevel  ? std::string {"whole file"}
-                                                   : lineLabel(*note));
-                    label += note->draft ? " · draft"
-                                         : " · submitted "
-                                               + roundLabel(note->round).substr(6);
-
-                    if (auto owner = findOwner(*note); !owner.empty())
-                        label += " · @" + owner;
-                    if (note->resolved)
-                        label += " · resolved";
-                    if (note->stale)
-                        label += " · stale: its lines left the diff";
-                }
-
-                element = text("          " + label + " ") | color(accent);
-            }
-            else if (row.kind == RowKind::replyHeader)
-            {
-                const auto& reply =
-                    note->replies[static_cast<std::size_t>(row.reply)];
-                auto byAgent = reply.author != reviewerName;
-                auto label =
-                    "↳ " + (reply.author.empty() ? std::string {"?"} : reply.author)
-                    + (reply.time.size() > 5 ? " · " + reply.time.substr(5) : "")
-                    + (reply.fresh ? " · draft" : "");
-                auto shown = text(label) | bold;
-
-                if (byAgent)
-                    shown = shown | color(Color::Cyan);
-
-                element = hbox({text("          │ ") | color(accent), shown});
-            }
-            else if (row.kind == RowKind::annotationText)
-            {
-                auto shown = body(row.text);
-                auto byAgent =
-                    row.reply >= 0 && note != nullptr
-                    && note->replies[static_cast<std::size_t>(row.reply)].author
-                           != reviewerName;
-
-                if (byAgent)
-                    shown = shown | color(Color::Cyan);
-
-                if (note != nullptr && note->resolved)
-                    shown = shown | dim;
-
-                element =
-                    hbox({text(row.reply >= 0 ? "          │   " : "          │ ")
-                              | color(accent),
-                          shown});
-            }
+            if (auto* note = annotation(row.annotation))
+                element = renderThreadRow(row, *note, index, body(row.text));
             else
-            {
-                element = text("          └─") | color(accent);
-            }
+                element = text("");
             break;
-        }
     }
 
     element = element | size(WIDTH, LESS_THAN, width + 1);
@@ -704,6 +724,70 @@ Element Viewer::renderRow(const DiffRow& row, int index, int width)
         return element | bgcolor(selectionBackground);
 
     return element;
+}
+
+Element Viewer::renderThreadRow(const DiffRow& row,
+                                const Annotation& note,
+                                int index,
+                                Element shown)
+{
+    auto resolvedLook = note.resolved && !pinnedThreads.contains(note.id);
+    auto accent = [&]
+    {
+        if (resolvedLook)
+            return Color::GrayDark;
+        if (note.stale)
+            return Color::Red;
+
+        return Color::Yellow;
+    }();
+    auto frame = text("          │ ") | color(accent);
+
+    if (index == diffCursor)
+        markSeen(note);
+
+    auto voiceOf = [&](int reply)
+    {
+        return resolvedLook ? Color::GrayDark : authorColor(findAuthor(note, reply));
+    };
+
+    switch (row.kind)
+    {
+        case RowKind::annotationTop:
+            return text("          " + describeThread(note) + " ") | color(accent);
+
+        case RowKind::replyHeader:
+        {
+            auto voice = voiceOf(row.reply);
+            auto rule = text(row.reply < 0 ? "" : " ▍ ") | color(voice);
+
+            return hbox({frame,
+                         rule,
+                         text(findAuthor(note, row.reply)) | bold | color(voice),
+                         text(describeWhen(note, row.reply)) | dim});
+        }
+
+        case RowKind::annotationText:
+        {
+            if (resolvedLook)
+                shown = shown | dim;
+
+            if (row.reply < 0)
+                return hbox({frame, shown});
+
+            return hbox({frame, text(" ▍ ") | color(voiceOf(row.reply)), shown});
+        }
+
+        default:
+        {
+            auto cursorHere =
+                diffCursor < static_cast<int>(rows.size())
+                && rows[static_cast<std::size_t>(diffCursor)].annotation == note.id;
+            auto hint = cursorHere ? describeKeys(note) : std::string {};
+
+            return hbox({text("          └─") | color(accent), text(hint) | dim});
+        }
+    }
 }
 
 Element Viewer::renderStatus()
@@ -956,12 +1040,13 @@ Element Viewer::renderHelp()
                    row("Space pf / ps", "find a file / grep the diff"),
                    row("Space pc", "all comments (Enter amends)"),
                    separator(),
-                   row("Enter  c", "comment on line (edits one already there)"),
+                   row("Enter  c", "comment on line; c edits one already there"),
                    row("V … c", "comment on a range"),
                    row("gh  C", "comment on hunk / whole file"),
                    row("gc  :note", "general note (about no file)"),
                    row("dd  x", "delete (withdraw if sent) / resolve"),
-                   row("R", "reply on the comment's thread (sent with S)"),
+                   row("R  Enter", "reply on a thread (Enter once it has replies);"),
+                   row("", "saving sends it, no S"),
                    row("X  :resolved", "show / hide resolved comments"),
                    row("S  :submit", "submit the draft as a review round"),
                    separator(),

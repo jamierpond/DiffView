@@ -33,6 +33,8 @@ struct DiffRow
 
     std::string text;
 
+    // Which reply a replyHeader or text row belongs to; -1 is the comment
+    // itself, whose header shows only once it has replies.
     int reply = -1;
 };
 

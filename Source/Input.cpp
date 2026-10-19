@@ -190,7 +190,10 @@ void Viewer::run(const Command& command)
             }
             else if (focus == Pane::diff)
             {
-                if (annotation(annotationAtCursor()) != nullptr)
+                if (const auto* note = annotation(annotationAtCursor());
+                    note != nullptr && !note->replies.empty())
+                    replyAtCursor();
+                else if (note != nullptr)
                     editAtCursor();
                 else
                     annotateAtCursor(false);

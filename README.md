@@ -28,7 +28,7 @@ merge-base of HEAD and `name`, as in `git diff main...`; anything else
 
 | Key | Action | Key | Action |
 |---|---|---|---|
-| `j` `k` `gg` `G` | Move (`5j` works) | `Enter` `c` | Comment on the line (edits the one there) |
+| `j` `k` `gg` `G` | Move (`5j` works) | `Enter` `c` | Comment on the line (`c` edits the one there; `Enter` replies if it has replies) |
 | `^D` `^U` | Half page | `V` … `c` | Comment on a range |
 | `h` `l` `Tab` | Tree / diff / switch | `gh` `C` | Comment on the hunk / whole file |
 | `Enter` `l` (tree) | Toggle directory, open file | `gc` `:note` | General note, about no file |
@@ -77,10 +77,17 @@ and the next round says it is an update ("updated from review …"), resolved,
 or withdrawn.
 
 Each comment is a thread. Agents answer with `dv reply` and close with `dv
-resolve`; their replies show under the comment as they arrive. `R` replies
-on a thread; like a GitHub review reply it waits in the draft and goes out
-with the next round, which carries the whole thread, your new reply marked
-`new`.
+resolve`; their replies show under the comment as they arrive, each message
+under its author (`you` in yellow, each agent in a colour of its own). `R`
+(or `Enter` on a thread with replies) replies, and saving sends it at once,
+no `S`: it becomes a one-thread round, `.diffview/reviews/<id>.md` headed
+`# DiffView reply · <id>`, holding the whole thread with your reply marked
+`new`, and wakes the agent the thread belongs to (every agent, if nobody's).
+latest.md stays the last full round. New comments still wait for `S`.
+
+A resolved thread whose newest reply is an agent's stays open in the diff
+until the cursor has been on it (`.diffview/seen` remembers), so an answer
+isn't folded away before you read it.
 
 `@name` in a comment gives its thread to that agent, and the owner is shown
 after the status. An unaddressed thread is everyone's until an agent
@@ -103,7 +110,7 @@ Review comments on this repo's changes, diffed against `main...` at 9170e37a2e03
 Each `### path:lines · status · #id` heading is one comment: working-tree line numbers, `(old)` the base's, `(whole file)` the whole file.
 In the block under it `>` marks the lines the comment is about (line number, then `+` added, `-` removed, space unchanged); the comment follows the block.
 Replies follow a comment as `#### reply · author · time`: `you` is the reviewer, `new` marks theirs new in this round. `@name` after the status is the agent the thread belongs to.
-Act on `open` comments; `resolved` and `withdrawn` ones need nothing. Answer with `dv reply <id> "text"`; when you have dealt with one, `dv resolve <id>` (or change its `· open` to `· resolved` here).
+Act on `open` comments; `resolved` and `withdrawn` ones need nothing. Answer with `dv reply <id> "text"`. `dv resolve <id>` only once the work is done; a question gets a reply and stays open.
 
 ## General
 
@@ -172,11 +179,16 @@ night). When it exits it prints the round:
 
 ```
 dv: review round 2026-10-17-142300 submitted · for @dev · 3 open · 1 with new replies · read /abs/repo/.diffview/latest.md
+dv: reply 2026-10-17-143512 on #4 from you · for @dev · read /abs/repo/.diffview/reviews/2026-10-17-143512.md
 ```
 
+The second is a reply sent on its own; `dv show 4` shows the thread.
+Resolve a thread only once the work is done. A question gets a reply and
+stays open: resolving folds the thread away from the reviewer.
+
 Read the threads (`dv comments --open --as dev`, `dv show <id>`), act,
-`dv reply`/`dv resolve`, and run the monitor again with `--after
-2026-10-17-142300`. A round already newer than `--after` exits it at once,
+`dv reply`/`dv resolve`, and run the monitor again with `--after` set to
+the id in the line (`2026-10-17-142300`). A round already newer than `--after` exits it at once,
 so nothing slips in between. With `--as`, rounds holding nothing for you
 (only other agents' threads) are skipped; without it every round counts.
 Plain `dv monitor` still streams a line per round until killed.
