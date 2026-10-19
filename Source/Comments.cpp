@@ -271,6 +271,8 @@ void Viewer::pinUnseenThreads()
     for (const auto& line: splitLines(seen))
         seenThreads.insert(line);
 
+    loadThreadFolds();
+
     for (const auto& note: annotations)
     {
         if (hasUnseenAgentReply(note))
@@ -286,6 +288,54 @@ void Viewer::markSeen(const Annotation& note)
     seenThreads.insert(threadKey(note));
     eacp::Files::appendFile(store.worktreeDirectory / seenFileName,
                             threadKey(note) + "\n");
+}
+
+void Viewer::loadThreadFolds()
+{
+    threadFolds = parseThreadFolds(
+        eacp::Files::readFile(store.worktreeDirectory / foldsFileName));
+}
+
+void Viewer::setThreadView(int id, ThreadView view)
+{
+    const auto* note = annotation(id);
+
+    if (note == nullptr)
+        return;
+
+    if (view == ThreadView::recent)
+        threadFolds.erase(id);
+    else
+        threadFolds[id] = {view, note->replies.size()};
+
+    eacp::Files::createDirectories(store.worktreeDirectory);
+    writeText(store.worktreeDirectory / foldsFileName,
+              formatThreadFolds(threadFolds));
+    rebuildRows();
+}
+
+void Viewer::setEveryThreadView(ThreadView view)
+{
+    for (const auto& note: annotations)
+        setThreadView(note.id, view);
+}
+
+bool Viewer::isCursorOn(RowKind kind) const
+{
+    if (diffCursor < 0 || diffCursor >= static_cast<int>(rows.size()))
+        return false;
+
+    return rows[static_cast<std::size_t>(diffCursor)].kind == kind;
+}
+
+void Viewer::toggleFoldAtCursor()
+{
+    auto id = annotationAtCursor();
+
+    if (findFold(threadFolds, id).view == ThreadView::collapsed)
+        setThreadView(id, ThreadView::recent);
+    else
+        setThreadView(id, ThreadView::collapsed);
 }
 
 void Viewer::annotateAtCursor(bool wholeHunk)
@@ -583,7 +633,7 @@ void Viewer::closeEditor(bool)
 
     for (std::size_t i = 0; i < rows.size(); ++i)
     {
-        if (rows[i].kind == RowKind::annotationTop && rows[i].annotation == id)
+        if (isThreadStart(rows[i]) && rows[i].annotation == id)
         {
             diffCursor = static_cast<int>(i);
             break;
@@ -674,6 +724,9 @@ void Viewer::editAtCursor()
         return;
     }
 
+    if (findFold(threadFolds, id).view == ThreadView::collapsed)
+        setThreadView(id, ThreadView::recent);
+
     editingId = id;
     replyCommentId.reset();
     pendingAnnotation.reset();
@@ -751,6 +804,9 @@ void Viewer::replyAtCursor()
         say("No comment here");
         return;
     }
+
+    if (findFold(threadFolds, id).view == ThreadView::collapsed)
+        setThreadView(id, ThreadView::recent);
 
     auto pending = findPendingReply(*note);
     replyCommentId = id;

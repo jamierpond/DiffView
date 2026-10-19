@@ -26,7 +26,7 @@ FileDiff sample()
 
 auto tPlain = test("DiffRows/file header, hunk headers, then lines") = []
 {
-    auto rows = buildRows(sample(), {}, 80);
+    auto rows = buildRows(sample(), {}, {}, 80);
 
     check(rows.size() == 8);
     check(rows[0].kind == RowKind::fileHeader);
@@ -41,7 +41,7 @@ auto tBlockAfterAnchor = test("DiffRows/a comment block follows its last line") 
     auto file = sample();
     auto annotation =
         makeAnnotation(file, {0, 1}, 7, "first\nsecond line that wraps");
-    auto rows = buildRows(file, {annotation}, 12);
+    auto rows = buildRows(file, {annotation}, {}, 12);
 
     check(rows[3].flat == 1);
     check(rows[4].kind == RowKind::annotationTop && rows[4].annotation == 7);
@@ -58,7 +58,7 @@ auto tFileLevelFirst = test("DiffRows/file comments sit under the file header") 
     auto stale = makeAnnotation(file, {0, 0}, 3, "gone");
     stale.stale = true;
     auto whole = makeFileAnnotation("f", 4, "about the file");
-    auto rows = buildRows(file, {stale, whole}, 80);
+    auto rows = buildRows(file, {stale, whole}, {}, 80);
 
     check(rows[0].kind == RowKind::fileHeader);
     check(rows[1].kind == RowKind::annotationTop && rows[1].annotation == 4);
@@ -68,7 +68,8 @@ auto tFileLevelFirst = test("DiffRows/file comments sit under the file header") 
 
 auto tBinary = test("DiffRows/a binary file is a header and one message row") = []
 {
-    auto rows = buildRows(diffForNewFile("x", std::string_view {"\0", 1}), {}, 80);
+    auto rows =
+        buildRows(diffForNewFile("x", std::string_view {"\0", 1}), {}, {}, 80);
 
     check(rows.size() == 2);
     check(rows[1].kind == RowKind::message);
@@ -80,7 +81,7 @@ auto tReplyRows = test("DiffRows/replies follow the comment inside its block") =
     auto annotation = makeAnnotation(file, {0, 0}, 7, "why?");
     annotation.replies = {{"dev", "2026-10-18 10:00", "because\nit is", false},
                           {"you", "2026-10-18 10:05", "ok", true}};
-    auto rows = buildRows(file, {annotation}, 80);
+    auto rows = buildRows(file, {annotation}, {}, 80);
 
     auto isGap = [](const DiffRow& row)
     {
@@ -107,7 +108,7 @@ auto tThreadCursor =
     auto file = sample();
     auto annotation = makeAnnotation(file, {0, 0}, 7, "why?");
     annotation.replies = {{"dev", "2026-10-18 10:00", "because\nit is", false}};
-    auto rows = buildRows(file, {annotation}, 80);
+    auto rows = buildRows(file, {annotation}, {}, 80);
     constexpr auto secondReplyLine = std::size_t {9};
     constexpr auto bottomAfterRebuild = 13;
     constexpr auto farPastTheBottom = 99;
@@ -116,10 +117,133 @@ auto tThreadCursor =
 
     auto offset = findOffsetInThread(rows, secondReplyLine);
     annotation.replies.push_back({"you", "2026-10-18 10:05", "ok", false});
-    auto rebuilt = buildRows(file, {annotation}, 80);
+    auto rebuilt = buildRows(file, {annotation}, {}, 80);
 
     check(findRowInThread(rebuilt, 7, offset) == static_cast<int>(secondReplyLine));
     check(rebuilt[bottomAfterRebuild].kind == RowKind::annotationBottom);
     check(findRowInThread(rebuilt, 7, farPastTheBottom) == bottomAfterRebuild);
     check(!findRowInThread(rebuilt, 8, 0));
+};
+
+namespace
+{
+constexpr auto threadId = 48;
+constexpr auto wideEnough = 200;
+
+Annotation makeThreadWithReplies(const FileDiff& file, std::size_t count)
+{
+    auto annotation =
+        makeAnnotation(file,
+                       {0, 0},
+                       threadId,
+                       "huh? you should have an Activity-ClaudeCode.h\nmore");
+
+    for (std::size_t r = 0; r < count; ++r)
+    {
+        auto author = r % 2 == 0 ? std::string {"dev"} : std::string {"you"};
+        annotation.replies.push_back(
+            {author, "2026-10-18 10:00", "reply " + std::to_string(r), false});
+    }
+
+    return annotation;
+}
+
+std::vector<int> findShownReplies(const std::vector<DiffRow>& rows)
+{
+    auto shown = std::vector<int> {};
+
+    for (const auto& row: rows)
+    {
+        if (row.kind == RowKind::replyHeader && row.reply >= 0)
+            shown.push_back(row.reply);
+    }
+
+    return shown;
+}
+
+long countKind(const std::vector<DiffRow>& rows, RowKind kind)
+{
+    return std::count_if(rows.begin(),
+                         rows.end(),
+                         [&](const DiffRow& row) { return row.kind == kind; });
+}
+} // namespace
+
+auto tRecentReplies = test(
+    "DiffRows/a thread shows its last few replies under a row for the rest") = []
+{
+    constexpr auto replyCount = recentReplyCount + 2;
+    auto file = sample();
+    auto annotation = makeThreadWithReplies(file, replyCount);
+    auto rows = buildRows(file, {annotation}, {}, wideEnough);
+    auto earlier = std::find_if(rows.begin(),
+                                rows.end(),
+                                [](const DiffRow& row)
+                                { return row.kind == RowKind::earlierReplies; });
+
+    check(earlier != rows.end());
+    check(earlier->text == "⋯ 2 earlier replies · Enter to show all");
+    check(findShownReplies(rows) == std::vector<int> {2, 3, 4, 5, 6});
+
+    auto all = buildRows(
+        file, {annotation}, {{threadId, {ThreadView::all, 0}}}, wideEnough);
+    check(countKind(all, RowKind::earlierReplies) == 0);
+    check(findShownReplies(all).size() == replyCount);
+
+    auto few = makeThreadWithReplies(file, recentReplyCount);
+    check(countKind(buildRows(file, {few}, {}, wideEnough), RowKind::earlierReplies)
+          == 0);
+};
+
+auto tCollapsedThread =
+    test("DiffRows/a collapsed thread is one summary row with what's new") = []
+{
+    constexpr auto repliesWhenCollapsed = std::size_t {3};
+    constexpr auto narrow = 30;
+    auto file = sample();
+    auto annotation = makeThreadWithReplies(file, repliesWhenCollapsed);
+    auto folds =
+        ThreadFolds {{threadId, {ThreadView::collapsed, repliesWhenCollapsed}}};
+    auto rows = buildRows(file, {annotation}, folds, wideEnough);
+
+    check(countKind(rows, RowKind::collapsedThread) == 1);
+    check(countKind(rows, RowKind::annotationTop) == 0);
+    check(countKind(rows, RowKind::annotationBottom) == 0);
+
+    auto collapsed = std::find_if(rows.begin(), rows.end(), isThreadStart);
+    check(
+        collapsed->text
+        == "#48 · you: huh? you should have an Activity-ClaudeCode.h… · 3 replies");
+
+    auto index = static_cast<std::size_t>(collapsed - rows.begin());
+    check(findOffsetInThread(rows, index) == 0);
+    constexpr auto offsetPastTheSummary = 5;
+    check(findRowInThread(rows, threadId, offsetPastTheSummary)
+          == static_cast<int>(index));
+
+    annotation.replies.push_back({"dev", "now", "done", false});
+    annotation.replies.push_back({"you", "now", "thanks", false});
+    auto fold = folds.at(threadId);
+    check(describeCollapsedThread(annotation, fold, wideEnough)
+              .ends_with(" · 5 replies · 1 new"));
+
+    auto cut = describeCollapsedThread(annotation, fold, narrow);
+    check(cut.starts_with("#48 · you: ") && cut.find("…") != std::string::npos);
+};
+
+auto tThreadFoldsFile =
+    test("DiffRows/folds read back; the default isn't written") = []
+{
+    auto folds = ThreadFolds {{4, {ThreadView::collapsed, 3}},
+                              {5, {ThreadView::all, 0}},
+                              {6, {ThreadView::recent, 0}}};
+    auto text = formatThreadFolds(folds);
+    auto parsed = parseThreadFolds(text + "junk\n");
+
+    check(text == "4 collapsed 3\n5 all\n");
+    check(parsed.size() == 2);
+    check(findFold(parsed, 4).view == ThreadView::collapsed
+          && findFold(parsed, 4).repliesWhenCollapsed == 3);
+    check(findFold(parsed, 5).view == ThreadView::all);
+    check(findFold(parsed, 6).view == ThreadView::recent);
 };

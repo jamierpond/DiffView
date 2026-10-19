@@ -188,6 +188,10 @@ void Viewer::run(const Command& command)
                     focus = Pane::diff;
                 }
             }
+            else if (focus == Pane::diff && isCursorOn(RowKind::collapsedThread))
+                setThreadView(annotationAtCursor(), ThreadView::recent);
+            else if (focus == Pane::diff && isCursorOn(RowKind::earlierReplies))
+                setThreadView(annotationAtCursor(), ThreadView::all);
             else if (focus == Pane::diff)
             {
                 if (const auto* note = annotation(annotationAtCursor());
@@ -307,6 +311,21 @@ void Viewer::run(const Command& command)
             break;
         case Action::pickComments:
             openPicker(PickerKind::comments);
+            break;
+        case Action::toggleFold:
+            toggleFoldAtCursor();
+            break;
+        case Action::closeFold:
+            setThreadView(annotationAtCursor(), ThreadView::collapsed);
+            break;
+        case Action::openFold:
+            setThreadView(annotationAtCursor(), ThreadView::all);
+            break;
+        case Action::closeAllFolds:
+            setEveryThreadView(ThreadView::collapsed);
+            break;
+        case Action::openAllFolds:
+            setEveryThreadView(ThreadView::recent);
             break;
         case Action::help:
             modal = Modal::help;
