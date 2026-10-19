@@ -183,7 +183,8 @@ std::optional<std::string>
                 arguments.positional.emplace_back(argv[i]);
         }
         else if (arg.starts_with("-") && arg.size() > 1)
-            return "unknown option " + arg;
+            return "unknown option " + arg
+                   + " (for text starting with -, use -m <text> or -- <text>)";
         else
             arguments.positional.push_back(arg);
     }
