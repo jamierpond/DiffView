@@ -30,6 +30,7 @@ enum class Action
     visual,
     deleteAnnotation,
     toggleResolved,
+    reply,
     clearResolved,
     changeBase,
     refresh,

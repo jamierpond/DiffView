@@ -112,3 +112,11 @@ auto tUnseenAndSearch = test("Keymap/]u [u for unseen, n N for search") = []
     check(keys.feed("C")->action == Action::commentFile);
     check(keys.feed(":")->action == Action::commandLine);
 };
+
+auto tReply = test("Keymap/R replies on a comment's thread") = []
+{
+    auto keys = KeyParser {};
+    auto command = keys.feed("R");
+
+    check(command && command->action == Action::reply);
+};

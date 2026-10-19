@@ -41,6 +41,7 @@ const std::map<std::string, Action>& singleKeys()
         {"o", Action::openWithSystem},
         {"x", Action::toggleResolved},
         {"X", Action::clearResolved},
+        {"R", Action::reply},
         {"b", Action::changeBase},
         {"r", Action::refresh},
         {"/", Action::search},

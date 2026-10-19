@@ -1,6 +1,7 @@
 #include "DiffRows.h"
 #include "Text.h"
 
+#include <algorithm>
 #include <map>
 
 namespace diffview
@@ -11,7 +12,7 @@ void appendBlock(std::vector<DiffRow>& rows,
                  const Annotation& annotation,
                  int wrapWidth)
 {
-    rows.push_back({RowKind::annotationTop, -1, -1, -1, annotation.id, {}});
+    rows.push_back({.kind = RowKind::annotationTop, .annotation = annotation.id});
 
     auto lines = splitLines(annotation.text);
 
@@ -20,14 +21,27 @@ void appendBlock(std::vector<DiffRow>& rows,
 
     for (const auto& line: lines)
         for (auto& piece: wrap(displayable(line), wrapWidth))
-            rows.push_back({RowKind::annotationText,
-                            -1,
-                            -1,
-                            -1,
-                            annotation.id,
-                            std::move(piece)});
+            rows.push_back({.kind = RowKind::annotationText,
+                            .annotation = annotation.id,
+                            .text = std::move(piece)});
 
-    rows.push_back({RowKind::annotationBottom, -1, -1, -1, annotation.id, {}});
+    for (std::size_t r = 0; r < annotation.replies.size(); ++r)
+    {
+        const auto& reply = annotation.replies[r];
+        auto index = static_cast<int>(r);
+        rows.push_back({.kind = RowKind::replyHeader,
+                        .annotation = annotation.id,
+                        .reply = index});
+
+        for (const auto& line: splitLines(reply.text))
+            for (auto& piece: wrap(displayable(line), std::max(1, wrapWidth - 2)))
+                rows.push_back({.kind = RowKind::annotationText,
+                                .annotation = annotation.id,
+                                .text = std::move(piece),
+                                .reply = index});
+    }
+
+    rows.push_back({.kind = RowKind::annotationBottom, .annotation = annotation.id});
 }
 } // namespace
 
@@ -35,7 +49,7 @@ std::vector<DiffRow> buildRows(const FileDiff& file,
                                const std::vector<Annotation>& annotations,
                                int wrapWidth)
 {
-    auto rows = std::vector<DiffRow> {{RowKind::fileHeader, -1, -1, -1, 0, {}}};
+    auto rows = std::vector<DiffRow> {{.kind = RowKind::fileHeader}};
 
     for (const auto& annotation: annotations)
         if (annotation.path == file.path && annotation.fileLevel)
@@ -57,31 +71,25 @@ std::vector<DiffRow> buildRows(const FileDiff& file,
     }
 
     if (file.binary)
-        rows.push_back({RowKind::message, -1, -1, -1, 0, "Binary file"});
+        rows.push_back({.kind = RowKind::message, .text = "Binary file"});
     else if (!file.note.empty())
-        rows.push_back({RowKind::message, -1, -1, -1, 0, file.note});
+        rows.push_back({.kind = RowKind::message, .text = file.note});
     else if (file.hunks.empty())
-        rows.push_back({RowKind::message,
-                        -1,
-                        -1,
-                        -1,
-                        0,
-                        "No content changes (mode or empty file)"});
+        rows.push_back({.kind = RowKind::message,
+                        .text = "No content changes (mode or empty file)"});
 
     auto flat = 0;
 
     for (std::size_t h = 0; h < file.hunks.size(); ++h)
     {
-        rows.push_back({RowKind::hunkHeader, static_cast<int>(h), -1, -1, 0, {}});
+        rows.push_back({.kind = RowKind::hunkHeader, .hunk = static_cast<int>(h)});
 
         for (std::size_t l = 0; l < file.hunks[h].lines.size(); ++l)
         {
-            rows.push_back({RowKind::line,
-                            static_cast<int>(h),
-                            static_cast<int>(l),
-                            flat,
-                            0,
-                            {}});
+            rows.push_back({.kind = RowKind::line,
+                            .hunk = static_cast<int>(h),
+                            .line = static_cast<int>(l),
+                            .flat = flat});
 
             auto [begin, end] = placed.equal_range(flat);
 

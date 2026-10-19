@@ -259,6 +259,9 @@ void Viewer::run(const Command& command)
         case Action::clearResolved:
             clearResolved();
             break;
+        case Action::reply:
+            replyAtCursor();
+            break;
         case Action::submitRound:
             if (draftCount(annotations) == 0)
                 say("Nothing to submit: no new or changed comments");

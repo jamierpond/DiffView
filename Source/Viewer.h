@@ -151,6 +151,9 @@ private:
     void editAtCursor();
     void deleteAtCursor();
     void toggleResolvedAtCursor();
+    void replyAtCursor();
+    Reply* pendingReply(Annotation& note);
+    bool completeMention();
     void clearResolved();
     void removeImages(const Annotation& annotation);
 
@@ -213,6 +216,7 @@ private:
 
     std::vector<Annotation> annotations;
     std::vector<std::string> rounds;
+    std::vector<std::string> listening;
 
     // What the files said when last read or written, to tell our own writes
     // from a hand edit.
@@ -242,6 +246,8 @@ private:
     vim::Editor editor;
     std::string editorTitle;
     int editingId = 0;
+    std::optional<int> replyCommentId;
+    bool replyMadeDraft = false;
     std::optional<Annotation> pendingAnnotation;
     std::vector<std::string> pastedImages;
     std::optional<LineRange> drawnTarget;

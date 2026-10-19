@@ -1,3 +1,4 @@
+#include "Agents.h"
 #include "Viewer.h"
 
 #include <Text.h>
@@ -258,6 +259,7 @@ void Viewer::apply(std::vector<FileDiff> diffs, const std::string& sha)
     tracker.update(files, nowMs());
 
     reloadStoreIfChanged();
+    listening = findListeningAgents(repo);
     unchangedCache.clear();
     auto moved =
         reanchorAll(annotations,
@@ -612,13 +614,10 @@ std::vector<DiffRow> Viewer::rowsFor(const FileDiff& file) const
                                 });
 
     if (hidden > 0)
-        built.insert(built.begin() + 1,
-                     {RowKind::message,
-                      -1,
-                      -1,
-                      -1,
-                      0,
-                      "✓ " + std::to_string(hidden) + " resolved · X shows them"});
+        built.insert(
+            built.begin() + 1,
+            {.kind = RowKind::message,
+             .text = "✓ " + std::to_string(hidden) + " resolved · X shows them"});
 
     return built;
 }

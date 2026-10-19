@@ -73,3 +73,21 @@ auto tBinary = test("DiffRows/a binary file is a header and one message row") = 
     check(rows.size() == 2);
     check(rows[1].kind == RowKind::message);
 };
+
+auto tReplyRows = test("DiffRows/replies follow the comment inside its block") = []
+{
+    auto file = sample();
+    auto annotation = makeAnnotation(file, {0, 0}, 7, "why?");
+    annotation.replies = {{"dev", "2026-10-18 10:00", "because\nit is", false},
+                          {"you", "2026-10-18 10:05", "ok", true}};
+    auto rows = buildRows(file, {annotation}, 80);
+
+    check(rows[3].kind == RowKind::annotationTop);
+    check(rows[4].text == "why?" && rows[4].reply == -1);
+    check(rows[5].kind == RowKind::replyHeader && rows[5].reply == 0);
+    check(rows[6].text == "because" && rows[6].reply == 0);
+    check(rows[7].text == "it is");
+    check(rows[8].kind == RowKind::replyHeader && rows[8].reply == 1);
+    check(rows[9].text == "ok" && rows[9].reply == 1);
+    check(rows[10].kind == RowKind::annotationBottom);
+};

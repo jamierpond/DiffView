@@ -16,6 +16,7 @@ enum class RowKind
     line,
     annotationTop,
     annotationText,
+    replyHeader,
     annotationBottom
 };
 
@@ -31,6 +32,8 @@ struct DiffRow
     int annotation = 0;
 
     std::string text;
+
+    int reply = -1;
 };
 
 // File-level and stale comments go under the file header row; each line

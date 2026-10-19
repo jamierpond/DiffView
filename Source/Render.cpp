@@ -286,6 +286,8 @@ Element Viewer::renderDiff(int width, int height)
         return index;
     };
 
+    auto hiddenReply = -1;
+
     if (editingId != 0)
     {
         for (auto i = 0; i < count; ++i)
@@ -294,6 +296,18 @@ Element Viewer::renderDiff(int width, int height)
                 boxAt = i;
                 break;
             }
+    }
+    else if (replyCommentId)
+    {
+        if (auto* note = annotation(*replyCommentId))
+            if (auto* pending = pendingReply(*note))
+                hiddenReply = static_cast<int>(pending - note->replies.data());
+
+        for (auto i = 0; i < count; ++i)
+            if (rows[static_cast<std::size_t>(i)].annotation == replyCommentId
+                && rows[static_cast<std::size_t>(i)].kind
+                       == RowKind::annotationBottom)
+                boxAt = i;
     }
     else if (pendingAnnotation && pendingAnnotation->fileLevel)
     {
@@ -328,6 +342,10 @@ Element Viewer::renderDiff(int width, int height)
         const auto& row = rows[static_cast<std::size_t>(i)];
 
         if (editingId != 0 && row.annotation == editingId)
+            continue;
+
+        if (hiddenReply >= 0 && row.annotation == replyCommentId
+            && row.reply == hiddenReply)
             continue;
 
         if (target && firstTargetItem < 0 && row.kind == RowKind::line
@@ -397,10 +415,12 @@ std::optional<LineRange> Viewer::editorTarget() const
     if (file == nullptr)
         return std::nullopt;
 
-    if (editingId != 0)
+    if (editingId != 0 || replyCommentId)
     {
+        auto id = editingId != 0 ? editingId : replyCommentId.value_or(0);
+
         for (const auto& note: annotations)
-            if (note.id == editingId && !note.stale)
+            if (note.id == id && !note.stale)
                 return findAnchor(note, *file);
 
         return std::nullopt;
@@ -590,6 +610,7 @@ Element Viewer::renderRow(const DiffRow& row, int index, int width)
 
         case RowKind::annotationTop:
         case RowKind::annotationText:
+        case RowKind::replyHeader:
         case RowKind::annotationBottom:
         {
             auto* note = annotation(row.annotation);
@@ -612,6 +633,8 @@ Element Viewer::renderRow(const DiffRow& row, int index, int width)
                                          : " · submitted "
                                                + roundLabel(note->round).substr(6);
 
+                    if (auto owner = findOwner(*note); !owner.empty())
+                        label += " · @" + owner;
                     if (note->resolved)
                         label += " · resolved";
                     if (note->stale)
@@ -620,14 +643,40 @@ Element Viewer::renderRow(const DiffRow& row, int index, int width)
 
                 element = text("          " + label + " ") | color(accent);
             }
+            else if (row.kind == RowKind::replyHeader)
+            {
+                const auto& reply =
+                    note->replies[static_cast<std::size_t>(row.reply)];
+                auto byAgent = reply.author != reviewerName;
+                auto label =
+                    "↳ " + (reply.author.empty() ? std::string {"?"} : reply.author)
+                    + (reply.time.size() > 5 ? " · " + reply.time.substr(5) : "")
+                    + (reply.fresh ? " · draft" : "");
+                auto shown = text(label) | bold;
+
+                if (byAgent)
+                    shown = shown | color(Color::Cyan);
+
+                element = hbox({text("          │ ") | color(accent), shown});
+            }
             else if (row.kind == RowKind::annotationText)
             {
                 auto shown = body(row.text);
+                auto byAgent =
+                    row.reply >= 0 && note != nullptr
+                    && note->replies[static_cast<std::size_t>(row.reply)].author
+                           != reviewerName;
+
+                if (byAgent)
+                    shown = shown | color(Color::Cyan);
 
                 if (note != nullptr && note->resolved)
                     shown = shown | dim;
 
-                element = hbox({text("          │ ") | color(accent), shown});
+                element =
+                    hbox({text(row.reply >= 0 ? "          │   " : "          │ ")
+                              | color(accent),
+                          shown});
             }
             else
             {
@@ -686,6 +735,16 @@ Element Viewer::renderStatus()
 
     if (!rounds.empty())
         parts.push_back(text("  sent " + roundLabel(rounds.back())) | dim);
+
+    if (!listening.empty())
+    {
+        auto names = std::string {};
+
+        for (const auto& name: listening)
+            names += " @" + name;
+
+        parts.push_back(text("  ◉" + names) | color(Color::Cyan));
+    }
 
     parts.push_back(filler());
 
@@ -902,6 +961,7 @@ Element Viewer::renderHelp()
                    row("gh  C", "comment on hunk / whole file"),
                    row("gc  :note", "general note (about no file)"),
                    row("dd  x", "delete (withdraw if sent) / resolve"),
+                   row("R", "reply on the comment's thread (sent with S)"),
                    row("X  :resolved", "show / hide resolved comments"),
                    row("S  :submit", "submit the draft as a review round"),
                    separator(),
@@ -914,7 +974,10 @@ Element Viewer::renderHelp()
                    text(
                        "/ ? n N search, Ctrl-S save+close, Ctrl-V paste (images too).")
                        | dim,
-                   text("● unseen  ◆ touched in the last 10s  ✎ comments") | dim,
+                   text("Tab after @ completes an agent's name.") | dim,
+                   text("● unseen  ◆ touched in the last 10s  ✎ comments  ◉ agents "
+                        "listening")
+                       | dim,
                    text("Agents read .diffview/latest.md") | dim,
                }))
            | size(WIDTH, EQUAL, 64);

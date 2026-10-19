@@ -7,6 +7,7 @@
 #include <eacp/Core/Utils/Files.h>
 
 #include <algorithm>
+#include <cctype>
 #include <filesystem>
 #include <fstream>
 #include <sstream>
@@ -361,6 +362,9 @@ bool Viewer::onEditorEvent(const ftxui::Event& event)
     if (key.empty())
         return true;
 
+    if (key == "Tab" && editor.mode() == vim::Mode::insert && completeMention())
+        return true;
+
     switch (editor.feed(key))
     {
         case vim::Outcome::none:
@@ -422,6 +426,33 @@ bool Viewer::commitEditor()
             existing->draft = true;
         }
     }
+    else if (replyCommentId)
+    {
+        auto* note = annotation(*replyCommentId);
+
+        if (note == nullptr)
+            return false;
+
+        removeUnlinked(pastedImages);
+        auto* pending = pendingReply(*note);
+
+        if (pending != nullptr && text.empty())
+        {
+            std::erase_if(note->replies,
+                          [&](const Reply& r) { return &r == pending; });
+            note->draft = !replyMadeDraft;
+        }
+        else if (pending != nullptr)
+            pending->text = text;
+        else if (!text.empty())
+        {
+            note->replies.push_back(
+                {reviewerName, formatReplyTime(nowMs()), text, true});
+            note->draft = true;
+        }
+        else
+            return false;
+    }
     else if (pendingAnnotation)
     {
         if (text.empty())
@@ -454,9 +485,10 @@ void Viewer::closeEditor(bool)
             std::filesystem::remove(std::filesystem::path {repo} / path, error);
         }
 
-    auto id = editingId;
+    auto id = editingId != 0 ? editingId : replyCommentId.value_or(0);
     editing = false;
     editingId = 0;
+    replyCommentId.reset();
     pendingAnnotation.reset();
     pastedImages.clear();
     rebuildRows();
@@ -475,6 +507,7 @@ void Viewer::pasteIntoEditor()
     if (auto png = clipboard::imagePng())
     {
         auto id = editingId != 0      ? editingId
+                  : replyCommentId    ? *replyCommentId
                   : pendingAnnotation ? pendingAnnotation->id
                                       : nextAnnotationId(annotations);
         auto dir = std::filesystem::path {repo} / imageDirectory;
@@ -522,6 +555,7 @@ void Viewer::editAtCursor()
     }
 
     editingId = id;
+    replyCommentId.reset();
     pendingAnnotation.reset();
     openEditor("Edit comment · " + existing->path + ":" + lineLabel(*existing),
                existing->text);
@@ -529,11 +563,17 @@ void Viewer::editAtCursor()
 
 void Viewer::removeImages(const Annotation& note)
 {
-    for (const auto& path: imagesIn(note.text))
-    {
-        auto error = std::error_code {};
-        std::filesystem::remove(std::filesystem::path {repo} / path, error);
-    }
+    auto texts = std::vector<std::string> {note.text};
+
+    for (const auto& reply: note.replies)
+        texts.push_back(reply.text);
+
+    for (const auto& text: texts)
+        for (const auto& path: imagesIn(text))
+        {
+            auto error = std::error_code {};
+            std::filesystem::remove(std::filesystem::path {repo} / path, error);
+        }
 }
 
 void Viewer::deleteAtCursor()
@@ -580,6 +620,102 @@ void Viewer::toggleResolvedAtCursor()
     say(existing->resolved ? "Resolved" : "Reopened");
     saveStore();
     rebuildRows();
+}
+
+Reply* Viewer::pendingReply(Annotation& note)
+{
+    for (auto& reply: note.replies)
+        if (reply.fresh && reply.author == reviewerName)
+            return &reply;
+
+    return nullptr;
+}
+
+void Viewer::replyAtCursor()
+{
+    auto id = annotationAtCursor();
+    auto* note = annotation(id);
+
+    if (note == nullptr)
+    {
+        say("No comment here");
+        return;
+    }
+
+    auto* pending = pendingReply(*note);
+    replyMadeDraft = pending == nullptr && !note->draft;
+    replyCommentId = id;
+    editingId = 0;
+    pendingAnnotation.reset();
+    openEditor((pending != nullptr ? "Edit reply · #" : "Reply · #")
+                   + std::to_string(id),
+               pending != nullptr ? pending->text : std::string {});
+}
+
+bool Viewer::completeMention()
+{
+    const auto& line = editor.lines()[static_cast<std::size_t>(editor.row())];
+    auto end = static_cast<std::size_t>(editor.column());
+    auto start = end;
+
+    auto isNameChar = [](char c)
+    {
+        return std::isalnum(static_cast<unsigned char>(c)) || c == '-' || c == '_'
+               || c == '.';
+    };
+
+    while (start > 0 && isNameChar(line[start - 1]))
+        --start;
+
+    if (start == 0 || line[start - 1] != '@')
+        return false;
+
+    auto typed = line.substr(start, end - start);
+    auto names = std::set<std::string> {listening.begin(), listening.end()};
+
+    for (const auto& note: annotations)
+    {
+        if (auto owner = findOwner(note); !owner.empty())
+            names.insert(owner);
+
+        for (const auto& reply: note.replies)
+            if (reply.author != reviewerName && !reply.author.empty())
+                names.insert(reply.author);
+    }
+
+    auto matches = std::vector<std::string> {};
+
+    for (const auto& name: names)
+        if (name.starts_with(typed))
+            matches.push_back(name);
+
+    if (matches.empty())
+    {
+        say(listening.empty() ? "No agent is listening (dv monitor --as <name>)"
+                              : "No agent @" + typed + "…");
+        return true;
+    }
+
+    auto common = matches.front();
+
+    for (const auto& name: matches)
+        while (!name.starts_with(common))
+            common.pop_back();
+
+    editor.insertText(common.substr(typed.size())
+                      + (matches.size() == 1 ? " " : ""));
+
+    if (matches.size() > 1)
+    {
+        auto list = std::string {};
+
+        for (const auto& name: matches)
+            list += "@" + name + " ";
+
+        say(list);
+    }
+
+    return true;
 }
 
 void Viewer::clearResolved()
