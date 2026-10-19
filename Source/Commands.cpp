@@ -38,7 +38,7 @@ std::string describeMissing(int id)
            + " in a submitted round (dv comments lists them)";
 }
 
-int changeAndWrite(const ThreadOptions& options, bool resolve)
+int changeAndWrite(const CommentThreadOptions& options, bool resolve)
 {
     const auto& root = options.store.directory;
 
@@ -75,7 +75,7 @@ int changeAndWrite(const ThreadOptions& options, bool resolve)
             round = std::move(*synced);
     }
 
-    auto change = ThreadChange {};
+    auto change = CommentThreadChange {};
     change.from = options.agent.empty() ? "agent" : options.agent;
     change.named = !options.agent.empty();
     change.force = options.force;
@@ -84,7 +84,7 @@ int changeAndWrite(const ThreadOptions& options, bool resolve)
     change.time = formatReplyTime(nowMs());
     change.listening = findListeningAgents(root.str());
 
-    if (auto error = changeThread(round, options.id, change))
+    if (auto error = changeCommentThread(round, options.id, change))
         return fail(*error);
 
     auto text = toMarkdown(round);
@@ -151,7 +151,7 @@ std::optional<Annotation> find(const std::vector<Annotation>& comments, int id)
 }
 } // namespace
 
-int runReply(const ThreadOptions& options)
+int runReply(const CommentThreadOptions& options)
 {
     if (trim(options.text).empty())
         return fail("nothing to say: give the text, -m <text>, or pipe it in");
@@ -159,7 +159,7 @@ int runReply(const ThreadOptions& options)
     return changeAndWrite(options, false);
 }
 
-int runResolve(const ThreadOptions& options)
+int runResolve(const CommentThreadOptions& options)
 {
     return changeAndWrite(options, true);
 }
@@ -263,7 +263,8 @@ int runStatus(const StatusOptions& options)
 
     if (options.isDone)
     {
-        if (parseAgentStatus(eacp::Files::readFile(path)).thread == options.id)
+        if (parseAgentStatus(eacp::Files::readFile(path)).commentThread
+            == options.id)
             eacp::Files::removeFile(path);
 
         return 0;

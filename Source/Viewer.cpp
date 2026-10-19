@@ -162,7 +162,8 @@ void Viewer::pollActivities(std::int64_t now)
                                        [&](const AgentActivity& shown)
                                        {
                                            return shown.agent == status.agent
-                                                  && shown.thread == status.thread;
+                                                  && shown.commentThread
+                                                         == status.commentThread;
                                        });
 
             if (!isShown)
@@ -233,7 +234,7 @@ void Viewer::deliverNewRounds()
         auto name = responder ? responder->getName() : config.name;
         auto route = routeSend(round, listening, name);
 
-        if (route.responderThreads.empty() || !claimResponder(config))
+        if (route.responderCommentThreads.empty() || !claimResponder(config))
             continue;
 
         auto everyone = listening;
@@ -245,7 +246,7 @@ void Viewer::deliverNewRounds()
                                             routeRound(round, name, everyone),
                                             name);
         responder->send(
-            {makeResponderMessage(notice, name), route.responderThreads});
+            {makeResponderMessage(notice, name), route.responderCommentThreads});
     }
 }
 
@@ -674,8 +675,8 @@ Viewer::CursorKey Viewer::cursorKey() const
     key.hunk = row.hunk;
 
     if (row.annotation != 0)
-        key.threadOffset =
-            findOffsetInThread(rows, static_cast<std::size_t>(diffCursor));
+        key.commentThreadOffset =
+            findOffsetInCommentThread(rows, static_cast<std::size_t>(diffCursor));
 
     if (row.kind == RowKind::line)
     {
@@ -705,7 +706,8 @@ void Viewer::restoreCursor(const CursorKey& key)
 
     if (key.annotation != 0)
     {
-        if (auto row = findRowInThread(rows, key.annotation, key.threadOffset))
+        if (auto row = findRowInCommentThread(
+                rows, key.annotation, key.commentThreadOffset))
         {
             diffCursor = *row;
             return;
@@ -839,7 +841,7 @@ std::optional<LineRange> Viewer::hunkRange(int rowIndex) const
 
 std::vector<DiffRow> Viewer::rowsFor(const FileDiff& file) const
 {
-    auto built = buildRows(file, shownAnnotations(), threadFolds, wrapWidth);
+    auto built = buildRows(file, shownAnnotations(), commentThreadFolds, wrapWidth);
 
     auto hidden = std::count_if(annotations.begin(),
                                 annotations.end(),
@@ -847,7 +849,7 @@ std::vector<DiffRow> Viewer::rowsFor(const FileDiff& file) const
                                 {
                                     return a.path == file.path && a.resolved
                                            && !a.withdrawn && !showResolved
-                                           && !pinnedThreads.contains(a.id);
+                                           && !pinnedCommentThreads.contains(a.id);
                                 });
 
     if (hidden > 0)
@@ -865,7 +867,8 @@ std::vector<Annotation> Viewer::shownAnnotations() const
 
     for (const auto& note: annotations)
         if (!note.withdrawn
-            && (showResolved || !note.resolved || pinnedThreads.contains(note.id)))
+            && (showResolved || !note.resolved
+                || pinnedCommentThreads.contains(note.id)))
             shown.push_back(note);
 
     return shown;
@@ -994,7 +997,7 @@ void Viewer::stepAnnotation(int direction, int count)
         {
             const auto& row = rows[static_cast<std::size_t>(i)];
 
-            if (isThreadStart(row)
+            if (isCommentThreadStart(row)
                 && (direction > 0
                     || rows[static_cast<std::size_t>(diffCursor)].annotation
                            != row.annotation))
@@ -1032,7 +1035,7 @@ void Viewer::stepAnnotation(int direction, int count)
             auto target = -1;
 
             for (auto i = 0; i < static_cast<int>(rows.size()); ++i)
-                if (isThreadStart(rows[static_cast<std::size_t>(i)]))
+                if (isCommentThreadStart(rows[static_cast<std::size_t>(i)]))
                 {
                     target = i;
 
@@ -1086,7 +1089,7 @@ void Viewer::jumpToAnnotation(int id)
     focus = Pane::diff;
 
     for (std::size_t i = 0; i < rows.size(); ++i)
-        if (isThreadStart(rows[i]) && rows[i].annotation == id)
+        if (isCommentThreadStart(rows[i]) && rows[i].annotation == id)
         {
             diffCursor = static_cast<int>(i);
             break;

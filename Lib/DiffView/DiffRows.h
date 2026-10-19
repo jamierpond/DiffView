@@ -21,7 +21,7 @@ enum class RowKind
     annotationText,
     replyHeader,
     annotationBottom,
-    collapsedThread,
+    collapsedCommentThread,
     earlierReplies
 };
 
@@ -30,32 +30,32 @@ constexpr auto foldsFileName = "folds";
 // Unfolded, a thread shows its comment and only this many of its last replies.
 constexpr auto recentReplyCount = std::size_t {5};
 
-enum class ThreadView
+enum class CommentThreadView
 {
     collapsed,
     recent,
     all
 };
 
-struct ThreadFold
+struct CommentThreadFold
 {
-    ThreadView view = ThreadView::recent;
+    CommentThreadView view = CommentThreadView::recent;
     // When it was collapsed: later replies from agents are new.
     std::size_t repliesWhenCollapsed = 0;
 };
 
 // By comment id; a thread not in it shows its recent replies.
-using ThreadFolds = std::map<int, ThreadFold>;
+using CommentThreadFolds = std::map<int, CommentThreadFold>;
 
-std::string formatThreadFolds(const ThreadFolds& folds);
-ThreadFolds parseThreadFolds(const std::string& text);
+std::string formatCommentThreadFolds(const CommentThreadFolds& folds);
+CommentThreadFolds parseCommentThreadFolds(const std::string& text);
 
-ThreadFold findFold(const ThreadFolds& folds, int id);
+CommentThreadFold findFold(const CommentThreadFolds& folds, int id);
 
 // "#48 · you: huh? you should… · 3 replies · 1 new", cut to fit `width`.
-std::string describeCollapsedThread(const Annotation& annotation,
-                                    const ThreadFold& fold,
-                                    int width);
+std::string describeCollapsedCommentThread(const Annotation& annotation,
+                                           const CommentThreadFold& fold,
+                                           int width);
 
 struct DiffRow
 {
@@ -78,14 +78,15 @@ struct DiffRow
 // comment goes after its last line.
 std::vector<DiffRow> buildRows(const FileDiff& file,
                                const std::vector<Annotation>& annotations,
-                               const ThreadFolds& folds,
+                               const CommentThreadFolds& folds,
                                int wrapWidth);
 
 // The first row of a thread, collapsed or not.
-bool isThreadStart(const DiffRow& row);
+bool isCommentThreadStart(const DiffRow& row);
 
-int findOffsetInThread(const std::vector<DiffRow>& rows, std::size_t index);
+int findOffsetInCommentThread(const std::vector<DiffRow>& rows, std::size_t index);
 
-std::optional<int>
-    findRowInThread(const std::vector<DiffRow>& rows, int annotation, int offset);
+std::optional<int> findRowInCommentThread(const std::vector<DiffRow>& rows,
+                                          int annotation,
+                                          int offset);
 } // namespace diffview

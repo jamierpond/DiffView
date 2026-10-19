@@ -23,7 +23,7 @@ const auto claudeResult =
     std::string {R"({"type":"result","subtype":"success","session_id":"session-1"})"}
     + "\n";
 
-Annotation makeThread(int id, const std::string& owner)
+Annotation makeCommentThread(int id, const std::string& owner)
 {
     auto comment = Annotation {};
     comment.id = id;
@@ -135,10 +135,11 @@ bool contains(const std::vector<std::string>& texts, const std::string& text)
 auto tRouteListeningOwner =
     test("Responder/a listening owner's thread is its own, not the responder's") = []
 {
-    auto route = routeSend(makeRound({makeThread(4, "ops")}), {"ops", "dv"}, "dv");
+    auto route =
+        routeSend(makeRound({makeCommentThread(4, "ops")}), {"ops", "dv"}, "dv");
 
     check(route.listeners == std::vector<std::string> {"ops"});
-    check(route.responderThreads.empty());
+    check(route.responderCommentThreads.empty());
     check(describeSendRoute(route, "dv") == "@ops listening");
 };
 
@@ -147,10 +148,12 @@ auto tRouteNobodyListening =
          "unheard threads") = []
 {
     auto route =
-        routeSend(makeRound({makeThread(4, {}), makeThread(5, "ops")}), {}, "dv");
+        routeSend(makeRound({makeCommentThread(4, {}), makeCommentThread(5, "ops")}),
+                  {},
+                  "dv");
 
     check(route.listeners.empty());
-    check(route.responderThreads == std::vector<int> {4, 5});
+    check(route.responderCommentThreads == std::vector<int> {4, 5});
     check(describeSendRoute(route, "dv") == "@dv");
 };
 
@@ -158,32 +161,36 @@ auto tRouteExternalTakesUnowned =
     test("Responder/a listening agent takes unowned threads and absent owners'") = []
 {
     auto route = routeSend(
-        makeRound({makeThread(4, {}), makeThread(5, "gone")}), {"ops"}, "dv");
+        makeRound({makeCommentThread(4, {}), makeCommentThread(5, "gone")}),
+        {"ops"},
+        "dv");
 
     check(route.listeners == std::vector<std::string> {"ops"});
-    check(route.responderThreads.empty());
+    check(route.responderCommentThreads.empty());
 };
 
 auto tRouteResponderOwns =
     test("Responder/the responder keeps its own threads, running or not") = []
 {
-    auto round = makeRound({makeThread(4, "dv"), makeThread(5, "ops")});
+    auto round =
+        makeRound({makeCommentThread(4, "dv"), makeCommentThread(5, "ops")});
     auto route = routeSend(round, {"ops"}, "dv");
 
     check(route.listeners == std::vector<std::string> {"ops"});
-    check(route.responderThreads == std::vector<int> {4});
+    check(route.responderCommentThreads == std::vector<int> {4});
     check(describeSendRoute(route, "dv") == "@ops listening, @dv");
 
-    auto mentioned = makeThread(4, "dv");
+    auto mentioned = makeCommentThread(4, "dv");
     mentioned.replies.push_back({reviewerName, "now", "@ops take this", true});
-    check(routeSend(makeRound({mentioned}), {"ops"}, "dv").responderThreads.empty());
+    check(routeSend(makeRound({mentioned}), {"ops"}, "dv")
+              .responderCommentThreads.empty());
 };
 
 auto tRouteResponderOff = test("Responder/with no responder nothing goes to it") = []
 {
-    auto route = routeSend(makeRound({makeThread(4, {})}), {}, {});
+    auto route = routeSend(makeRound({makeCommentThread(4, {})}), {}, {});
 
-    check(route.listeners.empty() && route.responderThreads.empty());
+    check(route.listeners.empty() && route.responderCommentThreads.empty());
     check(describeSendRoute(route, {}) == "nobody listening");
 };
 
@@ -242,14 +249,14 @@ auto tResponderOneProcess =
     process.output = claudeInit;
     responder.poll();
     check(responder.findActivities().size() == 1);
-    check(responder.findActivities().front().thread == 4);
+    check(responder.findActivities().front().commentThread == 4);
     check(responder.findActivities().front().doing == "starting");
 
     process.output = claudeResult;
     responder.poll();
     check(launcher.started.size() == 1);
     check(process.written.find("second") != std::string::npos);
-    check(responder.findActivities().front().thread == 5);
+    check(responder.findActivities().front().commentThread == 5);
     check(responder.getProcessId() == firstFakePid);
 
     responder.stop();

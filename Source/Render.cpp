@@ -82,7 +82,7 @@ std::string describePlace(const Annotation& note)
     return lineLabel(note);
 }
 
-std::string describeThread(const Annotation& note)
+std::string describeCommentThread(const Annotation& note)
 {
     auto label =
         "┌─ comment #" + std::to_string(note.id) + " · " + describePlace(note);
@@ -715,10 +715,10 @@ Element Viewer::renderRow(const DiffRow& row, int index, int width)
         case RowKind::annotationText:
         case RowKind::replyHeader:
         case RowKind::annotationBottom:
-        case RowKind::collapsedThread:
+        case RowKind::collapsedCommentThread:
         case RowKind::earlierReplies:
             if (auto* note = annotation(row.annotation))
-                element = renderThreadRow(row, *note, index, body(row.text));
+                element = renderCommentThreadRow(row, *note, index, body(row.text));
             else
                 element = text("");
             break;
@@ -744,12 +744,12 @@ Element Viewer::renderRow(const DiffRow& row, int index, int width)
     return element;
 }
 
-Element Viewer::renderThreadRow(const DiffRow& row,
-                                const Annotation& note,
-                                int index,
-                                Element shown)
+Element Viewer::renderCommentThreadRow(const DiffRow& row,
+                                       const Annotation& note,
+                                       int index,
+                                       Element shown)
 {
-    auto resolvedLook = note.resolved && !pinnedThreads.contains(note.id);
+    auto resolvedLook = note.resolved && !pinnedCommentThreads.contains(note.id);
     auto accent = [&]
     {
         if (resolvedLook)
@@ -772,9 +772,10 @@ Element Viewer::renderThreadRow(const DiffRow& row,
     switch (row.kind)
     {
         case RowKind::annotationTop:
-            return text("          " + describeThread(note) + " ") | color(accent);
+            return text("          " + describeCommentThread(note) + " ")
+                   | color(accent);
 
-        case RowKind::collapsedThread:
+        case RowKind::collapsedCommentThread:
         {
             auto owner = findOwner(note);
             auto voice =
@@ -880,7 +881,7 @@ Element Viewer::renderStatus()
     if (!activities.empty())
     {
         const auto& first = activities.front();
-        parts.push_back(text("  #" + std::to_string(first.thread) + " "));
+        parts.push_back(text("  #" + std::to_string(first.commentThread) + " "));
         parts.push_back(renderActivity(first));
 
         if (activities.size() > 1)
@@ -914,7 +915,7 @@ std::optional<AgentActivity> Viewer::findActivityOn(int thread) const
 {
     for (const auto& activity: activities)
     {
-        if (activity.thread == thread)
+        if (activity.commentThread == thread)
             return activity;
     }
 

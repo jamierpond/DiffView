@@ -14,7 +14,8 @@ namespace
 constexpr auto collapsedWord = std::string_view {"collapsed"};
 constexpr auto allWord = std::string_view {"all"};
 
-std::size_t countNewReplies(const Annotation& annotation, const ThreadFold& fold)
+std::size_t countNewReplies(const Annotation& annotation,
+                            const CommentThreadFold& fold)
 {
     auto count = std::size_t {0};
 
@@ -27,11 +28,12 @@ std::size_t countNewReplies(const Annotation& annotation, const ThreadFold& fold
     return count;
 }
 
-std::size_t findFirstShownReply(const Annotation& annotation, const ThreadFold& fold)
+std::size_t findFirstShownReply(const Annotation& annotation,
+                                const CommentThreadFold& fold)
 {
     auto count = annotation.replies.size();
 
-    if (fold.view == ThreadView::all || count <= recentReplyCount)
+    if (fold.view == CommentThreadView::all || count <= recentReplyCount)
         return 0;
 
     return count - recentReplyCount;
@@ -45,17 +47,17 @@ std::string describeEarlierReplies(std::size_t hidden)
 
 void appendBlock(std::vector<DiffRow>& rows,
                  const Annotation& annotation,
-                 const ThreadFolds& folds,
+                 const CommentThreadFolds& folds,
                  int wrapWidth)
 {
     auto fold = findFold(folds, annotation.id);
 
-    if (fold.view == ThreadView::collapsed)
+    if (fold.view == CommentThreadView::collapsed)
     {
         rows.push_back(
-            {.kind = RowKind::collapsedThread,
+            {.kind = RowKind::collapsedCommentThread,
              .annotation = annotation.id,
-             .text = describeCollapsedThread(annotation, fold, wrapWidth)});
+             .text = describeCollapsedCommentThread(annotation, fold, wrapWidth)});
         return;
     }
 
@@ -108,25 +110,25 @@ void appendBlock(std::vector<DiffRow>& rows,
 }
 } // namespace
 
-std::string formatThreadFolds(const ThreadFolds& folds)
+std::string formatCommentThreadFolds(const CommentThreadFolds& folds)
 {
     auto text = std::string {};
 
     for (const auto& [id, fold]: folds)
     {
-        if (fold.view == ThreadView::collapsed)
+        if (fold.view == CommentThreadView::collapsed)
             text += std::to_string(id) + " " + std::string {collapsedWord} + " "
                     + std::to_string(fold.repliesWhenCollapsed) + "\n";
-        else if (fold.view == ThreadView::all)
+        else if (fold.view == CommentThreadView::all)
             text += std::to_string(id) + " " + std::string {allWord} + "\n";
     }
 
     return text;
 }
 
-ThreadFolds parseThreadFolds(const std::string& text)
+CommentThreadFolds parseCommentThreadFolds(const std::string& text)
 {
-    auto folds = ThreadFolds {};
+    auto folds = CommentThreadFolds {};
 
     for (const auto& line: splitLines(text))
     {
@@ -139,15 +141,15 @@ ThreadFolds parseThreadFolds(const std::string& text)
             continue;
 
         if (word == collapsedWord && in >> replies)
-            folds[id] = {ThreadView::collapsed, replies};
+            folds[id] = {CommentThreadView::collapsed, replies};
         else if (word == allWord)
-            folds[id] = {ThreadView::all, 0};
+            folds[id] = {CommentThreadView::all, 0};
     }
 
     return folds;
 }
 
-ThreadFold findFold(const ThreadFolds& folds, int id)
+CommentThreadFold findFold(const CommentThreadFolds& folds, int id)
 {
     if (auto found = folds.find(id); found != folds.end())
         return found->second;
@@ -155,9 +157,9 @@ ThreadFold findFold(const ThreadFolds& folds, int id)
     return {};
 }
 
-std::string describeCollapsedThread(const Annotation& annotation,
-                                    const ThreadFold& fold,
-                                    int width)
+std::string describeCollapsedCommentThread(const Annotation& annotation,
+                                           const CommentThreadFold& fold,
+                                           int width)
 {
     auto lines = splitLines(annotation.text);
     auto first = lines.empty() ? std::string {} : displayable(lines.front());
@@ -181,15 +183,15 @@ std::string describeCollapsedThread(const Annotation& annotation,
     return head + first + suffix;
 }
 
-bool isThreadStart(const DiffRow& row)
+bool isCommentThreadStart(const DiffRow& row)
 {
     return row.kind == RowKind::annotationTop
-           || row.kind == RowKind::collapsedThread;
+           || row.kind == RowKind::collapsedCommentThread;
 }
 
 std::vector<DiffRow> buildRows(const FileDiff& file,
                                const std::vector<Annotation>& annotations,
-                               const ThreadFolds& folds,
+                               const CommentThreadFolds& folds,
                                int wrapWidth)
 {
     auto rows = std::vector<DiffRow> {{.kind = RowKind::fileHeader}};
@@ -246,24 +248,25 @@ std::vector<DiffRow> buildRows(const FileDiff& file,
     return rows;
 }
 
-int findOffsetInThread(const std::vector<DiffRow>& rows, std::size_t index)
+int findOffsetInCommentThread(const std::vector<DiffRow>& rows, std::size_t index)
 {
     auto upward = std::span {rows}.first(index + 1) | std::views::reverse;
-    auto top = std::ranges::find_if(upward, isThreadStart);
+    auto top = std::ranges::find_if(upward, isCommentThreadStart);
     return static_cast<int>(top - upward.begin());
 }
 
-std::optional<int>
-    findRowInThread(const std::vector<DiffRow>& rows, int annotation, int offset)
+std::optional<int> findRowInCommentThread(const std::vector<DiffRow>& rows,
+                                          int annotation,
+                                          int offset)
 {
     auto isTop = [&](const DiffRow& row)
-    { return isThreadStart(row) && row.annotation == annotation; };
+    { return isCommentThreadStart(row) && row.annotation == annotation; };
     auto top = std::ranges::find_if(rows, isTop);
 
     if (top == rows.end())
         return std::nullopt;
 
-    if (top->kind == RowKind::collapsedThread)
+    if (top->kind == RowKind::collapsedCommentThread)
         return static_cast<int>(top - rows.begin());
 
     auto bottom = std::ranges::find(

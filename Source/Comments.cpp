@@ -129,7 +129,7 @@ void Viewer::loadStore()
 
     rounds = std::move(merged.rounds);
     lastRoundsSignature = roundsSignature();
-    pinUnseenThreads();
+    pinUnseenCommentThreads();
 
     if (merged.renumbered)
         saveStore();
@@ -245,14 +245,15 @@ std::string Viewer::routeToAgents(const ReviewFile& round)
     auto route = routeSend(round, listening, name);
     deliverNewRounds();
 
-    if (responder && responder->getFailure() && !route.responderThreads.empty())
+    if (responder && responder->getFailure()
+        && !route.responderCommentThreads.empty())
         return describeSendRoute({route.listeners, {}}, name) + " (@" + name
                + " stopped)";
 
     return describeSendRoute(route, name);
 }
 
-std::string Viewer::threadKey(const Annotation& note)
+std::string Viewer::commentThreadKey(const Annotation& note)
 {
     return std::to_string(note.id) + " " + std::to_string(note.replies.size());
 }
@@ -261,22 +262,22 @@ bool Viewer::hasUnseenAgentReply(const Annotation& note) const
 {
     return note.resolved && !note.withdrawn && !note.replies.empty()
            && note.replies.back().author != reviewerName
-           && !seenThreads.contains(threadKey(note));
+           && !seenCommentThreads.contains(commentThreadKey(note));
 }
 
-void Viewer::pinUnseenThreads()
+void Viewer::pinUnseenCommentThreads()
 {
     auto seen = eacp::Files::readFile(store.worktreeDirectory / seenFileName);
 
     for (const auto& line: splitLines(seen))
-        seenThreads.insert(line);
+        seenCommentThreads.insert(line);
 
-    loadThreadFolds();
+    loadCommentThreadFolds();
 
     for (const auto& note: annotations)
     {
         if (hasUnseenAgentReply(note))
-            pinnedThreads.insert(note.id);
+            pinnedCommentThreads.insert(note.id);
     }
 }
 
@@ -285,39 +286,39 @@ void Viewer::markSeen(const Annotation& note)
     if (!hasUnseenAgentReply(note))
         return;
 
-    seenThreads.insert(threadKey(note));
+    seenCommentThreads.insert(commentThreadKey(note));
     eacp::Files::appendFile(store.worktreeDirectory / seenFileName,
-                            threadKey(note) + "\n");
+                            commentThreadKey(note) + "\n");
 }
 
-void Viewer::loadThreadFolds()
+void Viewer::loadCommentThreadFolds()
 {
-    threadFolds = parseThreadFolds(
+    commentThreadFolds = parseCommentThreadFolds(
         eacp::Files::readFile(store.worktreeDirectory / foldsFileName));
 }
 
-void Viewer::setThreadView(int id, ThreadView view)
+void Viewer::setCommentThreadView(int id, CommentThreadView view)
 {
     const auto* note = annotation(id);
 
     if (note == nullptr)
         return;
 
-    if (view == ThreadView::recent)
-        threadFolds.erase(id);
+    if (view == CommentThreadView::recent)
+        commentThreadFolds.erase(id);
     else
-        threadFolds[id] = {view, note->replies.size()};
+        commentThreadFolds[id] = {view, note->replies.size()};
 
     eacp::Files::createDirectories(store.worktreeDirectory);
     writeText(store.worktreeDirectory / foldsFileName,
-              formatThreadFolds(threadFolds));
+              formatCommentThreadFolds(commentThreadFolds));
     rebuildRows();
 }
 
-void Viewer::setEveryThreadView(ThreadView view)
+void Viewer::setEveryCommentThreadView(CommentThreadView view)
 {
     for (const auto& note: annotations)
-        setThreadView(note.id, view);
+        setCommentThreadView(note.id, view);
 }
 
 bool Viewer::isCursorOn(RowKind kind) const
@@ -332,10 +333,10 @@ void Viewer::toggleFoldAtCursor()
 {
     auto id = annotationAtCursor();
 
-    if (findFold(threadFolds, id).view == ThreadView::collapsed)
-        setThreadView(id, ThreadView::recent);
+    if (findFold(commentThreadFolds, id).view == CommentThreadView::collapsed)
+        setCommentThreadView(id, CommentThreadView::recent);
     else
-        setThreadView(id, ThreadView::collapsed);
+        setCommentThreadView(id, CommentThreadView::collapsed);
 }
 
 void Viewer::annotateAtCursor(bool wholeHunk)
@@ -624,16 +625,16 @@ void Viewer::closeEditor(bool)
 
     if (wasReplying)
     {
-        moveCursorToEndOfThread(id);
+        moveCursorToEndOfCommentThread(id);
         return;
     }
 
-    if (isCursorInThread(id))
+    if (isCursorInCommentThread(id))
         return;
 
     for (std::size_t i = 0; i < rows.size(); ++i)
     {
-        if (isThreadStart(rows[i]) && rows[i].annotation == id)
+        if (isCommentThreadStart(rows[i]) && rows[i].annotation == id)
         {
             diffCursor = static_cast<int>(i);
             break;
@@ -641,7 +642,7 @@ void Viewer::closeEditor(bool)
     }
 }
 
-bool Viewer::isCursorInThread(int id) const
+bool Viewer::isCursorInCommentThread(int id) const
 {
     if (diffCursor < 0 || diffCursor >= static_cast<int>(rows.size()))
         return false;
@@ -649,7 +650,7 @@ bool Viewer::isCursorInThread(int id) const
     return rows[static_cast<std::size_t>(diffCursor)].annotation == id;
 }
 
-void Viewer::moveCursorToEndOfThread(int id)
+void Viewer::moveCursorToEndOfCommentThread(int id)
 {
     for (std::size_t i = 0; i < rows.size(); ++i)
     {
@@ -724,8 +725,8 @@ void Viewer::editAtCursor()
         return;
     }
 
-    if (findFold(threadFolds, id).view == ThreadView::collapsed)
-        setThreadView(id, ThreadView::recent);
+    if (findFold(commentThreadFolds, id).view == CommentThreadView::collapsed)
+        setCommentThreadView(id, CommentThreadView::recent);
 
     editingId = id;
     replyCommentId.reset();
@@ -805,8 +806,8 @@ void Viewer::replyAtCursor()
         return;
     }
 
-    if (findFold(threadFolds, id).view == ThreadView::collapsed)
-        setThreadView(id, ThreadView::recent);
+    if (findFold(commentThreadFolds, id).view == CommentThreadView::collapsed)
+        setCommentThreadView(id, CommentThreadView::recent);
 
     auto pending = findPendingReply(*note);
     replyCommentId = id;

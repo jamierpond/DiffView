@@ -188,10 +188,12 @@ void Viewer::run(const Command& command)
                     focus = Pane::diff;
                 }
             }
-            else if (focus == Pane::diff && isCursorOn(RowKind::collapsedThread))
-                setThreadView(annotationAtCursor(), ThreadView::recent);
+            else if (focus == Pane::diff
+                     && isCursorOn(RowKind::collapsedCommentThread))
+                setCommentThreadView(annotationAtCursor(),
+                                     CommentThreadView::recent);
             else if (focus == Pane::diff && isCursorOn(RowKind::earlierReplies))
-                setThreadView(annotationAtCursor(), ThreadView::all);
+                setCommentThreadView(annotationAtCursor(), CommentThreadView::all);
             else if (focus == Pane::diff)
             {
                 if (const auto* note = annotation(annotationAtCursor());
@@ -316,16 +318,16 @@ void Viewer::run(const Command& command)
             toggleFoldAtCursor();
             break;
         case Action::closeFold:
-            setThreadView(annotationAtCursor(), ThreadView::collapsed);
+            setCommentThreadView(annotationAtCursor(), CommentThreadView::collapsed);
             break;
         case Action::openFold:
-            setThreadView(annotationAtCursor(), ThreadView::all);
+            setCommentThreadView(annotationAtCursor(), CommentThreadView::all);
             break;
         case Action::closeAllFolds:
-            setEveryThreadView(ThreadView::collapsed);
+            setEveryCommentThreadView(CommentThreadView::collapsed);
             break;
         case Action::openAllFolds:
-            setEveryThreadView(ThreadView::recent);
+            setEveryCommentThreadView(CommentThreadView::recent);
             break;
         case Action::help:
             modal = Modal::help;

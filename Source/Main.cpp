@@ -419,7 +419,7 @@ int runCommand(const std::string& command, int argc, char* argv[])
     if (command == "reply" && text.empty() && isatty(STDIN_FILENO) == 0)
         text = readStdin();
 
-    auto options = diffview::ThreadOptions {
+    auto options = diffview::CommentThreadOptions {
         *store, *id, agent, arguments.flags["--force"], text};
 
     return command == "reply" ? diffview::runReply(options)

@@ -151,7 +151,8 @@ std::vector<AgentActivity> findStatusActivities(const eacp::FilePath& statuses,
         auto status = parseAgentStatus(eacp::Files::readFile(path));
 
         if (isAgentStatusCurrent(status, now))
-            activities.push_back({path.fileName(), status.thread, status.doing});
+            activities.push_back(
+                {path.fileName(), status.commentThread, status.doing});
     }
 
     return activities;

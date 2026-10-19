@@ -11,7 +11,7 @@ auto tActivityStatusExpiry =
     auto written = AgentStatus {46, 1000, "running the tests\nand more"};
     auto status = parseAgentStatus(formatAgentStatus(written));
 
-    check(status.thread == 46 && status.updated == 1000);
+    check(status.commentThread == 46 && status.updated == 1000);
     check(status.doing == "running the tests");
     check(isAgentStatusCurrent(status, 1000));
     check(isAgentStatusCurrent(status, 1000 + statusExpirySeconds - 1));

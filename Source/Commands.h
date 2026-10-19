@@ -6,7 +6,7 @@
 
 namespace diffview
 {
-struct ThreadOptions
+struct CommentThreadOptions
 {
     StoreLayout store;
     int id = 0;
@@ -15,8 +15,8 @@ struct ThreadOptions
     std::string text;
 };
 
-int runReply(const ThreadOptions& options);
-int runResolve(const ThreadOptions& options);
+int runReply(const CommentThreadOptions& options);
+int runResolve(const CommentThreadOptions& options);
 
 struct ListOptions
 {

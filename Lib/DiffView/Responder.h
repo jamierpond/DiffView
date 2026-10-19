@@ -34,7 +34,7 @@ ResponderConfig parseResponderConfig(const std::string& text,
 struct SendRoute
 {
     std::vector<std::string> listeners;
-    std::vector<int> responderThreads;
+    std::vector<int> responderCommentThreads;
 };
 
 // Listening agents hear what `dv monitor --as` gives them. The responder
@@ -89,7 +89,7 @@ struct ResponderSettings
 struct ResponderMessage
 {
     std::string text;
-    std::vector<int> threads;
+    std::vector<int> commentThreads;
 };
 
 // dv's own agent: one CLI process, started on the first message, fed the

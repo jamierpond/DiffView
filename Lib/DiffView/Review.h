@@ -110,7 +110,7 @@ ReviewFile draftFile(const std::vector<Annotation>& annotations,
 std::optional<ReviewFile> resolutionsFrom(const ReviewFile& latest,
                                           const ReviewFile& round);
 
-struct ThreadChange
+struct CommentThreadChange
 {
     std::string from = "agent";
     bool named = false;
@@ -121,8 +121,9 @@ struct ThreadChange
     std::vector<std::string> listening;
 };
 
-std::optional<std::string>
-    changeThread(ReviewFile& round, int id, const ThreadChange& change);
+std::optional<std::string> changeCommentThread(ReviewFile& round,
+                                               int id,
+                                               const CommentThreadChange& change);
 
 // Withdrawn comments go out once more, so the agent hears, then disappear.
 ReviewFile submitDraft(std::vector<Annotation>& annotations,

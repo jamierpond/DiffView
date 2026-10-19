@@ -95,7 +95,7 @@ private:
         int oldLine = 0;
         std::string text;
         int annotation = 0;
-        int threadOffset = 0;
+        int commentThreadOffset = 0;
         int hunk = -1;
     };
 
@@ -163,13 +163,13 @@ private:
     void saveStore();
     void submitReview();
     void sendReply(Annotation& note, const std::string& text);
-    static std::string threadKey(const Annotation& note);
+    static std::string commentThreadKey(const Annotation& note);
     bool hasUnseenAgentReply(const Annotation& note) const;
-    void pinUnseenThreads();
+    void pinUnseenCommentThreads();
     void markSeen(const Annotation& note);
-    void loadThreadFolds();
-    void setThreadView(int id, ThreadView view);
-    void setEveryThreadView(ThreadView view);
+    void loadCommentThreadFolds();
+    void setCommentThreadView(int id, CommentThreadView view);
+    void setEveryCommentThreadView(CommentThreadView view);
     void toggleFoldAtCursor();
     bool isCursorOn(RowKind kind) const;
     void annotateAtCursor(bool wholeHunk);
@@ -179,8 +179,8 @@ private:
     bool onEditorEvent(const ftxui::Event& event);
     bool commitEditor();
     void closeEditor(bool keepPastedImages);
-    bool isCursorInThread(int id) const;
-    void moveCursorToEndOfThread(int id);
+    bool isCursorInCommentThread(int id) const;
+    void moveCursorToEndOfCommentThread(int id);
     void pasteIntoEditor();
     void editAtCursor();
     void deleteAtCursor();
@@ -215,10 +215,10 @@ private:
     ftxui::Element renderTree(int width, int height);
     ftxui::Element renderDiff(int width, int height);
     ftxui::Element renderRow(const DiffRow& row, int index, int width);
-    ftxui::Element renderThreadRow(const DiffRow& row,
-                                   const Annotation& note,
-                                   int index,
-                                   ftxui::Element shown);
+    ftxui::Element renderCommentThreadRow(const DiffRow& row,
+                                          const Annotation& note,
+                                          int index,
+                                          ftxui::Element shown);
     ftxui::Element renderStatus();
     ftxui::Element renderActivity(const AgentActivity& activity);
     std::optional<AgentActivity> findActivityOn(int thread) const;
@@ -276,9 +276,9 @@ private:
     std::string lastRoundsSignature;
     bool showResolved = false;
 
-    std::set<std::string> seenThreads;
-    std::set<int> pinnedThreads;
-    ThreadFolds threadFolds;
+    std::set<std::string> seenCommentThreads;
+    std::set<int> pinnedCommentThreads;
+    CommentThreadFolds commentThreadFolds;
 
     std::set<std::string> collapsed;
     std::vector<TreeRow> treeRows;

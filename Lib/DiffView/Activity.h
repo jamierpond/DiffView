@@ -11,7 +11,7 @@ constexpr auto statusDirectory = "status";
 // What a listening agent said with `dv status`.
 struct AgentStatus
 {
-    int thread = 0;
+    int commentThread = 0;
     std::time_t updated = 0;
     std::string doing;
 };
@@ -25,7 +25,7 @@ bool isAgentStatusCurrent(const AgentStatus& status, std::time_t now);
 struct AgentActivity
 {
     std::string agent;
-    int thread = 0;
+    int commentThread = 0;
     std::string doing;
 };
 

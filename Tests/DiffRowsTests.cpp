@@ -102,7 +102,7 @@ auto tReplyRows = test("DiffRows/replies follow the comment inside its block") =
     check(rows[13].kind == RowKind::annotationBottom);
 };
 
-auto tThreadCursor =
+auto tCommentThreadCursor =
     test("DiffRows/a row in a thread is found again after a rebuild") = []
 {
     auto file = sample();
@@ -115,27 +115,29 @@ auto tThreadCursor =
 
     check(rows[secondReplyLine].text == "it is");
 
-    auto offset = findOffsetInThread(rows, secondReplyLine);
+    auto offset = findOffsetInCommentThread(rows, secondReplyLine);
     annotation.replies.push_back({"you", "2026-10-18 10:05", "ok", false});
     auto rebuilt = buildRows(file, {annotation}, {}, 80);
 
-    check(findRowInThread(rebuilt, 7, offset) == static_cast<int>(secondReplyLine));
+    check(findRowInCommentThread(rebuilt, 7, offset)
+          == static_cast<int>(secondReplyLine));
     check(rebuilt[bottomAfterRebuild].kind == RowKind::annotationBottom);
-    check(findRowInThread(rebuilt, 7, farPastTheBottom) == bottomAfterRebuild);
-    check(!findRowInThread(rebuilt, 8, 0));
+    check(findRowInCommentThread(rebuilt, 7, farPastTheBottom)
+          == bottomAfterRebuild);
+    check(!findRowInCommentThread(rebuilt, 8, 0));
 };
 
 namespace
 {
-constexpr auto threadId = 48;
+constexpr auto commentThreadId = 48;
 constexpr auto wideEnough = 200;
 
-Annotation makeThreadWithReplies(const FileDiff& file, std::size_t count)
+Annotation makeCommentThreadWithReplies(const FileDiff& file, std::size_t count)
 {
     auto annotation =
         makeAnnotation(file,
                        {0, 0},
-                       threadId,
+                       commentThreadId,
                        "huh? you should have an Activity-ClaudeCode.h\nmore");
 
     for (std::size_t r = 0; r < count; ++r)
@@ -174,7 +176,7 @@ auto tRecentReplies = test(
 {
     constexpr auto replyCount = recentReplyCount + 2;
     auto file = sample();
-    auto annotation = makeThreadWithReplies(file, replyCount);
+    auto annotation = makeCommentThreadWithReplies(file, replyCount);
     auto rows = buildRows(file, {annotation}, {}, wideEnough);
     auto earlier = std::find_if(rows.begin(),
                                 rows.end(),
@@ -185,65 +187,67 @@ auto tRecentReplies = test(
     check(earlier->text == "⋯ 2 earlier replies · Enter to show all");
     check(findShownReplies(rows) == std::vector<int> {2, 3, 4, 5, 6});
 
-    auto all = buildRows(
-        file, {annotation}, {{threadId, {ThreadView::all, 0}}}, wideEnough);
+    auto all = buildRows(file,
+                         {annotation},
+                         {{commentThreadId, {CommentThreadView::all, 0}}},
+                         wideEnough);
     check(countKind(all, RowKind::earlierReplies) == 0);
     check(findShownReplies(all).size() == replyCount);
 
-    auto few = makeThreadWithReplies(file, recentReplyCount);
+    auto few = makeCommentThreadWithReplies(file, recentReplyCount);
     check(countKind(buildRows(file, {few}, {}, wideEnough), RowKind::earlierReplies)
           == 0);
 };
 
-auto tCollapsedThread =
+auto tCollapsedCommentThread =
     test("DiffRows/a collapsed thread is one summary row with what's new") = []
 {
     constexpr auto repliesWhenCollapsed = std::size_t {3};
     constexpr auto narrow = 30;
     auto file = sample();
-    auto annotation = makeThreadWithReplies(file, repliesWhenCollapsed);
-    auto folds =
-        ThreadFolds {{threadId, {ThreadView::collapsed, repliesWhenCollapsed}}};
+    auto annotation = makeCommentThreadWithReplies(file, repliesWhenCollapsed);
+    auto folds = CommentThreadFolds {
+        {commentThreadId, {CommentThreadView::collapsed, repliesWhenCollapsed}}};
     auto rows = buildRows(file, {annotation}, folds, wideEnough);
 
-    check(countKind(rows, RowKind::collapsedThread) == 1);
+    check(countKind(rows, RowKind::collapsedCommentThread) == 1);
     check(countKind(rows, RowKind::annotationTop) == 0);
     check(countKind(rows, RowKind::annotationBottom) == 0);
 
-    auto collapsed = std::find_if(rows.begin(), rows.end(), isThreadStart);
+    auto collapsed = std::find_if(rows.begin(), rows.end(), isCommentThreadStart);
     check(
         collapsed->text
         == "#48 · you: huh? you should have an Activity-ClaudeCode.h… · 3 replies");
 
     auto index = static_cast<std::size_t>(collapsed - rows.begin());
-    check(findOffsetInThread(rows, index) == 0);
+    check(findOffsetInCommentThread(rows, index) == 0);
     constexpr auto offsetPastTheSummary = 5;
-    check(findRowInThread(rows, threadId, offsetPastTheSummary)
+    check(findRowInCommentThread(rows, commentThreadId, offsetPastTheSummary)
           == static_cast<int>(index));
 
     annotation.replies.push_back({"dev", "now", "done", false});
     annotation.replies.push_back({"you", "now", "thanks", false});
-    auto fold = folds.at(threadId);
-    check(describeCollapsedThread(annotation, fold, wideEnough)
+    auto fold = folds.at(commentThreadId);
+    check(describeCollapsedCommentThread(annotation, fold, wideEnough)
               .ends_with(" · 5 replies · 1 new"));
 
-    auto cut = describeCollapsedThread(annotation, fold, narrow);
+    auto cut = describeCollapsedCommentThread(annotation, fold, narrow);
     check(cut.starts_with("#48 · you: ") && cut.find("…") != std::string::npos);
 };
 
-auto tThreadFoldsFile =
+auto tCommentThreadFoldsFile =
     test("DiffRows/folds read back; the default isn't written") = []
 {
-    auto folds = ThreadFolds {{4, {ThreadView::collapsed, 3}},
-                              {5, {ThreadView::all, 0}},
-                              {6, {ThreadView::recent, 0}}};
-    auto text = formatThreadFolds(folds);
-    auto parsed = parseThreadFolds(text + "junk\n");
+    auto folds = CommentThreadFolds {{4, {CommentThreadView::collapsed, 3}},
+                                     {5, {CommentThreadView::all, 0}},
+                                     {6, {CommentThreadView::recent, 0}}};
+    auto text = formatCommentThreadFolds(folds);
+    auto parsed = parseCommentThreadFolds(text + "junk\n");
 
     check(text == "4 collapsed 3\n5 all\n");
     check(parsed.size() == 2);
-    check(findFold(parsed, 4).view == ThreadView::collapsed
+    check(findFold(parsed, 4).view == CommentThreadView::collapsed
           && findFold(parsed, 4).repliesWhenCollapsed == 3);
-    check(findFold(parsed, 5).view == ThreadView::all);
-    check(findFold(parsed, 6).view == ThreadView::recent);
+    check(findFold(parsed, 5).view == CommentThreadView::all);
+    check(findFold(parsed, 6).view == CommentThreadView::recent);
 };

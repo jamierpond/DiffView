@@ -8,7 +8,7 @@ namespace diffview
 {
 namespace
 {
-constexpr auto threadKey = std::string_view {"thread"};
+constexpr auto commentThreadKey = std::string_view {"thread"};
 constexpr auto updatedKey = std::string_view {"updated"};
 constexpr auto doingKey = std::string_view {"doing"};
 
@@ -25,9 +25,10 @@ std::string formatAgentStatus(const AgentStatus& status)
     auto lines = splitLines(trim(status.doing));
     auto doing = lines.empty() ? std::string {} : lines.front();
 
-    return std::string {threadKey} + " " + std::to_string(status.thread) + "\n"
-           + std::string {updatedKey} + " " + std::to_string(status.updated) + "\n"
-           + std::string {doingKey} + " " + doing + "\n";
+    return std::string {commentThreadKey} + " "
+           + std::to_string(status.commentThread) + "\n" + std::string {updatedKey}
+           + " " + std::to_string(status.updated) + "\n" + std::string {doingKey}
+           + " " + doing + "\n";
 }
 
 AgentStatus parseAgentStatus(const std::string& text)
@@ -44,8 +45,8 @@ AgentStatus parseAgentStatus(const std::string& text)
         auto key = std::string_view {line}.substr(0, space);
         auto value = line.substr(space + 1);
 
-        if (key == threadKey)
-            status.thread = parseNumber(value);
+        if (key == commentThreadKey)
+            status.commentThread = parseNumber(value);
         else if (key == updatedKey)
             status.updated = static_cast<std::time_t>(std::stoll("0" + value));
         else if (key == doingKey)
@@ -57,7 +58,7 @@ AgentStatus parseAgentStatus(const std::string& text)
 
 bool isAgentStatusCurrent(const AgentStatus& status, std::time_t now)
 {
-    return status.thread > 0 && !status.doing.empty()
+    return status.commentThread > 0 && !status.doing.empty()
            && now - status.updated < statusExpirySeconds;
 }
 

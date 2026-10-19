@@ -44,14 +44,14 @@ bool contains(const std::vector<std::string>& names, const std::string& name)
     return std::find(names.begin(), names.end(), name) != names.end();
 }
 
-ReviewFile makeThreadRound(const ReviewFile& round, const Annotation& comment)
+ReviewFile makeCommentThreadRound(const ReviewFile& round, const Annotation& comment)
 {
     auto thread = round;
     thread.comments = {comment};
     return thread;
 }
 
-std::string joinThreads(const std::vector<int>& threads)
+std::string joinCommentThreads(const std::vector<int>& threads)
 {
     auto text = std::string {};
 
@@ -123,7 +123,7 @@ SendRoute routeSend(const ReviewFile& round,
 
     for (const auto& comment: round.comments)
     {
-        auto thread = makeThreadRound(round, comment);
+        auto thread = makeCommentThreadRound(round, comment);
         auto isTaken =
             std::any_of(external.begin(),
                         external.end(),
@@ -131,7 +131,7 @@ SendRoute routeSend(const ReviewFile& round,
                         { return routeRound(thread, agent, everyone).wakes(); });
 
         if (!isTaken && routeRound(thread, responder, everyone).wakes())
-            route.responderThreads.push_back(comment.id);
+            route.responderCommentThreads.push_back(comment.id);
     }
 
     return route;
@@ -144,7 +144,8 @@ std::string describeSendRoute(const SendRoute& route, const std::string& respond
     for (const auto& agent: route.listeners)
         parts.push_back("@" + agent + " listening");
 
-    if (!route.responderThreads.empty() && !contains(route.listeners, responder))
+    if (!route.responderCommentThreads.empty()
+        && !contains(route.listeners, responder))
         parts.push_back("@" + responder);
 
     if (parts.empty())
@@ -256,7 +257,7 @@ std::vector<AgentActivity> Responder::findActivities() const
     if (!current)
         return activities;
 
-    for (auto thread: current->threads)
+    for (auto thread: current->commentThreads)
         activities.push_back({settings.name, thread, doing});
 
     return activities;
@@ -280,7 +281,8 @@ void Responder::sendNext()
     current = std::move(queue.front());
     queue.pop_front();
     doing = "starting";
-    log("dv: sending " + joinThreads(current->threads) + ": " + current->text);
+    log("dv: sending " + joinCommentThreads(current->commentThreads) + ": "
+        + current->text);
 
     if (!hasStdinSession(settings.cli))
     {
