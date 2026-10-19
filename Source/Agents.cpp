@@ -3,14 +3,17 @@
 #include <Review.h>
 #include <Store.h>
 
+#include <eacp/Core/Utils/Files.h>
+
 #include <algorithm>
 #include <array>
 #include <cerrno>
 #include <csignal>
 #include <cstdio>
 #include <ctime>
-#include <filesystem>
-#include <fstream>
+#include <span>
+#include <sstream>
+#include <stdexcept>
 #include <unistd.h>
 
 namespace diffview
@@ -28,9 +31,24 @@ bool isAlive(pid_t pid)
     return pid > 0 && (kill(pid, checkOnly) == 0 || errno == EPERM);
 }
 
-bool isListening(const std::filesystem::path& registration)
+// Best effort: an agents directory dv can't write to mustn't stop it.
+void writeRegistration(const eacp::FilePath& path, const std::string& text)
 {
-    auto in = std::ifstream {registration};
+    auto bytes =
+        std::span {reinterpret_cast<const std::uint8_t*>(text.data()), text.size()};
+
+    try
+    {
+        eacp::Files::writeFile(path, bytes);
+    }
+    catch (const std::runtime_error&)
+    {
+    }
+}
+
+bool isListening(const eacp::FilePath& registration)
+{
+    auto in = std::istringstream {eacp::Files::readFile(registration)};
     auto word = std::string {};
     auto pid = pid_t {0};
 
@@ -53,17 +71,16 @@ void registerAgent(const std::string& store, const std::string& name)
 {
     createStoreDirectory(store);
 
-    auto dir = std::filesystem::path {store} / agentDirectory;
-    auto error = std::error_code {};
-    std::filesystem::create_directories(dir, error);
+    auto dir = eacp::FilePath {store} / agentDirectory;
+    eacp::Files::createDirectories(dir);
 
-    auto path = (dir / name).string();
+    auto path = (dir / name).str();
     std::snprintf(registered.data(), registered.size(), "%s", path.c_str());
 
-    std::ofstream {path} << "pid " << getpid() << "\nstarted "
-                         << roundId(static_cast<std::int64_t>(std::time(nullptr))
-                                    * 1000)
-                         << "\n";
+    auto text = std::ostringstream {};
+    text << "pid " << getpid() << "\nstarted "
+         << roundId(static_cast<std::int64_t>(std::time(nullptr)) * 1000) << "\n";
+    writeRegistration(path, text.str());
 
     for (auto signal: {SIGINT, SIGTERM, SIGHUP, SIGPIPE})
         std::signal(signal,
@@ -81,24 +98,21 @@ void markAgentStopped()
     if (registered[0] == 0)
         return;
 
-    std::ofstream {registered.data()} << "pid 0\nstopped " << std::time(nullptr)
-                                      << "\n";
+    auto text = std::ostringstream {};
+    text << "pid 0\nstopped " << std::time(nullptr) << "\n";
+    writeRegistration(registered.data(), text.str());
     registered[0] = 0;
 }
 
 std::vector<std::string> findListeningAgents(const std::string& store)
 {
     auto names = std::vector<std::string> {};
-    auto dir = std::filesystem::path {store} / agentDirectory;
-    auto error = std::error_code {};
+    auto dir = eacp::FilePath {store} / agentDirectory;
 
-    if (!std::filesystem::is_directory(dir, error))
-        return names;
-
-    for (const auto& entry: std::filesystem::directory_iterator {dir, error})
+    for (const auto& entry: eacp::Files::listDirectory(dir, {.includeHidden = true}))
     {
-        if (isListening(entry.path()))
-            names.push_back(entry.path().filename().string());
+        if (isListening(entry.path))
+            names.push_back(entry.path.fileName());
     }
 
     std::sort(names.begin(), names.end());
