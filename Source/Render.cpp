@@ -826,16 +826,6 @@ Element Viewer::renderStatus()
     if (!rounds.empty())
         parts.push_back(text("  sent " + roundLabel(rounds.back())) | dim);
 
-    if (!listening.empty())
-    {
-        auto names = std::string {};
-
-        for (const auto& name: listening)
-            names += " @" + name;
-
-        parts.push_back(text("  ◉" + names) | color(Color::Cyan));
-    }
-
     parts.push_back(filler());
 
     auto pending = keys.pending();
@@ -1066,9 +1056,7 @@ Element Viewer::renderHelp()
                        "/ ? n N search, Ctrl-S save+close, Ctrl-V paste (images too).")
                        | dim,
                    text("Tab after @ completes an agent's name.") | dim,
-                   text("● unseen  ◆ touched in the last 10s  ✎ comments  ◉ agents "
-                        "listening")
-                       | dim,
+                   text("● unseen  ◆ touched in the last 10s  ✎ comments") | dim,
                    text("Agents read .diffview/latest.md") | dim,
                }))
            | size(WIDTH, EQUAL, 64);

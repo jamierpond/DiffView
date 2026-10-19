@@ -1,4 +1,3 @@
-#include "Agents.h"
 #include "Commands.h"
 #include "Viewer.h"
 
@@ -80,7 +79,6 @@ int changeAndWrite(const ThreadOptions& options, bool resolve)
     change.resolve = resolve;
     change.text = options.text;
     change.time = formatReplyTime(nowMs());
-    change.listening = findListeningAgents(root.str());
 
     if (auto error = changeThread(round, options.id, change))
         return fail(*error);
@@ -166,7 +164,6 @@ int runComments(const ListOptions& options)
 {
     auto comments = mergeReviews(readRounds(options.store), {}).annotations;
     auto rows = std::vector<std::array<std::string, 5>> {};
-    auto listening = findListeningAgents(options.store.directory.str());
 
     for (const auto& comment: comments)
     {
@@ -175,10 +172,7 @@ int runComments(const ListOptions& options)
         if (options.openOnly && comment.resolved)
             continue;
 
-        auto listeningOwner = findListeningOwner(comment, listening);
-
-        if (!options.agent.empty() && !listeningOwner.empty()
-            && listeningOwner != options.agent)
+        if (!options.agent.empty() && !owner.empty() && owner != options.agent)
             continue;
 
         auto lines = splitLines(comment.text);

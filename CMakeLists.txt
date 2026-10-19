@@ -49,7 +49,6 @@ CPMAddPackage(
 add_subdirectory(Lib)
 
 add_executable(DiffView
-        Source/Agents.cpp
         Source/Commands.cpp
         Source/Comments.cpp
         Source/Input.cpp

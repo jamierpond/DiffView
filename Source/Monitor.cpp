@@ -1,5 +1,4 @@
 #include "Monitor.h"
-#include "Agents.h"
 
 #include <Review.h>
 
@@ -53,24 +52,14 @@ int runMonitor(const StoreLayout& store, const MonitorOptions& options)
     if (options.after)
         seen = keepRoundsUpTo(seen, *options.after);
 
-    if (!options.agent.empty())
-        registerAgent(root.str(), options.agent);
-
-    auto listening = std::vector<std::string> {};
-
     while (true)
     {
         auto current = listRoundIdsInOrder(root);
         auto woke = false;
-        auto fresh = newRounds(seen, current);
-
-        if (!fresh.empty())
-            listening = findListeningAgents(root.str());
-
-        for (const auto& id: fresh)
+        for (const auto& id: newRounds(seen, current))
         {
             auto round = readReviewOrEmpty(root / reviewDirectory / (id + ".md"));
-            auto counts = routeRound(round, options.agent, listening);
+            auto counts = routeRound(round, options.agent);
 
             if (!options.agent.empty() && !counts.wakes())
                 continue;
@@ -84,10 +73,7 @@ int runMonitor(const StoreLayout& store, const MonitorOptions& options)
         seen = std::move(current);
 
         if (woke && options.once)
-        {
-            markAgentStopped();
             return 0;
-        }
 
         std::this_thread::sleep_for(std::chrono::seconds {1});
     }
