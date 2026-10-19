@@ -140,6 +140,11 @@ private:
     std::string roundsSignature() const;
     void saveStore();
     void submitReview();
+    void sendReply(Annotation& note, const std::string& text);
+    static std::string threadKey(const Annotation& note);
+    bool needsSeeing(const Annotation& note) const;
+    void pinUnseenThreads();
+    void markSeen(const Annotation& note);
     void annotateAtCursor(bool wholeHunk);
     void commentOnFile();
     void commentGeneral();
@@ -181,6 +186,10 @@ private:
     ftxui::Element renderTree(int width, int height);
     ftxui::Element renderDiff(int width, int height);
     ftxui::Element renderRow(const DiffRow& row, int index, int width);
+    ftxui::Element renderThreadRow(const DiffRow& row,
+                                   const Annotation& note,
+                                   int index,
+                                   ftxui::Element shown);
     ftxui::Element renderStatus();
     ftxui::Element renderPrompt();
     ftxui::Element renderModal();
@@ -223,6 +232,11 @@ private:
     std::string lastRoundsSignature;
     bool showResolved = false;
 
+    // Resolved threads whose newest reply is an agent's stay shown until the
+    // reviewer has had the cursor on them, and for the rest of the session.
+    std::set<std::string> seenThreads;
+    std::set<int> pinnedThreads;
+
     std::set<std::string> collapsed;
     std::vector<TreeRow> treeRows;
     int treeCursor = 0;
@@ -246,7 +260,6 @@ private:
     std::string editorTitle;
     int editingId = 0;
     std::optional<int> replyCommentId;
-    bool replyMadeDraft = false;
     std::optional<Annotation> pendingAnnotation;
     std::vector<std::string> pastedImages;
     std::optional<LineRange> drawnTarget;

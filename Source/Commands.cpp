@@ -1,4 +1,5 @@
 #include "Commands.h"
+#include "Store.h"
 #include "Viewer.h"
 
 #include <Review.h>
@@ -10,8 +11,7 @@
 #include <array>
 #include <cstdio>
 #include <filesystem>
-#include <fstream>
-#include <sstream>
+#include <optional>
 #include <fcntl.h>
 #include <sys/file.h>
 #include <unistd.h>
@@ -21,45 +21,6 @@ namespace diffview
 namespace
 {
 namespace fs = std::filesystem;
-
-std::string readFile(const fs::path& path)
-{
-    auto in = std::ifstream {path, std::ios::binary};
-    auto buffer = std::stringstream {};
-    buffer << in.rdbuf();
-    return buffer.str();
-}
-
-void writeFile(const fs::path& path, const std::string& text)
-{
-    auto bytes =
-        std::span {reinterpret_cast<const std::uint8_t*>(text.data()), text.size()};
-    eacp::Files::writeFileAtomically(path.string(), bytes);
-}
-
-std::vector<ReviewFile> loadRounds(const std::string& repo)
-{
-    auto dir = fs::path {repo} / reviewDirectory;
-    auto names = std::vector<fs::path> {};
-    auto error = std::error_code {};
-
-    if (fs::is_directory(dir, error))
-        for (const auto& entry: fs::directory_iterator {dir, error})
-            if (entry.path().extension() == ".md")
-                names.push_back(entry.path());
-
-    std::sort(names.begin(), names.end());
-
-    auto rounds = std::vector<ReviewFile> {};
-
-    for (const auto& path: names)
-    {
-        rounds.push_back(fromMarkdown(readFile(path)));
-        rounds.back().title = path.stem().string();
-    }
-
-    return rounds;
-}
 
 bool contains(const ReviewFile& file, int id)
 {
@@ -107,14 +68,14 @@ private:
 
 int changeAndWrite(const ThreadOptions& options, bool resolve)
 {
-    auto root = fs::path {options.repo};
+    auto root = eacp::FilePath {options.repo};
 
-    if (!fs::is_directory(root / reviewDirectory))
+    if (!eacp::Files::isDirectory(root / reviewDirectory))
         return fail("no review rounds in " + options.repo
                     + " yet (nothing has been submitted)");
 
     auto lock = RepoLock {options.repo};
-    auto rounds = loadRounds(options.repo);
+    auto rounds = readRounds(root);
     auto at =
         std::find_if(rounds.rbegin(),
                      rounds.rend(),
@@ -122,10 +83,7 @@ int changeAndWrite(const ThreadOptions& options, bool resolve)
 
     if (at == rounds.rend())
     {
-        auto draftPath = root / draftFileName;
-
-        if (fs::exists(draftPath)
-            && contains(fromMarkdown(readFile(draftPath)), options.id))
+        if (contains(readReview(root / draftFileName), options.id))
             return fail("#" + std::to_string(options.id)
                         + " is still in the reviewer's draft, not sent to you");
 
@@ -133,12 +91,15 @@ int changeAndWrite(const ThreadOptions& options, bool resolve)
     }
 
     auto& round = *at;
-    auto isNewest = at == rounds.rbegin();
     auto latestPath = root / latestReviewFileName;
+    auto latest = readReview(latestPath);
+    auto isNewest = latest.title == round.title;
 
-    if (isNewest && fs::exists(latestPath))
-        if (auto synced = resolutionsFrom(fromMarkdown(readFile(latestPath)), round))
+    if (isNewest)
+    {
+        if (auto synced = resolutionsFrom(latest, round))
             round = std::move(*synced);
+    }
 
     auto change = ThreadChange {};
     change.from = options.agent.empty() ? "agent" : options.agent;
@@ -152,16 +113,16 @@ int changeAndWrite(const ThreadOptions& options, bool resolve)
         return fail(*error);
 
     auto text = toMarkdown(round);
-    auto file = fs::path {reviewDirectory} / (round.title + ".md");
-    writeFile(root / file, text);
+    auto path = root / reviewDirectory / (round.title + ".md");
+    writeText(path, text);
 
     if (isNewest)
-        writeFile(latestPath, text);
+        writeText(latestPath, text);
 
     std::printf("dv: %s #%d · %s\n",
                 resolve ? "resolved" : "replied to",
                 options.id,
-                (root / file).string().c_str());
+                path.c_str());
     return 0;
 }
 
@@ -184,13 +145,15 @@ std::string pad(const std::string& text, int width)
                : text;
 }
 
-const Annotation* find(const std::vector<Annotation>& comments, int id)
+std::optional<Annotation> find(const std::vector<Annotation>& comments, int id)
 {
     for (const auto& comment: comments)
+    {
         if (comment.id == id)
-            return &comment;
+            return comment;
+    }
 
-    return nullptr;
+    return std::nullopt;
 }
 } // namespace
 
@@ -209,7 +172,7 @@ int runResolve(const ThreadOptions& options)
 
 int runComments(const ListOptions& options)
 {
-    auto comments = mergeReviews(loadRounds(options.repo), {}).annotations;
+    auto comments = mergeReviews(readRounds(options.repo), {}).annotations;
     auto rows = std::vector<std::array<std::string, 5>> {};
 
     for (const auto& comment: comments)
@@ -228,9 +191,11 @@ int runComments(const ListOptions& options)
                      + (pieces.size() > 1 || lines.size() > 1 ? "…" : "");
 
         if (!comment.replies.empty())
+        {
             about += " · " + std::to_string(comment.replies.size())
                      + (comment.replies.size() == 1 ? " reply" : " replies")
                      + ", last " + comment.replies.back().author;
+        }
 
         rows.push_back({"#" + std::to_string(comment.id),
                         comment.resolved ? "resolved" : "open",
@@ -242,8 +207,10 @@ int runComments(const ListOptions& options)
     auto widths = std::array<int, 4> {};
 
     for (const auto& row: rows)
+    {
         for (std::size_t k = 0; k < widths.size(); ++k)
             widths[k] = std::max(widths[k], codepointCount(row[k]));
+    }
 
     for (const auto& row: rows)
     {
@@ -260,10 +227,10 @@ int runComments(const ListOptions& options)
 
 int runShow(const std::string& repo, int id)
 {
-    auto comments = mergeReviews(loadRounds(repo), {}).annotations;
-    const auto* comment = find(comments, id);
+    auto comments = mergeReviews(readRounds(repo), {}).annotations;
+    auto comment = find(comments, id);
 
-    if (comment == nullptr)
+    if (!comment)
         return fail(describeMissing(id));
 
     auto shown = *comment;

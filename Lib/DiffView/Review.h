@@ -20,11 +20,16 @@ constexpr auto reviewDirectory = ".diffview/reviews";
 constexpr auto latestReviewFileName = ".diffview/latest.md";
 constexpr auto imageDirectory = ".diffview/images";
 constexpr auto agentDirectory = ".diffview/agents";
+constexpr auto seenFileName = ".diffview/seen";
 
 // "2026-10-16-153012": sorts as it reads, so file order is time order.
 std::string roundId(std::int64_t epochMs);
 
 std::string roundLabel(const std::string& id);
+
+// Newer than every existing round, so `dv monitor --after` never skips one.
+std::string nextRoundId(const std::vector<std::string>& existing,
+                        std::int64_t epochMs);
 
 std::string formatReplyTime(std::int64_t epochMs);
 
@@ -48,12 +53,12 @@ int draftCount(const std::vector<Annotation>& annotations);
 
 int openCount(const std::vector<Annotation>& annotations);
 
-// For `dv monitor`: the round files (names, any order) not seen before,
+// For `dv monitor`: the round ids (any order) not seen before,
 // oldest first.
 std::vector<std::string> newRounds(const std::vector<std::string>& seen,
                                    std::vector<std::string> current);
 
-std::vector<std::string> keepRoundsUpTo(std::vector<std::string> names,
+std::vector<std::string> keepRoundsUpTo(std::vector<std::string> ids,
                                         const std::string& after);
 
 struct RoundRoute
@@ -71,6 +76,20 @@ std::string roundNotice(const std::string& id,
                         const RoundRoute& counts,
                         const std::string& agent,
                         const std::string& path);
+
+std::string replyNotice(const std::string& id,
+                        const ReviewFile& round,
+                        const std::string& agent,
+                        const std::string& path);
+
+// The thread as sent so far plus the reviewer's new reply, as its own round:
+// a new file wakes the monitor, and the store stays the round files.
+ReviewFile makeReplyRound(Annotation thread,
+                          const std::string& text,
+                          const std::string& time,
+                          const std::string& id,
+                          const std::string& baseLabel,
+                          const std::string& baseSha);
 
 ReviewFile draftFile(const std::vector<Annotation>& annotations,
                      const std::string& baseLabel,

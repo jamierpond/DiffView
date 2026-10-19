@@ -47,9 +47,13 @@ constexpr auto usage =
     "  2. when it exits it prints the round, e.g.\n"
     "       dv: review round 2026-10-17-142300 submitted · for @you · 3 open ·\n"
     "       1 with new replies · read /abs/repo/.diffview/latest.md\n"
+    "     or a reply the human sent on one thread:\n"
+    "       dv: reply 2026-10-17-143512 on #4 from you · for @you · read <path>\n"
     "  3. `dv comments --as <you> --open`, `dv show <id>` for each\n"
-    "  4. act, then `dv reply <id> \"what you did\"` or `dv resolve <id>`\n"
-    "  5. re-arm with --after set to that round id\n"
+    "  4. act, then `dv reply <id> \"what you did\"`; `dv resolve <id>` only\n"
+    "     once the work is done. A question gets a reply and stays open:\n"
+    "     resolving folds the thread away from the human.\n"
+    "  5. re-arm with --after set to the id in that line\n"
     "\n"
     "Addressing: `@name` in a comment gives its thread to that agent; an\n"
     "unaddressed thread wakes every agent and belongs to the first to answer\n"
@@ -76,6 +80,8 @@ const std::map<std::string, std::string>& commandHelp()
          "Each line names the round to pass to the next --after:\n"
          "  dv: review round 2026-10-17-142300 submitted · for @dev · 2 open · "
          "read <path>\n"
+         "  dv: reply 2026-10-17-143512 on #4 from you · for @dev · read <path>\n"
+         "A reply is sent the moment the human writes it, as its own round.\n"
          "\n"
          "example: dv monitor --once --as diffview-dev --after 2026-10-17-142300\n"},
         {"comments",
@@ -107,7 +113,9 @@ const std::map<std::string, std::string>& commandHelp()
          "\n"
          "example: dv reply 4 --as diffview-dev \"Done: it's a copy again.\"\n"},
         {"resolve",
-         "Close a thread, with an optional closing note.\n"
+         "Close a thread, with an optional closing note. Only once the work is\n"
+         "done: a question gets `dv reply` and stays open, since a resolved\n"
+         "thread folds away from the human.\n"
          "\n"
          "usage: dv resolve <id> [[-m] <note>] [--as <name>] [--force] [--repo <dir>]\n"
          "\n"

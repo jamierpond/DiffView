@@ -1,14 +1,12 @@
 #include "Monitor.h"
 #include "Agents.h"
+#include "Store.h"
 
 #include <Review.h>
 
-#include <algorithm>
 #include <chrono>
 #include <cstdio>
 #include <filesystem>
-#include <fstream>
-#include <sstream>
 #include <thread>
 #include <vector>
 
@@ -16,26 +14,24 @@ namespace diffview
 {
 namespace
 {
-std::vector<std::string> roundFiles(const std::filesystem::path& dir)
+std::string describeRound(const eacp::FilePath& root,
+                          const std::string& id,
+                          const ReviewFile& round,
+                          const RoundRoute& counts,
+                          const std::string& agent)
 {
-    auto names = std::vector<std::string> {};
-    auto error = std::error_code {};
+    auto own = (root / reviewDirectory / (id + ".md")).str();
 
-    // Submit writes atomically, so a name that is there is a whole file.
-    if (std::filesystem::is_directory(dir, error))
-        for (const auto& entry: std::filesystem::directory_iterator {dir, error})
-            if (entry.path().extension() == ".md")
-                names.push_back(entry.path().filename().string());
+    // latest.md is the newest full round; a reply is read from its own file.
+    if (round.reply)
+        return replyNotice(id, round, agent, own);
 
-    return names;
-}
+    auto latest = root / latestReviewFileName;
 
-std::string readFile(const std::filesystem::path& path)
-{
-    auto in = std::ifstream {path, std::ios::binary};
-    auto buffer = std::stringstream {};
-    buffer << in.rdbuf();
-    return buffer.str();
+    if (readReview(latest).title == id)
+        return roundNotice(id, counts, agent, latest.str());
+
+    return roundNotice(id, counts, agent, own);
 }
 } // namespace
 
@@ -43,33 +39,29 @@ std::string readFile(const std::filesystem::path& path)
 // round is a person pressing a key.
 int runMonitor(const std::string& repo, const MonitorOptions& options)
 {
-    auto root = std::filesystem::absolute(repo);
-    auto dir = root / reviewDirectory;
-    auto latest = (root / latestReviewFileName).string();
-    auto seen = options.after ? keepRoundsUpTo(roundFiles(dir), *options.after)
-                              : roundFiles(dir);
+    auto root = eacp::FilePath {std::filesystem::absolute(repo)};
+    auto seen = listRoundIdsInOrder(root);
+
+    if (options.after)
+        seen = keepRoundsUpTo(seen, *options.after);
 
     if (!options.agent.empty())
-        registerAgent(root.string(), options.agent);
+        registerAgent(root.str(), options.agent);
 
     while (true)
     {
-        auto current = roundFiles(dir);
-        auto newest = std::max_element(current.begin(), current.end());
+        auto current = listRoundIdsInOrder(root);
         auto woke = false;
 
-        for (const auto& name: newRounds(seen, current))
+        for (const auto& id: newRounds(seen, current))
         {
-            auto counts =
-                routeRound(fromMarkdown(readFile(dir / name)), options.agent);
+            auto round = readReview(root / reviewDirectory / (id + ".md"));
+            auto counts = routeRound(round, options.agent);
 
             if (!options.agent.empty() && !counts.wakes())
                 continue;
 
-            auto id = std::filesystem::path {name}.stem().string();
-            auto path = name == *newest ? latest : (dir / name).string();
-            auto line = roundNotice(id, counts, options.agent, path);
-
+            auto line = describeRound(root, id, round, counts, options.agent);
             std::printf("%s\n", line.c_str());
             std::fflush(stdout);
             woke = true;

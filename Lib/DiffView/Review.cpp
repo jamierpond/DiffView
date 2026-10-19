@@ -26,6 +26,28 @@ std::string roundLabel(const std::string& id)
     return id.substr(5, 5) + " " + id.substr(11, 2) + ":" + id.substr(13, 2);
 }
 
+std::string nextRoundId(const std::vector<std::string>& existing,
+                        std::int64_t epochMs)
+{
+    auto stamp = roundId(epochMs);
+
+    if (existing.empty())
+        return stamp;
+
+    const auto& newest = std::ranges::max(existing);
+
+    // A clock behind the newest round counts on from it.
+    if (stamp <= newest)
+        stamp = newest.substr(0, stamp.size());
+
+    auto id = stamp;
+
+    for (auto n = 2; id <= newest; ++n)
+        id = stamp + "-" + std::to_string(n);
+
+    return id;
+}
+
 std::string formatReplyTime(std::int64_t epochMs)
 {
     auto seconds = static_cast<std::time_t>(epochMs / 1000);
@@ -183,13 +205,11 @@ std::vector<std::string> newRounds(const std::vector<std::string>& seen,
     return current;
 }
 
-std::vector<std::string> keepRoundsUpTo(std::vector<std::string> names,
+std::vector<std::string> keepRoundsUpTo(std::vector<std::string> ids,
                                         const std::string& after)
 {
-    std::erase_if(names,
-                  [&](const std::string& name)
-                  { return name.substr(0, name.rfind(".md")) > after; });
-    return names;
+    std::erase_if(ids, [&](const std::string& id) { return id > after; });
+    return ids;
 }
 
 RoundRoute routeRound(const ReviewFile& round, const std::string& agent)
@@ -234,6 +254,52 @@ std::string roundNotice(const std::string& id,
         line += " · " + std::to_string(counts.replied) + " with new replies";
 
     return line + " · read " + path;
+}
+
+std::string replyNotice(const std::string& id,
+                        const ReviewFile& round,
+                        const std::string& agent,
+                        const std::string& path)
+{
+    auto line = "dv: reply " + id;
+
+    if (!round.comments.empty())
+    {
+        const auto& thread = round.comments.front();
+        auto from = std::string {reviewerName};
+
+        for (const auto& reply: thread.replies)
+        {
+            if (reply.fresh)
+                from = reply.author;
+        }
+
+        line += " on #" + std::to_string(thread.id) + " from " + from;
+    }
+
+    if (!agent.empty())
+        line += " · for @" + agent;
+
+    return line + " · read " + path;
+}
+
+ReviewFile makeReplyRound(Annotation thread,
+                          const std::string& text,
+                          const std::string& time,
+                          const std::string& id,
+                          const std::string& baseLabel,
+                          const std::string& baseSha)
+{
+    thread.owner = findOwner(thread);
+    thread.updates.clear();
+    thread.draft = false;
+
+    for (auto& reply: thread.replies)
+        reply.fresh = false;
+
+    thread.replies.push_back({reviewerName, time, text, true});
+
+    return {id, baseLabel, baseSha, {thread}, true};
 }
 
 ReviewFile draftFile(const std::vector<Annotation>& annotations,

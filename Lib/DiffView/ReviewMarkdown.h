@@ -47,9 +47,12 @@ struct ReviewFile
     std::string baseSha;
     std::vector<Annotation> comments;
 
+    // One reply on one thread, sent the moment it was written.
+    bool reply = false;
+
     bool operator==(const ReviewFile&) const = default;
 
-    MIRO_REFLECT(title, baseLabel, baseSha, comments)
+    MIRO_REFLECT(title, baseLabel, baseSha, comments, reply)
 };
 
 // A Markdown frontend for Miro, as its XML one: Markdown to and from Miro's

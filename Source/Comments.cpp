@@ -1,36 +1,20 @@
 #include "Clipboard.h"
+#include "Store.h"
 #include "Viewer.h"
 
 #include <Text.h>
 
 #include <eacp/Core/App/Clipboard.h>
+#include <eacp/Core/Utils/File.h>
 #include <eacp/Core/Utils/Files.h>
 
 #include <algorithm>
 #include <cctype>
-#include <filesystem>
-#include <fstream>
-#include <sstream>
 
 namespace diffview
 {
 namespace
 {
-std::string readFile(const std::filesystem::path& path)
-{
-    auto in = std::ifstream {path, std::ios::binary};
-    auto buffer = std::stringstream {};
-    buffer << in.rdbuf();
-    return buffer.str();
-}
-
-void writeFile(const std::filesystem::path& path, const std::string& text)
-{
-    auto bytes =
-        std::span {reinterpret_cast<const std::uint8_t*>(text.data()), text.size()};
-    eacp::Files::writeFileAtomically(path.string(), bytes);
-}
-
 std::string editorKey(const ftxui::Event& event)
 {
     using ftxui::Event;
@@ -89,77 +73,45 @@ std::string trimmedEnd(std::string text)
 
 std::string Viewer::roundsSignature() const
 {
+    auto root = eacp::FilePath {repo};
     auto signature = std::string {};
-    auto dir = std::filesystem::path {repo} / reviewDirectory;
-    auto error = std::error_code {};
 
-    if (!std::filesystem::is_directory(dir, error))
-        return signature;
+    for (const auto& id: listRoundIdsInOrder(root))
+    {
+        auto file = eacp::File {root / reviewDirectory / (id + ".md")};
+        signature += id + ":" + std::to_string(file.size()) + ":"
+                     + std::to_string(file.modificationTime()) + "\n";
+    }
 
-    auto names = std::vector<std::string> {};
-
-    for (const auto& entry: std::filesystem::directory_iterator {dir, error})
-        if (entry.path().extension() == ".md")
-            names.push_back(
-                entry.path().filename().string() + ":"
-                + std::to_string(entry.file_size(error)) + ":"
-                + std::to_string(static_cast<long long>(
-                    entry.last_write_time(error).time_since_epoch().count())));
-
-    std::sort(names.begin(), names.end());
-
-    for (const auto& name: names)
-        signature += name + "\n";
-
-    auto latest = std::filesystem::path {repo} / latestReviewFileName;
-
-    if (std::filesystem::exists(latest, error))
-        signature += readFile(latest);
-
-    return signature;
+    return signature + eacp::Files::readFile(root / latestReviewFileName);
 }
 
 void Viewer::loadStore()
 {
-    auto root = std::filesystem::path {repo};
-    auto roundFiles = std::vector<ReviewFile> {};
-    auto error = std::error_code {};
-    auto names = std::vector<std::filesystem::path> {};
+    auto root = eacp::FilePath {repo};
+    auto roundFiles = readRounds(root);
+    auto latest = readReview(root / latestReviewFileName);
 
-    if (std::filesystem::is_directory(root / reviewDirectory, error))
-        for (const auto& entry:
-             std::filesystem::directory_iterator {root / reviewDirectory, error})
-            if (entry.path().extension() == ".md")
-                names.push_back(entry.path());
-
-    std::sort(names.begin(), names.end());
-
-    for (const auto& path: names)
+    for (auto& round: roundFiles)
     {
-        auto file = fromMarkdown(readFile(path));
-        file.title = path.stem().string();
-        roundFiles.push_back(std::move(file));
+        if (round.title != latest.title)
+            continue;
+
+        if (auto resolved = resolutionsFrom(latest, round))
+        {
+            writeText(root / reviewDirectory / (resolved->title + ".md"),
+                      toMarkdown(*resolved));
+            round = std::move(*resolved);
+        }
     }
 
-    auto latestPath = root / latestReviewFileName;
-
-    if (!roundFiles.empty() && std::filesystem::exists(latestPath))
-        if (auto resolved = resolutionsFrom(fromMarkdown(readFile(latestPath)),
-                                            roundFiles.back()))
-        {
-            writeFile(root / reviewDirectory / (resolved->title + ".md"),
-                      toMarkdown(*resolved));
-            roundFiles.back() = std::move(*resolved);
-        }
-
-    auto draftPath = root / draftFileName;
-    lastDraftText =
-        std::filesystem::exists(draftPath) ? readFile(draftPath) : std::string {};
+    lastDraftText = eacp::Files::readFile(root / draftFileName);
     auto merged = mergeReviews(roundFiles, fromMarkdown(lastDraftText));
 
     annotations = std::move(merged.annotations);
     rounds = std::move(merged.rounds);
     lastRoundsSignature = roundsSignature();
+    pinUnseenThreads();
 
     if (merged.renumbered)
         saveStore();
@@ -167,9 +119,7 @@ void Viewer::loadStore()
 
 bool Viewer::reloadStoreIfChanged()
 {
-    auto draftPath = std::filesystem::path {repo} / draftFileName;
-    auto draftText =
-        std::filesystem::exists(draftPath) ? readFile(draftPath) : std::string {};
+    auto draftText = eacp::Files::readFile(eacp::FilePath {repo} / draftFileName);
 
     if (draftText == lastDraftText && roundsSignature() == lastRoundsSignature)
         return false;
@@ -186,18 +136,18 @@ void Viewer::saveStore()
     if (text == lastDraftText)
         return;
 
-    auto dir = std::filesystem::path {repo} / annotationDirectory;
+    auto dir = eacp::FilePath {repo} / annotationDirectory;
 
-    if (draftCount(annotations) == 0 && !std::filesystem::exists(dir))
+    if (draftCount(annotations) == 0 && !eacp::Files::exists(dir))
         return;
 
-    std::filesystem::create_directories(dir);
+    eacp::Files::createDirectories(dir);
 
     // Ignores itself, so an agent's `git add -A` never sweeps it up.
-    if (!std::filesystem::exists(dir / ".gitignore"))
-        std::ofstream {dir / ".gitignore"} << "*\n";
+    if (!eacp::Files::exists(dir / ".gitignore"))
+        writeText(dir / ".gitignore", "*\n");
 
-    writeFile(std::filesystem::path {repo} / draftFileName, text);
+    writeText(eacp::FilePath {repo} / draftFileName, text);
     lastDraftText = text;
 }
 
@@ -211,20 +161,14 @@ void Viewer::submitReview()
         return;
     }
 
-    auto root = std::filesystem::path {repo};
-    auto id = roundId(nowMs());
-
-    for (auto n = 2; std::filesystem::exists(root / reviewDirectory / (id + ".md"));
-         ++n)
-        id = roundId(nowMs()) + "-" + std::to_string(n);
-
+    auto root = eacp::FilePath {repo};
+    auto id = nextRoundId(rounds, nowMs());
     auto round = submitDraft(annotations, id, base.label(), baseSha);
     auto review = toMarkdown(round);
 
-    std::filesystem::create_directories(root / reviewDirectory);
-    writeFile(root / reviewDirectory / (id + ".md"), review);
-
-    writeFile(root / latestReviewFileName, review);
+    eacp::Files::createDirectories(root / reviewDirectory);
+    writeText(root / reviewDirectory / (id + ".md"), review);
+    writeText(root / latestReviewFileName, review);
 
     rounds.push_back(id);
     lastRoundsSignature = roundsSignature();
@@ -232,6 +176,78 @@ void Viewer::submitReview()
     rebuildRows();
     say("Submitted " + std::to_string(round.comments.size())
         + " comments → .diffview/latest.md");
+}
+
+void Viewer::sendReply(Annotation& note, const std::string& text)
+{
+    auto root = eacp::FilePath {repo};
+    auto sent = mergeReviews(readRounds(root), {}).annotations;
+    auto thread = std::find_if(sent.begin(),
+                               sent.end(),
+                               [&](const Annotation& a) { return a.id == note.id; });
+
+    if (thread == sent.end())
+        return;
+
+    auto id = nextRoundId(rounds, nowMs());
+    auto time = formatReplyTime(nowMs());
+    auto round = makeReplyRound(*thread, text, time, id, base.label(), baseSha);
+
+    eacp::Files::createDirectories(root / reviewDirectory);
+    writeText(root / reviewDirectory / (id + ".md"), toMarkdown(round));
+
+    note.replies.push_back({reviewerName, time, text, false});
+    note.round = id;
+    note.owner = round.comments.front().owner;
+
+    auto unchanged = note.text == thread->text && note.resolved == thread->resolved
+                     && note.withdrawn == thread->withdrawn;
+
+    if (unchanged)
+        note.draft = false;
+
+    rounds.push_back(id);
+    lastRoundsSignature = roundsSignature();
+
+    auto owner = findOwner(note);
+    auto to = owner.empty() ? std::string {"every agent"} : "@" + owner;
+    say("Sent reply on #" + std::to_string(note.id) + " → " + to);
+}
+
+std::string Viewer::threadKey(const Annotation& note)
+{
+    return std::to_string(note.id) + " " + std::to_string(note.replies.size());
+}
+
+bool Viewer::needsSeeing(const Annotation& note) const
+{
+    return note.resolved && !note.withdrawn && !note.replies.empty()
+           && note.replies.back().author != reviewerName
+           && !seenThreads.contains(threadKey(note));
+}
+
+void Viewer::pinUnseenThreads()
+{
+    auto seen = eacp::Files::readFile(eacp::FilePath {repo} / seenFileName);
+
+    for (const auto& line: splitLines(seen))
+        seenThreads.insert(line);
+
+    for (const auto& note: annotations)
+    {
+        if (needsSeeing(note))
+            pinnedThreads.insert(note.id);
+    }
+}
+
+void Viewer::markSeen(const Annotation& note)
+{
+    if (!needsSeeing(note))
+        return;
+
+    seenThreads.insert(threadKey(note));
+    eacp::Files::appendFile(eacp::FilePath {repo} / seenFileName,
+                            threadKey(note) + "\n");
 }
 
 void Viewer::annotateAtCursor(bool wholeHunk)
@@ -370,7 +386,12 @@ bool Viewer::onEditorEvent(const ftxui::Event& event)
         case vim::Outcome::none:
             break;
         case vim::Outcome::save:
-            if (commitEditor())
+            if (replyCommentId)
+            {
+                commitEditor();
+                closeEditor(true);
+            }
+            else if (commitEditor())
                 say("Saved");
             break;
         case vim::Outcome::saveAndClose:
@@ -400,11 +421,10 @@ bool Viewer::commitEditor()
     auto removeUnlinked = [&](const std::vector<std::string>& candidates)
     {
         for (const auto& path: candidates)
+        {
             if (std::find(linked.begin(), linked.end(), path) == linked.end())
-            {
-                auto error = std::error_code {};
-                std::filesystem::remove(std::filesystem::path {repo} / path, error);
-            }
+                eacp::Files::removeFile(eacp::FilePath {repo} / path);
+        }
     };
 
     if (editingId != 0)
@@ -436,14 +456,30 @@ bool Viewer::commitEditor()
         removeUnlinked(pastedImages);
         auto pending = findPendingReply(*note);
 
-        if (pending && text.empty())
+        auto dropPending = [&]
         {
-            note->replies.erase(note->replies.begin()
-                                + static_cast<std::ptrdiff_t>(*pending));
-            note->draft = !replyMadeDraft;
+            auto at = static_cast<std::ptrdiff_t>(*pending);
+            note->replies.erase(note->replies.begin() + at);
+        };
+
+        if (!note->round.empty())
+        {
+            if (pending)
+                dropPending();
+
+            if (!text.empty())
+                sendReply(*note, text);
+            else if (!pending)
+                return false;
+        }
+        else if (pending && text.empty())
+        {
+            dropPending();
         }
         else if (pending)
+        {
             note->replies[*pending].text = text;
+        }
         else if (!text.empty())
         {
             note->replies.push_back(
@@ -451,7 +487,9 @@ bool Viewer::commitEditor()
             note->draft = true;
         }
         else
+        {
             return false;
+        }
     }
     else if (pendingAnnotation)
     {
@@ -475,15 +513,16 @@ bool Viewer::commitEditor()
 void Viewer::closeEditor(bool)
 {
     const auto* saved = editingId != 0 ? annotation(editingId) : nullptr;
-    auto linked =
-        saved != nullptr ? imagesIn(saved->text) : std::vector<std::string> {};
+    auto linked = std::vector<std::string> {};
+
+    if (saved != nullptr)
+        linked = imagesIn(saved->text);
 
     for (const auto& path: pastedImages)
+    {
         if (std::find(linked.begin(), linked.end(), path) == linked.end())
-        {
-            auto error = std::error_code {};
-            std::filesystem::remove(std::filesystem::path {repo} / path, error);
-        }
+            eacp::Files::removeFile(eacp::FilePath {repo} / path);
+    }
 
     auto id = editingId != 0 ? editingId : replyCommentId.value_or(0);
     editing = false;
@@ -493,25 +532,36 @@ void Viewer::closeEditor(bool)
     pastedImages.clear();
     rebuildRows();
 
-    if (id != 0)
-        for (std::size_t i = 0; i < rows.size(); ++i)
-            if (rows[i].kind == RowKind::annotationTop && rows[i].annotation == id)
-            {
-                diffCursor = static_cast<int>(i);
-                break;
-            }
+    if (id == 0)
+        return;
+
+    for (std::size_t i = 0; i < rows.size(); ++i)
+    {
+        if (rows[i].kind == RowKind::annotationTop && rows[i].annotation == id)
+        {
+            diffCursor = static_cast<int>(i);
+            break;
+        }
+    }
 }
 
 void Viewer::pasteIntoEditor()
 {
     if (auto png = clipboard::imagePng())
     {
-        auto id = editingId != 0      ? editingId
-                  : replyCommentId    ? *replyCommentId
-                  : pendingAnnotation ? pendingAnnotation->id
-                                      : nextAnnotationId(annotations);
-        auto dir = std::filesystem::path {repo} / imageDirectory;
-        std::filesystem::create_directories(dir);
+        auto id = [&]
+        {
+            if (editingId != 0)
+                return editingId;
+            if (replyCommentId)
+                return *replyCommentId;
+            if (pendingAnnotation)
+                return pendingAnnotation->id;
+
+            return nextAnnotationId(annotations);
+        }();
+        auto dir = eacp::FilePath {repo} / imageDirectory;
+        eacp::Files::createDirectories(dir);
 
         auto name = std::string {};
 
@@ -519,11 +569,11 @@ void Viewer::pasteIntoEditor()
         {
             name = std::to_string(id) + "-" + std::to_string(n) + ".png";
 
-            if (!std::filesystem::exists(dir / name))
+            if (!eacp::Files::exists(dir / name))
                 break;
         }
 
-        writeFile(dir / name, *png);
+        writeText(dir / name, *png);
 
         auto path = std::string {imageDirectory} + "/" + name;
         pastedImages.push_back(path);
@@ -569,11 +619,10 @@ void Viewer::removeImages(const Annotation& note)
         texts.push_back(reply.text);
 
     for (const auto& text: texts)
+    {
         for (const auto& path: imagesIn(text))
-        {
-            auto error = std::error_code {};
-            std::filesystem::remove(std::filesystem::path {repo} / path, error);
-        }
+            eacp::Files::removeFile(eacp::FilePath {repo} / path);
+    }
 }
 
 void Viewer::deleteAtCursor()
@@ -634,7 +683,6 @@ void Viewer::replyAtCursor()
     }
 
     auto pending = findPendingReply(*note);
-    replyMadeDraft = !pending && !note->draft;
     replyCommentId = id;
     editingId = 0;
     pendingAnnotation.reset();
@@ -669,28 +717,37 @@ bool Viewer::completeMention()
             names.insert(owner);
 
         for (const auto& reply: note.replies)
+        {
             if (reply.author != reviewerName && !reply.author.empty())
                 names.insert(reply.author);
+        }
     }
 
     auto matches = std::vector<std::string> {};
 
     for (const auto& name: names)
+    {
         if (name.starts_with(typed))
             matches.push_back(name);
+    }
 
     if (matches.empty())
     {
-        say(listening.empty() ? "No agent is listening (dv monitor --as <name>)"
-                              : "No agent @" + typed + "…");
+        if (listening.empty())
+            say("No agent is listening (dv monitor --as <name>)");
+        else
+            say("No agent @" + typed + "…");
+
         return true;
     }
 
     auto common = matches.front();
 
     for (const auto& name: matches)
+    {
         while (!name.starts_with(common))
             common.pop_back();
+    }
 
     editor.insertText(common.substr(typed.size())
                       + (matches.size() == 1 ? " " : ""));

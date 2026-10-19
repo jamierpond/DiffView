@@ -610,7 +610,8 @@ std::vector<DiffRow> Viewer::rowsFor(const FileDiff& file) const
                                 [&](const Annotation& a)
                                 {
                                     return a.path == file.path && a.resolved
-                                           && !a.withdrawn && !showResolved;
+                                           && !a.withdrawn && !showResolved
+                                           && !pinnedThreads.contains(a.id);
                                 });
 
     if (hidden > 0)
@@ -627,7 +628,8 @@ std::vector<Annotation> Viewer::shownAnnotations() const
     auto shown = std::vector<Annotation> {};
 
     for (const auto& note: annotations)
-        if (!note.withdrawn && (showResolved || !note.resolved))
+        if (!note.withdrawn
+            && (showResolved || !note.resolved || pinnedThreads.contains(note.id)))
             shown.push_back(note);
 
     return shown;

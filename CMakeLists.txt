@@ -56,6 +56,7 @@ add_executable(DiffView
         Source/Main.cpp
         Source/Monitor.cpp
         Source/Render.cpp
+        Source/Store.cpp
         Source/Viewer.cpp)
 
 set_target_properties(DiffView PROPERTIES OUTPUT_NAME diffview)

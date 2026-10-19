@@ -4,7 +4,7 @@ Review comments on this repo's changes, diffed against `main...` at 9170e37a2e03
 Each `### path:lines · status · #id` heading is one comment: working-tree line numbers, `(old)` the base's, `(whole file)` the whole file.
 In the block under it `>` marks the lines the comment is about (line number, then `+` added, `-` removed, space unchanged); the comment follows the block.
 Replies follow a comment as `#### reply · author · time`: `you` is the reviewer, `new` marks theirs new in this round. `@name` after the status is the agent the thread belongs to.
-Act on `open` comments; `resolved` and `withdrawn` ones need nothing. Answer with `dv reply <id> "text"`; when you have dealt with one, `dv resolve <id>` (or change its `· open` to `· resolved` here).
+Act on `open` comments; `resolved` and `withdrawn` ones need nothing. Answer with `dv reply <id> "text"`. `dv resolve <id>` only once the work is done; a question gets a reply and stays open.
 
 ## General
 

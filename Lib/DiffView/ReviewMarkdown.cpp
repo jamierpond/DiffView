@@ -643,6 +643,15 @@ std::string printMarkdown(const Miro::JSON& review)
             "Your comments on the changes " + against
             + "; edit freely, DiffView reloads this file, and S sends it as a round.\n\n";
     }
+    else if (boolField(review, "reply"))
+    {
+        out += "# DiffView reply · " + title + "\n\n";
+        out += "A reply the reviewer sent on one thread, on this repo's changes "
+               + against + ".\n";
+        out += "The thread is below in full; `new` marks the reply. Answer with "
+               "`dv reply <id> \"text\"`; `dv resolve <id>` only once the work "
+               "is done.\n\n";
+    }
     else
     {
         out += "# DiffView review · " + title + "\n\n";
@@ -659,8 +668,8 @@ std::string printMarkdown(const Miro::JSON& review)
                "the status is the agent the thread belongs to.\n";
         out +=
             "Act on `open` comments; `resolved` and `withdrawn` ones need nothing. "
-            "Answer with `dv reply <id> \"text\"`; when you have dealt with one, "
-            "`dv resolve <id>` (or change its `· open` to `· resolved` here).\n\n";
+            "Answer with `dv reply <id> \"text\"`. `dv resolve <id>` only once "
+            "the work is done; a question gets a reply and stays open.\n\n";
     }
 
     auto section = std::optional<std::string> {};
@@ -695,6 +704,7 @@ Miro::JSON parseMarkdown(std::string_view input)
     review["title"] = "draft";
     review["baseLabel"] = "";
     review["baseSha"] = "";
+    review["reply"] = false;
 
     auto lines = splitLines(input);
 
@@ -733,9 +743,13 @@ Miro::JSON parseMarkdown(std::string_view input)
 
             if (blocks.empty())
             {
-                if (line.starts_with("# DiffView review · "))
-                    review["title"] = trim(std::string_view {line}.substr(
-                        std::string_view {"# DiffView review · "}.size()));
+                for (auto heading: {"# DiffView review · ", "# DiffView reply · "})
+                    if (line.starts_with(heading))
+                        review["title"] = trim(std::string_view {line}.substr(
+                            std::string_view {heading}.size()));
+
+                if (line.starts_with("# DiffView reply · "))
+                    review["reply"] = true;
 
                 if (auto open = line.find("diffed against `");
                     open != std::string::npos)

@@ -136,15 +136,15 @@ auto tOpenCount = test("Review/open counts neither resolved nor withdrawn") = []
 auto tNewRounds =
     test("Review/the monitor reports only unseen rounds, oldest first") = []
 {
-    auto seen = std::vector<std::string> {"2026-10-16-100000.md"};
+    auto seen = std::vector<std::string> {"2026-10-16-100000"};
     auto current = std::vector<std::string> {
-        "2026-10-17-090000.md", "2026-10-16-100000.md", "2026-10-16-120000.md"};
+        "2026-10-17-090000", "2026-10-16-100000", "2026-10-16-120000"};
 
     auto fresh = newRounds(seen, current);
 
     check(fresh.size() == 2);
-    check(fresh[0] == "2026-10-16-120000.md");
-    check(fresh[1] == "2026-10-17-090000.md");
+    check(fresh[0] == "2026-10-16-120000");
+    check(fresh[1] == "2026-10-17-090000");
     check(newRounds(current, current).empty());
 };
 
@@ -271,11 +271,11 @@ auto tRoundFor = test("Review/which rounds wake which agent") = []
 auto tRoundsUpTo = test("Review/--after drops the rounds up to it") = []
 {
     auto kept = keepRoundsUpTo(
-        {"2026-10-16-100000.md", "2026-10-16-120000.md", "2026-10-16-120000-2.md"},
+        {"2026-10-16-100000", "2026-10-16-120000", "2026-10-16-120000-2"},
         "2026-10-16-120000");
 
     check(kept.size() == 2);
-    check(kept[1] == "2026-10-16-120000.md");
+    check(kept[1] == "2026-10-16-120000");
 };
 
 auto tChangeThread = test("Review/reply and resolve claim, refuse, force") = []
@@ -335,4 +335,54 @@ auto tPendingReply =
 
     note.replies.push_back({"you", "t3", "draft", true});
     check(findPendingReply(note) == std::size_t {2});
+};
+
+auto tNextRoundId = test("Review/a new round id sorts after every existing one") = []
+{
+    auto now = roundId(1760000000000);
+
+    check(nextRoundId({}, 1760000000000) == now);
+    check(nextRoundId({"2025-01-01-000000"}, 1760000000000) == now);
+    check(nextRoundId({now}, 1760000000000) == now + "-2");
+    check(nextRoundId({now, now + "-2"}, 1760000000000) == now + "-3");
+    check(nextRoundId({"2099-01-01-000000"}, 1760000000000) > "2099-01-01-000000");
+};
+
+auto tReplyRound =
+    test("Review/a sent reply is its own round: the thread, the reply new") = []
+{
+    auto thread = comment(31, "why?");
+    thread.owner = "dev";
+    thread.updates = "2026-10-18-190000";
+    thread.replies = {said("dev", "2026-10-18 19:56", "because")};
+
+    auto round = makeReplyRound(thread,
+                                "not convinced",
+                                "2026-10-18 20:01",
+                                "2026-10-18-200101",
+                                "HEAD",
+                                "abc");
+
+    check(round.reply && round.title == "2026-10-18-200101");
+    check(round.comments.size() == 1);
+    check(round.comments[0].updates.empty());
+    check(round.comments[0].replies.size() == 2);
+    check(round.comments[0].replies[1].fresh);
+    check(round.comments[0].replies[1].author == "you");
+
+    auto parsed = fromMarkdown(toMarkdown(round));
+    check(parsed.reply && parsed.title == "2026-10-18-200101");
+    check(parsed.comments[0].replies[1].fresh);
+
+    check(routeRound(parsed, "dev").wakes());
+    check(!routeRound(parsed, "other").wakes());
+    check(
+        replyNotice("2026-10-18-200101", parsed, "dev", "/r/x.md")
+        == "dv: reply 2026-10-18-200101 on #31 from you · for @dev · read /r/x.md");
+
+    auto merged = mergeReviews(
+        {ReviewFile {"2026-10-18-190000", "HEAD", "abc", {thread}}, parsed}, {});
+    check(merged.annotations.size() == 1);
+    check(merged.annotations[0].replies.size() == 2);
+    check(merged.annotations[0].round == "2026-10-18-200101");
 };
