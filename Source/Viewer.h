@@ -233,8 +233,6 @@ private:
     std::string lastRoundsSignature;
     bool showResolved = false;
 
-    // Resolved threads whose newest reply is an agent's stay shown until the
-    // reviewer has had the cursor on them, and for the rest of the session.
     std::set<std::string> seenThreads;
     std::set<int> pinnedThreads;
 

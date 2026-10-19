@@ -34,8 +34,7 @@ struct DiffRow
 
     std::string text;
 
-    // Which reply a replyHeader or text row belongs to; -1 is the comment
-    // itself, whose header shows only once it has replies.
+    // -1: the comment itself.
     int reply = -1;
 };
 
@@ -44,12 +43,9 @@ struct DiffRow
 std::vector<DiffRow> buildRows(const FileDiff& file,
                                const std::vector<Annotation>& annotations,
                                int wrapWidth);
-// How far into its comment's block a row is, so a rebuild can put the cursor
-// back on the same line of the thread.
-int findThreadOffset(const std::vector<DiffRow>& rows, std::size_t index);
 
-// The row that far into the comment's block, clamped to the block; nullopt
-// when the comment isn't shown.
+int findOffsetInThread(const std::vector<DiffRow>& rows, std::size_t index);
+
 std::optional<int>
-    findThreadRow(const std::vector<DiffRow>& rows, int annotation, int offset);
+    findRowInThread(const std::vector<DiffRow>& rows, int annotation, int offset);
 } // namespace diffview

@@ -92,7 +92,6 @@ std::string describeThread(const Annotation& note)
     return label;
 }
 
-// The comment itself (-1) is the reviewer's, with no time of its own.
 std::string findAuthor(const Annotation& note, int reply)
 {
     if (reply < 0)

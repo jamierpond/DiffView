@@ -22,7 +22,6 @@ std::string describeRound(const eacp::FilePath& root,
 {
     auto own = (root / reviewDirectory / (id + ".md")).str();
 
-    // latest.md is the newest full round; a reply is read from its own file.
     if (round.reply)
         return replyNotice(id, round, agent, own);
 

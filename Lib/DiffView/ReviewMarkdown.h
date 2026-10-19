@@ -47,7 +47,6 @@ struct ReviewFile
     std::string baseSha;
     std::vector<Annotation> comments;
 
-    // One reply on one thread, sent the moment it was written.
     bool reply = false;
 
     bool operator==(const ReviewFile&) const = default;

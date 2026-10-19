@@ -489,7 +489,7 @@ Viewer::CursorKey Viewer::cursorKey() const
 
     if (row.annotation != 0)
         key.threadOffset =
-            findThreadOffset(rows, static_cast<std::size_t>(diffCursor));
+            findOffsetInThread(rows, static_cast<std::size_t>(diffCursor));
 
     if (row.kind == RowKind::line)
     {
@@ -519,7 +519,7 @@ void Viewer::restoreCursor(const CursorKey& key)
 
     if (key.annotation != 0)
     {
-        if (auto row = findThreadRow(rows, key.annotation, key.threadOffset))
+        if (auto row = findRowInThread(rows, key.annotation, key.threadOffset))
         {
             diffCursor = *row;
             return;

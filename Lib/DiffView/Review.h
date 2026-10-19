@@ -27,7 +27,6 @@ std::string roundId(std::int64_t epochMs);
 
 std::string roundLabel(const std::string& id);
 
-// Newer than every existing round, so `dv monitor --after` never skips one.
 std::string nextRoundId(const std::vector<std::string>& existing,
                         std::int64_t epochMs);
 
@@ -82,8 +81,6 @@ std::string replyNotice(const std::string& id,
                         const std::string& agent,
                         const std::string& path);
 
-// The thread as sent so far plus the reviewer's new reply, as its own round:
-// a new file wakes the monitor, and the store stays the round files.
 ReviewFile makeReplyRound(Annotation thread,
                           const std::string& text,
                           const std::string& time,

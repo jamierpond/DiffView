@@ -110,7 +110,7 @@ std::vector<DiffRow> buildRows(const FileDiff& file,
     return rows;
 }
 
-int findThreadOffset(const std::vector<DiffRow>& rows, std::size_t index)
+int findOffsetInThread(const std::vector<DiffRow>& rows, std::size_t index)
 {
     auto upward = std::span {rows}.first(index + 1) | std::views::reverse;
     auto top = std::ranges::find(upward, RowKind::annotationTop, &DiffRow::kind);
@@ -118,7 +118,7 @@ int findThreadOffset(const std::vector<DiffRow>& rows, std::size_t index)
 }
 
 std::optional<int>
-    findThreadRow(const std::vector<DiffRow>& rows, int annotation, int offset)
+    findRowInThread(const std::vector<DiffRow>& rows, int annotation, int offset)
 {
     auto isTop = [&](const DiffRow& row)
     { return row.kind == RowKind::annotationTop && row.annotation == annotation; };

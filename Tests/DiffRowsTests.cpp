@@ -112,12 +112,12 @@ auto tThreadCursor =
 
     check(rows[static_cast<std::size_t>(secondReplyLine)].text == "it is");
 
-    auto offset = findThreadOffset(rows, secondReplyLine);
+    auto offset = findOffsetInThread(rows, secondReplyLine);
     annotation.replies.push_back({"you", "2026-10-18 10:05", "ok", false});
     auto rebuilt = buildRows(file, {annotation}, 80);
 
-    check(findThreadRow(rebuilt, 7, offset) == secondReplyLine);
+    check(findRowInThread(rebuilt, 7, offset) == secondReplyLine);
     check(rebuilt[13].kind == RowKind::annotationBottom);
-    check(findThreadRow(rebuilt, 7, 99) == 13);
-    check(!findThreadRow(rebuilt, 8, 0));
+    check(findRowInThread(rebuilt, 7, 99) == 13);
+    check(!findRowInThread(rebuilt, 8, 0));
 };
