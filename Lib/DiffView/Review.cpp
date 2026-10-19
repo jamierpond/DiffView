@@ -327,6 +327,9 @@ ReviewFile makeReplyRound(Annotation thread,
     for (auto& reply: thread.replies)
         reply.fresh = false;
 
+    thread.reopened = thread.resolved || thread.withdrawn;
+    thread.resolved = false;
+    thread.withdrawn = false;
     thread.replies.push_back({reviewerName, time, text, true});
 
     return {id, baseLabel, baseSha, {thread}, true};
@@ -427,6 +430,12 @@ ReviewFile submitDraft(std::vector<Annotation>& annotations,
                        const std::string& baseLabel,
                        const std::string& baseSha)
 {
+    for (auto& annotation: annotations)
+    {
+        if (annotation.draft)
+            annotation.reopened = false;
+    }
+
     auto file = draftFile(annotations, baseLabel, baseSha);
     file.title = id;
 

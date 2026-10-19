@@ -291,6 +291,36 @@ auto tRouteUnlistenedOwner =
     check(round.comments[0].replies.back().author == "ops");
 };
 
+auto tReplyReopens =
+    test("Review/a reviewer's reply on a closed thread reopens it and wakes") = []
+{
+    auto closed = comment(7, "@dev q");
+    closed.resolved = true;
+    closed.replies = {said("dev", "t", "done")};
+
+    auto round = makeReplyRound(
+        closed, "not done", "2026-10-18 21:00", "2026-10-18-210000", "HEAD", "a");
+    auto parsed = fromMarkdown(toMarkdown(round));
+    const auto& thread = parsed.comments.front();
+
+    check(!thread.resolved && !thread.withdrawn && thread.reopened);
+    check(routeRound(parsed, "dev", {"dev"}).open == 1);
+
+    auto withdrawn = comment(8, "q");
+    withdrawn.withdrawn = true;
+    auto revived = makeReplyRound(
+        withdrawn, "back", "2026-10-18 21:01", "2026-10-18-210100", "HEAD", "a");
+    check(!revived.comments.front().withdrawn && revived.comments.front().reopened);
+
+    auto open = makeReplyRound(comment(9, "q"),
+                               "more",
+                               "2026-10-18 21:02",
+                               "2026-10-18-210200",
+                               "HEAD",
+                               "a");
+    check(!open.comments.front().reopened);
+};
+
 auto tRoundsUpTo = test("Review/--after drops the rounds up to it") = []
 {
     auto kept = keepRoundsUpTo(

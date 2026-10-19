@@ -67,6 +67,9 @@ struct Annotation
     // Its lines left the diff; it re-attaches if they come back.
     bool stale = false;
 
+    // A reviewer's reply put it back to open after it was resolved or withdrawn.
+    bool reopened = false;
+
     // Which file it came from, so never written into one.
     std::string round;
     std::string worktree;
@@ -89,6 +92,7 @@ struct Annotation
                  unchangedFile,
                  updates,
                  stale,
+                 reopened,
                  round,
                  worktree,
                  draft)

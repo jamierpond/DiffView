@@ -218,7 +218,12 @@ void Viewer::sendReply(Annotation& note, const std::string& text)
                      && note.withdrawn == thread->withdrawn;
 
     if (unchanged)
+    {
         note.draft = false;
+        note.resolved = false;
+        note.withdrawn = false;
+        note.reopened = round.comments.front().reopened;
+    }
 
     rounds.push_back(id);
     lastRoundsSignature = roundsSignature();

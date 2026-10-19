@@ -18,6 +18,7 @@ constexpr auto oldSide = std::string_view {" (old)"};
 constexpr auto generalLocation = std::string_view {"General"};
 constexpr auto unchangedNote = std::string_view {"unchanged file"};
 constexpr auto updatedFrom = std::string_view {"updated from review "};
+constexpr auto reopenedNote = std::string_view {"reopened"};
 constexpr auto replyMark = std::string_view {"#### reply"};
 constexpr auto freshMark = std::string_view {"new"};
 constexpr auto worktreeOpening = std::string_view {"Reviewed in the worktree at `"};
@@ -111,6 +112,7 @@ struct Heading
     std::string updates;
     bool unchangedFile = false;
     std::string owner;
+    bool reopened = false;
     int id = 0;
 };
 
@@ -179,6 +181,7 @@ std::optional<Heading> parseHeading(std::string_view line)
     heading.status = word;
     heading.stale = status.find("stale") != std::string::npos;
     heading.unchangedFile = status.find(unchangedNote) != std::string::npos;
+    heading.reopened = status.find(reopenedNote) != std::string::npos;
 
     if (auto at = status.find(updatedFrom); at != std::string::npos)
     {
@@ -419,6 +422,9 @@ void writeComment(std::string& out, const Json::Value& comment)
     if (auto updates = stringField(comment, "updates"); !updates.empty())
         status += ", " + std::string {updatedFrom} + updates;
 
+    if (boolField(comment, "reopened"))
+        status += ", " + std::string {reopenedNote};
+
     if (boolField(comment, "unchangedFile"))
         status += ", " + std::string {unchangedNote};
 
@@ -496,6 +502,7 @@ Json::Value commentValue(const Block& block)
     comment["stale"] = heading.stale;
     comment["updates"] = heading.updates;
     comment["unchangedFile"] = heading.unchangedFile;
+    comment["reopened"] = heading.reopened;
     comment["owner"] = heading.owner;
 
     auto before = std::vector<std::string> {};
