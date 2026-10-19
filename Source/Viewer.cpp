@@ -1,3 +1,4 @@
+#include "Agents.h"
 #include "Viewer.h"
 
 #include <Text.h>
@@ -273,6 +274,7 @@ void Viewer::apply(std::vector<FileDiff> diffs, const std::string& sha)
     tracker.update(files, nowMs());
 
     reloadStoreIfChanged();
+    listening = findListeningAgents(store.directory.str());
     unchangedCache.clear();
     auto moved =
         reanchorAll(annotations,

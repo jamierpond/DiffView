@@ -221,13 +221,26 @@ std::vector<std::string> keepRoundsUpTo(std::vector<std::string> ids,
     return ids;
 }
 
-RoundRoute routeRound(const ReviewFile& round, const std::string& agent)
+std::string findListeningOwner(const Annotation& comment,
+                               const std::vector<std::string>& listening)
+{
+    auto owner = findOwner(comment);
+
+    if (std::find(listening.begin(), listening.end(), owner) == listening.end())
+        return {};
+
+    return owner;
+}
+
+RoundRoute routeRound(const ReviewFile& round,
+                      const std::string& agent,
+                      const std::vector<std::string>& listening)
 {
     auto counts = RoundRoute {};
 
     for (const auto& comment: round.comments)
     {
-        auto owner = findOwner(comment);
+        auto owner = findListeningOwner(comment, listening);
         auto named = false;
 
         for (const auto& reply: comment.replies)
@@ -392,12 +405,13 @@ std::optional<std::string>
         return "no comment #" + std::to_string(id);
 
     auto owner = findOwner(*found);
+    auto listeningOwner = findListeningOwner(*found, change.listening);
 
-    if (!owner.empty() && owner != change.from && !change.force)
+    if (!listeningOwner.empty() && owner != change.from && !change.force)
         return "#" + std::to_string(id) + " belongs to @" + owner
                + "; pass --force to answer it anyway";
 
-    if (owner.empty() && change.named)
+    if (listeningOwner.empty() && change.named)
         found->owner = change.from;
     else if (found->owner.empty())
         found->owner = owner;

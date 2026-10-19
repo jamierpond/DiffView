@@ -20,6 +20,7 @@ constexpr auto draftFileName = "draft.md";
 constexpr auto reviewDirectory = "reviews";
 constexpr auto latestReviewFileName = "latest.md";
 constexpr auto imageDirectory = ".diffview/images";
+constexpr auto agentDirectory = "agents";
 constexpr auto seenFileName = "seen";
 constexpr auto worktreeDirectoryName = "worktrees";
 
@@ -72,7 +73,13 @@ struct RoundRoute
     bool wakes() const { return open > 0 || replied > 0; }
 };
 
-RoundRoute routeRound(const ReviewFile& round, const std::string& agent);
+// A thread whose owner isn't listening is routed as nobody's.
+RoundRoute routeRound(const ReviewFile& round,
+                      const std::string& agent,
+                      const std::vector<std::string>& listening);
+
+std::string findListeningOwner(const Annotation& comment,
+                               const std::vector<std::string>& listening);
 
 // One line per submitted round, for an agent's monitor to wake on.
 std::string roundNotice(const std::string& id,
@@ -111,6 +118,7 @@ struct ThreadChange
     bool resolve = false;
     std::string text;
     std::string time;
+    std::vector<std::string> listening;
 };
 
 std::optional<std::string>

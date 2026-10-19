@@ -238,6 +238,7 @@ private:
     std::vector<Annotation> otherWorktreeAnnotations;
     int highestIdInOtherDrafts = 0;
     std::vector<std::string> rounds;
+    std::vector<std::string> listening;
 
     // What the files said when last read or written, to tell our own writes
     // from a hand edit.

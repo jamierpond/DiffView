@@ -228,7 +228,7 @@ void Viewer::sendReply(Annotation& note, const std::string& text)
     rounds.push_back(id);
     lastRoundsSignature = roundsSignature();
 
-    auto owner = findOwner(note);
+    auto owner = findListeningOwner(note, listening);
     auto to = owner.empty() ? std::string {"every agent"} : "@" + owner;
     say("Sent reply on #" + std::to_string(note.id) + " → " + to);
 }
@@ -760,7 +760,7 @@ bool Viewer::completeMention()
         return false;
 
     auto typed = line.substr(start, end - start);
-    auto names = std::set<std::string> {};
+    auto names = std::set<std::string> {listening.begin(), listening.end()};
 
     for (const auto& note: annotations)
     {
@@ -784,7 +784,11 @@ bool Viewer::completeMention()
 
     if (matches.empty())
     {
-        say("No agent @" + typed + "…");
+        if (listening.empty())
+            say("No agent is listening (dv monitor --as <name>)");
+        else
+            say("No agent @" + typed + "…");
+
         return true;
     }
 

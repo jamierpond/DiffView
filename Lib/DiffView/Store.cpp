@@ -338,7 +338,8 @@ bool isKnownStoreEntry(const std::string& name)
                                                      latestReviewFileName,
                                                      seenFileName,
                                                      reviewDirectory,
-                                                     "images"};
+                                                     "images",
+                                                     agentDirectory};
     return known.contains(name);
 }
 
@@ -430,6 +431,14 @@ std::string mergeWorktreeStore(const StoreLayout& store,
     if (!seen.empty())
         eacp::Files::appendFile(ownDirectory / seenFileName,
                                 renumberSeen(seen, renumbering));
+
+    for (const auto& path: eacp::Files::listFiles(old / agentDirectory))
+    {
+        auto target = store.directory / agentDirectory / path.fileName();
+
+        if (!eacp::Files::exists(target))
+            eacp::Files::moveFile(path, target);
+    }
 
     for (const auto& entry: eacp::Files::listDirectory(old, {.includeHidden = true}))
     {
