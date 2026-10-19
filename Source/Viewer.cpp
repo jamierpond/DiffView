@@ -11,6 +11,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <ctime>
 #include <filesystem>
 #include <fstream>
 #include <map>
@@ -56,6 +57,13 @@ bool isOurs(const std::string& path)
            || path.starts_with(std::string {storeDirectoryName} + "/");
 }
 
+bool isActivityFileInRepo(const std::string& path)
+{
+    auto store = std::string {storeDirectoryName} + "/";
+    return path.starts_with(store) && isActivityFile(path.substr(store.size()));
+}
+
+constexpr auto activityPollMs = std::int64_t {250};
 } // namespace
 
 std::int64_t nowMs()
@@ -70,6 +78,9 @@ Viewer::Viewer(const Options& optionsToUse)
     , repo(optionsToUse.repo)
     , store(optionsToUse.store)
     , base(optionsToUse.base)
+    , activityWatcher(optionsToUse.store.worktreeDirectory / wakeDirectory,
+                      optionsToUse.store.directory / statusDirectory,
+                      optionsToUse.store.worktree.str())
     , pump([this] { tick(); }, eacp::Time::MS {16})
 {
     root = ftxui::Renderer([this] { return render(); })
@@ -92,7 +103,8 @@ Viewer::Viewer(const Options& optionsToUse)
         createStoreDirectory(store.directory);
         storeWatcher = std::make_unique<RepoWatcher>(
             store.directory.str(),
-            [this](const std::vector<std::string>&) { scheduleRefresh(120); });
+            [this](const std::vector<std::string>& changed)
+            { onStoreChanged(changed); });
     }
 
     for (const auto& note: options.mergeNotes)
@@ -125,6 +137,27 @@ void Viewer::tick()
         lastRecentRedraw = now;
         redraw();
     }
+
+    pollActivities(now);
+}
+
+void Viewer::pollActivities(std::int64_t now)
+{
+    if (now - lastActivityPoll >= activityPollMs)
+    {
+        lastActivityPoll = now;
+        auto wasActive = !activities.empty();
+        activities = activityWatcher.findActivities(std::time(nullptr));
+
+        if (wasActive && activities.empty())
+            redraw();
+    }
+
+    if (!activities.empty() && now - lastSpinnerRedraw >= spinnerFrameMs)
+    {
+        lastSpinnerRedraw = now;
+        redraw();
+    }
 }
 
 void Viewer::onRepoChanged(const std::vector<std::string>& changed)
@@ -132,10 +165,22 @@ void Viewer::onRepoChanged(const std::vector<std::string>& changed)
     auto relevant = changed.empty();
 
     for (const auto& path: changed)
-        if (git::affectsDiff(path))
+        if (git::affectsDiff(path) && !isActivityFileInRepo(path))
             relevant = true;
 
     if (relevant)
+        scheduleRefresh(120);
+}
+
+void Viewer::onStoreChanged(const std::vector<std::string>& changed)
+{
+    auto isOnlyActivity =
+        !changed.empty()
+        && std::all_of(changed.begin(),
+                       changed.end(),
+                       [](const std::string& path) { return isActivityFile(path); });
+
+    if (!isOnlyActivity)
         scheduleRefresh(120);
 }
 

@@ -13,8 +13,10 @@
 #include <fcntl.h>
 #include <filesystem>
 #include <fstream>
+#include <optional>
 #include <sys/wait.h>
 #include <unistd.h>
+#include <utility>
 
 namespace diffview
 {
@@ -24,6 +26,8 @@ auto registered = std::array<char, 4096> {};
 
 // An agent between `dv monitor --once` runs is still working its threads.
 constexpr auto listeningGraceSeconds = std::time_t {600};
+
+constexpr auto failureShownSeconds = std::time_t {10};
 
 bool isAlive(pid_t pid)
 {
@@ -49,6 +53,14 @@ bool isListening(const std::filesystem::path& registration)
         return false;
 
     return std::time(nullptr) - stopped < listeningGraceSeconds;
+}
+
+std::string describeExit(std::optional<int> exitCode)
+{
+    if (!exitCode)
+        return "stopped";
+
+    return "exit " + std::to_string(*exitCode);
 }
 } // namespace
 
@@ -177,5 +189,95 @@ void launchDetached(const WakeLaunch& launch)
 
     execv(arguments[0], arguments.data());
     _exit(127);
+}
+
+ActivityWatcher::ActivityWatcher(eacp::FilePath wakeLogsToUse,
+                                 eacp::FilePath statusesToUse,
+                                 std::string worktreeToUse)
+    : wakeLogs(std::move(wakeLogsToUse))
+    , statuses(std::move(statusesToUse))
+    , worktree(std::move(worktreeToUse))
+{
+}
+
+std::vector<AgentActivity> ActivityWatcher::findActivities(std::time_t now)
+{
+    auto activities = std::vector<AgentActivity> {};
+    addWakeActivities(activities, now);
+    addStatusActivities(activities, now);
+    return activities;
+}
+
+// A log already over when first seen ended before this UI started: it is
+// never shown, and never read again.
+void ActivityWatcher::follow(const eacp::FilePath& path,
+                             FollowedLog& log,
+                             std::time_t now)
+{
+    auto isFirstRead = !log.hasBeenRead;
+    log.hasBeenRead = true;
+    auto added = readFileFrom(path, log.offset);
+    log.offset += added.size();
+    readWakeLog(log.progress, added, worktree);
+
+    auto hasHeader = log.progress.pid > 0;
+    auto hasEnded = log.progress.exitCode.has_value()
+                    || (hasHeader && !isAlive(log.progress.pid));
+    auto predatesHeaders = isFirstRead && !added.empty() && !hasHeader;
+
+    if (!hasEnded && !predatesHeaders)
+        return;
+
+    log.isOver = true;
+
+    if (!isFirstRead)
+        log.endedAt = now;
+}
+
+void ActivityWatcher::addWakeActivities(std::vector<AgentActivity>& activities,
+                                        std::time_t now)
+{
+    auto options = eacp::Files::DirectoryOptions {};
+    options.pattern = "*.log";
+
+    for (const auto& path: eacp::Files::listFiles(wakeLogs, options))
+    {
+        auto& log = logs[path.str()];
+
+        if (!log.isOver)
+            follow(path, log, now);
+
+        const auto& progress = log.progress;
+        auto hasFailed = !progress.exitCode || *progress.exitCode != 0;
+        auto isShowingFailure = log.isOver && hasFailed && log.endedAt > 0
+                                && now - log.endedAt < failureShownSeconds;
+
+        if (log.isOver && !isShowingFailure)
+            continue;
+
+        auto doing =
+            isShowingFailure ? describeExit(progress.exitCode) : progress.doing;
+
+        for (auto thread: progress.threads)
+            activities.push_back({progress.agent, thread, doing, isShowingFailure});
+    }
+}
+
+void ActivityWatcher::addStatusActivities(std::vector<AgentActivity>& activities,
+                                          std::time_t now)
+{
+    for (const auto& path: eacp::Files::listFiles(statuses))
+    {
+        auto status = parseAgentStatus(eacp::Files::readFile(path));
+        auto agent = path.fileName();
+        auto isWoken = std::any_of(
+            activities.begin(),
+            activities.end(),
+            [&](const AgentActivity& activity)
+            { return activity.agent == agent && activity.thread == status.thread; });
+
+        if (isAgentStatusCurrent(status, now) && !isWoken)
+            activities.push_back({agent, status.thread, status.doing, false});
+    }
 }
 } // namespace diffview

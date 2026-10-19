@@ -2,6 +2,7 @@
 #include "Commands.h"
 #include "Viewer.h"
 
+#include <Activity.h>
 #include <Review.h>
 #include <Text.h>
 
@@ -10,6 +11,7 @@
 #include <algorithm>
 #include <array>
 #include <cstdio>
+#include <ctime>
 #include <filesystem>
 #include <optional>
 
@@ -242,6 +244,34 @@ int runShow(const StoreLayout& store, int id)
                     comment->round.c_str(),
                     worktree.c_str(),
                     comment->worktree.c_str());
+    return 0;
+}
+
+int runStatus(const StatusOptions& options)
+{
+    auto rounds = readRounds(options.store);
+    auto isSent =
+        std::any_of(rounds.begin(),
+                    rounds.end(),
+                    [&](const ReviewFile& r) { return hasComment(r, options.id); });
+
+    if (!isSent)
+        return fail(describeMissing(options.id));
+
+    auto agent = options.agent.empty() ? std::string {"agent"} : options.agent;
+    auto path = options.store.directory / statusDirectory / agent;
+
+    if (options.isDone)
+    {
+        if (parseAgentStatus(eacp::Files::readFile(path)).thread == options.id)
+            eacp::Files::removeFile(path);
+
+        return 0;
+    }
+
+    eacp::Files::createDirectories(path.parentDirectory());
+    writeText(path,
+              formatAgentStatus({options.id, std::time(nullptr), options.text}));
     return 0;
 }
 } // namespace diffview

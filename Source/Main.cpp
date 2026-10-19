@@ -44,6 +44,7 @@ constexpr auto usage =
     "  show       print one thread with its code\n"
     "  reply      answer a thread\n"
     "  resolve    close a thread\n"
+    "  status     say what you're doing on a thread, live in the UI\n"
     "  help       this, or `dv help <command>`\n"
     "\n"
     "For coding agents: the human watches your edits in dv and comments line by\n"
@@ -58,7 +59,9 @@ constexpr auto usage =
     "  3. `dv comments --as <you> --open`, `dv show <id>` for each\n"
     "  4. act, then `dv reply <id> \"what you did\"`; `dv resolve <id>` only\n"
     "     once the work is done. A question gets a reply and stays open:\n"
-    "     resolving folds the thread away from the human.\n"
+    "     resolving folds the thread away from the human. While you work,\n"
+    "     `dv status <id> \"running the tests\"` shows under the thread;\n"
+    "     `dv status <id> --done` once you reply.\n"
     "  5. re-arm with --after set to the id in that line\n"
     "\n"
     "Addressing: `@name` in a comment gives its thread to that agent; an\n"
@@ -73,7 +76,9 @@ constexpr auto usage =
     "every command sees the whole repo from any of them.\n"
     "\n"
     "Nobody listening: a send resumes the owner's last `dv monitor` session\n"
-    "with `claude --dangerously-skip-permissions -p --resume`.\n"
+    "with `claude --dangerously-skip-permissions -p --resume`, adding\n"
+    "`--output-format stream-json --verbose`; the UI shows what it is doing\n"
+    "under the thread from its log in .diffview/wakes/.\n"
     "~/.config/diffview/config or .diffview/config:\n"
     "  wake = resume|fresh|off\n"
     "  wakeCommand = claude --dangerously-skip-permissions\n";
@@ -136,6 +141,19 @@ const std::map<std::string, std::string>& commandHelp()
          "usage: dv resolve <id> [[-m] <note>] [--as <name>] [--force] [--repo <dir>]\n"
          "\n"
          "example: dv resolve 4 --as diffview-dev \"Renamed in 3f2a1c.\"\n"},
+        {"status",
+         "Say what you're doing on a thread. The UI shows it under the thread\n"
+         "with a spinner, and in its status bar, until you clear it or a few\n"
+         "minutes pass without an update. One per agent: a new one replaces it.\n"
+         "Woken agents (dv started them) needn't: the UI reads their log.\n"
+         "\n"
+         "usage: dv status <id> [-m] <text> [--as <name>] [--repo <dir>]\n"
+         "       dv status <id> --done [--as <name>] [--repo <dir>]\n"
+         "\n"
+         "  --as <name>  who is working (default: agent)\n"
+         "  --done       clear it, e.g. as you reply\n"
+         "\n"
+         "example: dv status 4 --as diffview-dev \"running the tests\"\n"},
         {"help",
          "usage: dv help [<command>]\n"
          "\n"
@@ -190,7 +208,8 @@ std::optional<std::string>
 
             arguments.values[found->second] = argv[++i];
         }
-        else if (arg == "--once" || arg == "--force" || arg == "--open")
+        else if (arg == "--once" || arg == "--force" || arg == "--open"
+                 || arg == "--done")
             arguments.flags[arg] = true;
         else if (arg == "--")
         {
@@ -380,6 +399,16 @@ int runCommand(const std::string& command, int argc, char* argv[])
 
     for (const auto& word: positional)
         text += (text.empty() ? "" : " ") + word;
+
+    if (command == "status")
+    {
+        auto isDone = arguments.flags["--done"];
+
+        if (isDone == !text.empty())
+            return usageError("give the text, or --done to clear it", command);
+
+        return diffview::runStatus({*store, *id, agent, text, isDone});
+    }
 
     if (command == "reply" && text.empty() && isatty(STDIN_FILENO) == 0)
         text = readStdin();

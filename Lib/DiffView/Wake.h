@@ -55,6 +55,7 @@ struct WakeDecision
     WakeKind kind = WakeKind::off;
     std::string agent;
     std::string sessionId;
+    std::vector<int> threads;
 };
 
 struct KnownSession
@@ -89,7 +90,8 @@ struct WakeLaunch
 };
 
 // /bin/sh runs the configured command, so it may carry its own arguments; a
-// failed resume falls back to a fresh session.
+// failed resume falls back to a fresh session. The log opens with the shell's
+// pid and the threads, and ends with the exit status (see Activity.h).
 WakeLaunch makeWakeLaunch(const WakeDecision& decision,
                           const WakeConfig& config,
                           const std::string& prompt,

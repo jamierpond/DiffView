@@ -111,7 +111,14 @@ is the one the agent last ran `dv monitor --as <name>` from
 (`.diffview/sessions/<name>`). A session that is still open isn't resumed
 (two writers on one transcript); a fresh one is started and the status bar
 says so. Output goes to `.diffview/wakes/` (a linked worktree's to
-`.diffview/worktrees/<name>/wakes/`). Unowned threads wake no one.
+`.diffview/worktrees/<name>/wakes/`) as Claude's JSON event stream
+(`--output-format stream-json --verbose`), between a `dv-wake pid …
+threads …` line and a `dv-wake-exit <status>` one. While the wake runs, the
+UI follows its log and shows what it is doing at the bottom of the thread
+and in the status bar: `⠋ @dev is working · running dv show 46`, `·
+thinking`, `· editing Source/Foo.cpp`. The row goes when it exits, after
+showing `✗ … failed · exit 1` for a few seconds if it failed. Unowned
+threads wake no one.
 
 Set it in `~/.config/diffview/config`, or per repo in `.diffview/config`
 (the repo's wins, as with git):
@@ -119,7 +126,8 @@ Set it in `~/.config/diffview/config`, or per repo in `.diffview/config`
 ```
 wake = resume   # resume | fresh | off
 wakeCommand = claude --dangerously-skip-permissions
-# run by /bin/sh as `<wakeCommand> -p [--resume <id>] <prompt>`; yours replaces it whole
+# run by /bin/sh as `<wakeCommand> -p --output-format stream-json --verbose
+# [--resume <id>] <prompt>`; yours replaces it whole
 ```
 
 ### The files are the store
@@ -199,6 +207,7 @@ around the working directory) and `dv <command> --help` has an example.
 | `dv show <id>` | One thread: the code block, the comment, every reply |
 | `dv reply <id> [-m] "<text>"` | Answer (text from stdin if not given) |
 | `dv resolve <id> ["<note>"]` | Resolve, with an optional closing note |
+| `dv status <id> "<text>"` / `--done` | Say what you're doing on a thread; the UI shows it live under it |
 
 The loop: run the `monitor` as a background shell task, so it costs nothing
 while nobody reviews (a watcher tool that times out would be re-armed all
@@ -219,6 +228,11 @@ the id in the line (`2026-10-17-142300`). A round already newer than `--after` e
 so nothing slips in between. With `--as`, rounds holding nothing for you
 (only other agents' threads) are skipped; without it every round counts.
 Plain `dv monitor` still streams a line per round until killed.
+
+While working a thread, `dv status <id> --as dev "running the tests"`
+shows `⠋ @dev is working · running the tests` under it in the UI. It lives
+in `.diffview/status/<name>`, one per agent, and goes with `dv status <id>
+--done` or after five minutes without an update.
 
 `.diffview` has its own `.gitignore` (`*`), so none of it shows up in `git
 status`, the diff, or an agent's `git add -A`. Images pasted into comments

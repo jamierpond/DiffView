@@ -1,5 +1,6 @@
 # One test binary per library under Lib/.
 add_executable(DiffViewTests
+        ActivityTests.cpp
         AnnotationsTests.cpp
         ChangeTrackerTests.cpp
         DiffRowsTests.cpp

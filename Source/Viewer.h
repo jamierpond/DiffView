@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Agents.h"
 #include "RepoWatcher.h"
 
 #include <ChangeTracker.h>
@@ -31,6 +32,7 @@
 namespace diffview
 {
 constexpr auto recentWindowMs = std::int64_t {10000};
+constexpr auto spinnerFrameMs = std::int64_t {80};
 
 std::int64_t nowMs();
 
@@ -104,7 +106,9 @@ private:
 
     // Viewer.cpp
     void tick();
+    void pollActivities(std::int64_t now);
     void onRepoChanged(const std::vector<std::string>& paths);
+    void onStoreChanged(const std::vector<std::string>& paths);
     void scheduleRefresh(int delayMs);
     eacp::Threads::Async<void> refresh();
     void apply(std::vector<FileDiff> diffs, const std::string& sha);
@@ -205,6 +209,8 @@ private:
                                    int index,
                                    ftxui::Element shown);
     ftxui::Element renderStatus();
+    ftxui::Element renderActivity(const AgentActivity& activity);
+    std::optional<AgentActivity> findActivityOn(int thread) const;
     ftxui::Element renderPrompt();
     ftxui::Element renderModal();
     ftxui::Element renderPicker();
@@ -244,6 +250,11 @@ private:
     int highestIdInOtherDrafts = 0;
     std::vector<std::string> rounds;
     std::vector<std::string> listening;
+
+    ActivityWatcher activityWatcher;
+    std::vector<AgentActivity> activities;
+    std::int64_t lastActivityPoll = 0;
+    std::int64_t lastSpinnerRedraw = 0;
 
     // What the files said when last read or written, to tell our own writes
     // from a hand edit.

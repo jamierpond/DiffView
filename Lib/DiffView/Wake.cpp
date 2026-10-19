@@ -1,9 +1,9 @@
 #include "Wake.h"
+#include "Activity.h"
 #include "Text.h"
 
 #include <algorithm>
 #include <charconv>
-#include <set>
 
 namespace diffview
 {
@@ -45,9 +45,9 @@ int parseNumber(const std::string& text)
     return value;
 }
 
-std::set<std::string> findOwnersToWake(const ReviewFile& round)
+std::map<std::string, std::vector<int>> findOwnersToWake(const ReviewFile& round)
 {
-    auto owners = std::set<std::string> {};
+    auto owners = std::map<std::string, std::vector<int>> {};
 
     for (const auto& comment: round.comments)
     {
@@ -55,31 +55,32 @@ std::set<std::string> findOwnersToWake(const ReviewFile& round)
         auto thread = ReviewFile {round.title, {}, {}, {comment}, round.reply};
 
         if (!owner.empty() && routeRound(thread, owner, {owner}).wakes())
-            owners.insert(owner);
+            owners[owner].push_back(comment.id);
     }
 
     return owners;
 }
 
 WakeDecision decideWake(const std::string& agent,
+                        const std::vector<int>& threads,
                         const std::map<std::string, KnownSession>& sessions,
                         WakeMode mode)
 {
     if (mode == WakeMode::off)
-        return {WakeKind::off, agent, {}};
+        return {WakeKind::off, agent, {}, threads};
 
     if (mode == WakeMode::fresh)
-        return {WakeKind::fresh, agent, {}};
+        return {WakeKind::fresh, agent, {}, threads};
 
     auto known = sessions.find(agent);
 
     if (known == sessions.end() || known->second.session.sessionId.empty())
-        return {WakeKind::freshWithoutSession, agent, {}};
+        return {WakeKind::freshWithoutSession, agent, {}, threads};
 
     if (known->second.isClaudeAlive)
-        return {WakeKind::freshBesideOpenSession, agent, {}};
+        return {WakeKind::freshBesideOpenSession, agent, {}, threads};
 
-    return {WakeKind::resumed, agent, known->second.session.sessionId};
+    return {WakeKind::resumed, agent, known->second.session.sessionId, threads};
 }
 
 std::string describeWake(const WakeDecision& decision)
@@ -168,14 +169,14 @@ std::vector<WakeDecision>
     for (const auto& agent: listening)
     {
         if (routeRound(round, agent, listening).wakes())
-            decisions.push_back({WakeKind::listening, agent, {}});
+            decisions.push_back({WakeKind::listening, agent, {}, {}});
     }
 
     if (!listening.empty())
         return decisions;
 
-    for (const auto& owner: findOwnersToWake(round))
-        decisions.push_back(decideWake(owner, sessions, mode));
+    for (const auto& [owner, threads]: findOwnersToWake(round))
+        decisions.push_back(decideWake(owner, threads, sessions, mode));
 
     return decisions;
 }
@@ -226,16 +227,28 @@ WakeLaunch makeWakeLaunch(const WakeDecision& decision,
                           const std::string& worktree,
                           const std::string& logPath)
 {
-    auto fresh = config.command + " -p \"$1\"";
-    auto launch =
-        WakeLaunch {worktree, logPath, {"/bin/sh", "-c", fresh, "dv-wake", prompt}};
+    auto threads = std::string {};
+
+    for (auto thread: decision.threads)
+        threads += (threads.empty() ? "" : " ") + std::to_string(thread);
+
+    auto claude = config.command + " -p --output-format stream-json --verbose";
+    auto fresh = claude + " \"$1\"";
+    auto run = fresh;
 
     if (decision.kind == WakeKind::resumed)
-    {
-        launch.arguments[2] =
-            config.command + " -p --resume \"$2\" \"$1\" || " + fresh;
+        run = claude + " --resume \"$4\" \"$1\" || " + fresh;
+
+    auto script = "echo " + std::string {wakeHeaderWord}
+                  + " pid $$ agent \"$2\" threads $3; " + run + "; echo "
+                  + std::string {wakeExitWord} + " $?";
+    auto launch = WakeLaunch {
+        worktree,
+        logPath,
+        {"/bin/sh", "-c", script, "dv-wake", prompt, decision.agent, threads}};
+
+    if (decision.kind == WakeKind::resumed)
         launch.arguments.push_back(decision.sessionId);
-    }
 
     return launch;
 }

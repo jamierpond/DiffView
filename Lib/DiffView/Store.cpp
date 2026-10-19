@@ -6,6 +6,8 @@
 
 #include <algorithm>
 #include <filesystem>
+#include <fstream>
+#include <iterator>
 #include <map>
 #include <set>
 #include <fcntl.h>
@@ -612,6 +614,17 @@ void writeText(const eacp::FilePath& path, std::string_view text)
     auto bytes =
         std::span {reinterpret_cast<const std::uint8_t*>(text.data()), text.size()};
     eacp::Files::writeFileAtomically(path, bytes);
+}
+
+std::string readFileFrom(const eacp::FilePath& path, std::uint64_t offset)
+{
+    auto in = std::ifstream {path.str(), std::ios::binary};
+    in.seekg(static_cast<std::streamoff>(offset));
+
+    if (!in)
+        return {};
+
+    return {std::istreambuf_iterator<char> {in}, std::istreambuf_iterator<char> {}};
 }
 
 std::vector<eacp::FilePath> listDraftFiles(const StoreLayout& store)

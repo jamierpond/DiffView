@@ -26,5 +26,16 @@ struct ListOptions
 };
 
 int runComments(const ListOptions& options);
+
+struct StatusOptions
+{
+    StoreLayout store;
+    int id = 0;
+    std::string agent;
+    std::string text;
+    bool isDone = false;
+};
+
+int runStatus(const StatusOptions& options);
 int runShow(const StoreLayout& store, int id);
 } // namespace diffview

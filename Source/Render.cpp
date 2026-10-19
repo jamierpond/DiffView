@@ -17,6 +17,16 @@ using ftxui::text; // not the TextBuffer namespace
 
 namespace
 {
+constexpr auto spinnerFrames =
+    std::array {"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"};
+
+std::string getSpinnerFrame(std::int64_t now)
+{
+    auto frame =
+        static_cast<std::size_t>(now / spinnerFrameMs) % spinnerFrames.size();
+    return spinnerFrames[frame];
+}
+
 Color statusColor(FileStatus status)
 {
     switch (status)
@@ -790,8 +800,17 @@ Element Viewer::renderThreadRow(const DiffRow& row,
                 diffCursor < static_cast<int>(rows.size())
                 && rows[static_cast<std::size_t>(diffCursor)].annotation == note.id;
             auto hint = cursorHere ? describeKeys(note) : std::string {};
+            auto activity = findActivityOn(note.id);
 
-            return hbox({text("          └─") | color(accent), text(hint) | dim});
+            if (!activity)
+            {
+                return hbox(
+                    {text("          └─") | color(accent), text(hint) | dim});
+            }
+
+            return hbox({text("          └─ ") | color(accent),
+                         renderActivity(*activity),
+                         text("  " + hint) | dim});
         }
     }
 }
@@ -836,6 +855,17 @@ Element Viewer::renderStatus()
         parts.push_back(text("  ◉" + names) | color(Color::Cyan));
     }
 
+    if (!activities.empty())
+    {
+        const auto& first = activities.front();
+        parts.push_back(text("  #" + std::to_string(first.thread) + " "));
+        parts.push_back(renderActivity(first));
+
+        if (activities.size() > 1)
+            parts.push_back(text(" +" + std::to_string(activities.size() - 1))
+                            | dim);
+    }
+
     parts.push_back(filler());
 
     auto pending = keys.pending();
@@ -850,6 +880,26 @@ Element Viewer::renderStatus()
         parts.push_back(text("F1 help ") | dim);
 
     return hbox(std::move(parts));
+}
+
+Element Viewer::renderActivity(const AgentActivity& activity)
+{
+    if (activity.hasFailed)
+        return text("✗ " + describeActivity(activity)) | color(Color::Red);
+
+    return text(getSpinnerFrame(nowMs()) + " " + describeActivity(activity))
+           | color(Color::Cyan);
+}
+
+std::optional<AgentActivity> Viewer::findActivityOn(int thread) const
+{
+    for (const auto& activity: activities)
+    {
+        if (activity.thread == thread)
+            return activity;
+    }
+
+    return std::nullopt;
 }
 
 Element Viewer::renderPrompt()

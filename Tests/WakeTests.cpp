@@ -47,11 +47,15 @@ auto tWakeResume =
     check(describeWakes(decisions) == "woke @dev (resumed)");
 
     auto launch = makeWakeLaunch(decisions[0], {}, "prompt", "/r/main", "/r/log");
-    check(launch.arguments.size() == 6);
+    check(launch.arguments.size() == 8);
     check(launch.arguments[2]
-          == "claude --dangerously-skip-permissions -p --resume \"$2\" \"$1\" || "
-             "claude --dangerously-skip-permissions -p \"$1\"");
-    check(launch.arguments[4] == "prompt" && launch.arguments[5] == "session-1");
+          == "echo dv-wake pid $$ agent \"$2\" threads $3; "
+             "claude --dangerously-skip-permissions -p --output-format stream-json "
+             "--verbose --resume \"$4\" \"$1\" || "
+             "claude --dangerously-skip-permissions -p --output-format stream-json "
+             "--verbose \"$1\"; echo dv-wake-exit $?");
+    check(launch.arguments[4] == "prompt" && launch.arguments[5] == "dev"
+          && launch.arguments[6] == "35" && launch.arguments[7] == "session-1");
 };
 
 auto tWakeOpenSession =
@@ -64,9 +68,11 @@ auto tWakeOpenSession =
     check(describeWakes(decisions) == "woke @dev (fresh: its session is open)");
 
     auto launch = makeWakeLaunch(decisions[0], {}, "prompt", "/r/main", "/r/log");
-    check(launch.arguments.size() == 5
+    check(launch.arguments.size() == 7
           && launch.arguments[2]
-                 == "claude --dangerously-skip-permissions -p \"$1\"");
+                 == "echo dv-wake pid $$ agent \"$2\" threads $3; "
+                    "claude --dangerously-skip-permissions -p --output-format "
+                    "stream-json --verbose \"$1\"; echo dv-wake-exit $?");
 };
 
 auto tWakeNoSession =

@@ -1,4 +1,5 @@
 add_library(DiffViewCore STATIC
+        Activity.cpp
         Annotations.cpp
         ChangeTracker.cpp
         Diff.cpp
