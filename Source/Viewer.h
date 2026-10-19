@@ -288,8 +288,7 @@ private:
 
     // The responder's stream, read from its file: any dv can show it, not just
     // the one running it.
-    bool isAgentPaneShown = false;
-    bool isAgentPaneBesideDiff = false;
+    bool isAgentPaneShown = true;
     std::optional<Transcript> transcript;
     std::string transcriptAgentName;
     std::string transcriptPath;

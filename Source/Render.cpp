@@ -141,7 +141,11 @@ const auto userPromptBackground = Color::RGB(50, 52, 66);
 // A dark background rather than inverted, so +/- colours stay readable.
 const auto selectionBackground = Color::RGB(38, 58, 96);
 const auto claudeOrange = Color::RGB(215, 119, 87);
-constexpr auto agentPaneBesideDiffColumns = 200;
+constexpr auto agentPaneShareOfRows = 3;
+constexpr auto minimumAgentPaneRows = 6;
+constexpr auto minimumBrowserRows = 4;
+constexpr auto agentPaneBorderSize = 2;
+constexpr auto statusBarRows = 1;
 constexpr auto agentPaneMargin = 1;
 
 Element renderToolCallText(const std::string& call)
@@ -224,17 +228,19 @@ Element Viewer::render()
     frameTime = nowMs();
     auto terminal = Terminal::Size();
     auto treeWidth = std::clamp(terminal.dimx * 3 / 10, 20, 50);
-    auto bodyHeight = std::max(1, terminal.dimy - 2); // pane title + status bar
-    auto rightWidth = std::max(10, terminal.dimx - treeWidth - 1);
-    isAgentPaneBesideDiff = terminal.dimx >= agentPaneBesideDiffColumns;
+    auto agentHeight = [&]
+    {
+        if (!isAgentPaneShown)
+            return 0;
 
-    // Narrow, the agent pane stands in for the diff until the diff is wanted.
-    if (isAgentPaneShown && !isAgentPaneBesideDiff && focus == Pane::diff)
-        isAgentPaneShown = false;
-
-    auto isAgentBesideDiff = isAgentPaneShown && isAgentPaneBesideDiff;
-    auto agentWidth = isAgentBesideDiff ? (rightWidth - 1) / 2 : rightWidth;
-    auto diffWidth = isAgentBesideDiff ? rightWidth - 1 - agentWidth : rightWidth;
+        auto wanted =
+            std::max(minimumAgentPaneRows, terminal.dimy / agentPaneShareOfRows);
+        auto room = terminal.dimy - statusBarRows - minimumBrowserRows;
+        return std::max(0, std::min(wanted, room));
+    }();
+    auto browserHeight = terminal.dimy - statusBarRows - agentHeight;
+    auto bodyHeight = std::max(1, browserHeight - 1); // less the pane title
+    auto diffWidth = std::max(10, terminal.dimx - treeWidth - 1);
 
     auto wantedWrap = std::max(10, diffWidth - 13); // less the "          > " gutter
 
@@ -247,24 +253,19 @@ Element Viewer::render()
     treeHeight = bodyHeight;
     diffHeight = bodyHeight + 1; // no title row: the file header is a row
 
-    auto columns =
-        Elements {renderTree(treeWidth, bodyHeight) | size(WIDTH, EQUAL, treeWidth),
-                  separator()};
+    auto browser =
+        hbox({renderTree(treeWidth, bodyHeight) | size(WIDTH, EQUAL, treeWidth),
+              separator(),
+              renderDiff(diffWidth, diffHeight) | flex});
+    auto stacked = Elements {browser | flex};
 
-    if (!isAgentPaneShown || isAgentBesideDiff)
-        columns.push_back(renderDiff(diffWidth, diffHeight)
-                          | size(WIDTH, EQUAL, diffWidth));
+    if (agentHeight > agentPaneBorderSize)
+        stacked.push_back(renderAgentPane(terminal.dimx - agentPaneBorderSize,
+                                          agentHeight - agentPaneBorderSize)
+                          | size(HEIGHT, EQUAL, agentHeight));
 
-    if (isAgentBesideDiff)
-        columns.push_back(separator());
-
-    if (isAgentPaneShown)
-        columns.push_back(renderAgentPane(agentWidth, bodyHeight) | flex);
-    else
-        columns.back() = columns.back() | flex;
-
-    auto main = vbox({hbox(std::move(columns)) | flex,
-                      prompt != Prompt::none ? renderPrompt() : renderStatus()});
+    stacked.push_back(prompt != Prompt::none ? renderPrompt() : renderStatus());
+    auto main = vbox(std::move(stacked));
 
     if (modal == Modal::none)
         return main;
@@ -290,10 +291,8 @@ Element Viewer::renderAgentPane(int width, int height)
         isFollowingTranscript ? lastTop : std::min(transcriptTop, lastTop);
 
     auto title =
-        " @" + transcriptAgentName + (isFollowingTranscript ? "" : " · G follows");
-    auto lines = Elements {
-        text(title) | bold | (focus == Pane::agent ? inverted : dim),
-    };
+        " @" + transcriptAgentName + (isFollowingTranscript ? " " : " · G follows ");
+    auto lines = Elements {};
 
     if (transcriptRows.empty())
         lines.push_back(text(" nothing from its agent yet · " + transcriptPath)
@@ -305,7 +304,8 @@ Element Viewer::renderAgentPane(int width, int height)
         lines.push_back(renderTranscriptRow(
             transcriptRows[static_cast<std::size_t>(i)], rowWidth));
 
-    return vbox(std::move(lines)) | flex;
+    return window(text(title) | bold | (focus == Pane::agent ? inverted : dim),
+                  vbox(std::move(lines)) | flex);
 }
 
 Element Viewer::renderTranscriptRow(const TranscriptRow& row, int width)
@@ -1245,7 +1245,7 @@ Element Viewer::renderHelp()
                    row("j k  gg G", "move, top / bottom (counts: 5j)"),
                    row("Ctrl-d Ctrl-u", "half page down / up"),
                    row("h l  Tab", "tree / diff / switch pane"),
-                   row("A", "agent pane: watch @dv work (A again hides)"),
+                   row("A", "agent pane: focus it; again hides it, again shows"),
                    row("", "j k scroll it, G follows the tail again"),
                    row("Enter  l", "tree: toggle directory, open file"),
                    row("a  s", "all files / changed only, tree / by size"),

@@ -244,12 +244,10 @@ void Viewer::toggleAgentPane()
 
 void Viewer::cycleFocus()
 {
-    auto isDiffHidden = isAgentPaneShown && !isAgentPaneBesideDiff;
-
     switch (focus)
     {
         case Pane::tree:
-            focus = isDiffHidden ? Pane::agent : Pane::diff;
+            focus = Pane::diff;
             return;
         case Pane::diff:
             focus = isAgentPaneShown ? Pane::agent : Pane::tree;
