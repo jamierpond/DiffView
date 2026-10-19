@@ -9,11 +9,6 @@ namespace
 {
 constexpr auto gitHeader = std::string_view {"diff --git "};
 
-bool startsWith(std::string_view text, std::string_view prefix)
-{
-    return text.substr(0, prefix.size()) == prefix;
-}
-
 void parseRange(std::string_view text, int& start, int& count)
 {
     auto comma = text.find(',');
@@ -30,7 +25,7 @@ void parseRange(std::string_view text, int& start, int& count)
 
 bool parseHunkHeader(std::string_view line, Hunk& hunk)
 {
-    if (!startsWith(line, "@@ -"))
+    if (!line.starts_with("@@ -"))
         return false;
 
     auto rest = line.substr(4);
@@ -42,7 +37,7 @@ bool parseHunkHeader(std::string_view line, Hunk& hunk)
     parseRange(rest.substr(0, space), hunk.oldStart, hunk.oldCount);
     rest = rest.substr(space + 1);
 
-    if (!startsWith(rest, "+"))
+    if (!rest.starts_with("+"))
         return false;
 
     rest = rest.substr(1);
@@ -63,16 +58,16 @@ std::string pathFromGitHeader(std::string_view line)
 {
     auto rest = line.substr(gitHeader.size());
 
-    if (startsWith(rest, "\""))
+    if (rest.starts_with("\""))
     {
         auto close = rest.find("\" ");
         auto quoted = rest.substr(
             0, close == std::string_view::npos ? rest.size() : close + 1);
         auto path = unquotePath(quoted);
-        return startsWith(path, "a/") ? path.substr(2) : path;
+        return path.starts_with("a/") ? path.substr(2) : path;
     }
 
-    if (rest.size() < 6 || !startsWith(rest, "a/"))
+    if (rest.size() < 6 || !rest.starts_with("a/"))
         return std::string {rest};
 
     auto pathLength = (rest.size() - 5) / 2;
@@ -91,7 +86,7 @@ std::string pathFromMarker(std::string_view line)
 
     auto unquoted = unquotePath(path);
 
-    if (startsWith(unquoted, "a/") || startsWith(unquoted, "b/"))
+    if (unquoted.starts_with("a/") || unquoted.starts_with("b/"))
         return unquoted.substr(2);
 
     return unquoted;
@@ -248,7 +243,7 @@ std::vector<FileDiff> parseDiff(std::string_view text)
         {
             auto& hunk = files.back().hunks.back();
 
-            if (startsWith(line, "\\"))
+            if (line.starts_with("\\"))
                 continue;
 
             auto marker = line.empty() ? ' ' : line.front();
@@ -281,7 +276,7 @@ std::vector<FileDiff> parseDiff(std::string_view text)
             newLeft = 0;
         }
 
-        if (startsWith(line, gitHeader))
+        if (line.starts_with(gitHeader))
         {
             if (!files.empty())
                 finalize(files.back());
@@ -297,7 +292,7 @@ std::vector<FileDiff> parseDiff(std::string_view text)
 
         auto& file = files.back();
 
-        if (startsWith(line, "@@ -"))
+        if (line.starts_with("@@ -"))
         {
             auto hunk = Hunk {};
 
@@ -312,25 +307,25 @@ std::vector<FileDiff> parseDiff(std::string_view text)
             continue;
         }
 
-        if (startsWith(line, "\\"))
+        if (line.starts_with("\\"))
             continue;
 
         if (!file.hunks.empty())
             continue;
 
-        if (startsWith(line, "new file mode"))
+        if (line.starts_with("new file mode"))
             file.status = FileStatus::added;
-        else if (startsWith(line, "deleted file mode"))
+        else if (line.starts_with("deleted file mode"))
             file.status = FileStatus::deleted;
-        else if (startsWith(line, "Binary files ")
-                 || startsWith(line, "GIT binary patch"))
+        else if (line.starts_with("Binary files ")
+                 || line.starts_with("GIT binary patch"))
             file.binary = true;
-        else if (startsWith(line, "+++ "))
+        else if (line.starts_with("+++ "))
         {
             if (auto path = pathFromMarker(line); !path.empty())
                 file.path = path;
         }
-        else if (startsWith(line, "--- "))
+        else if (line.starts_with("--- "))
         {
             if (auto path = pathFromMarker(line); !path.empty())
                 file.path = path;

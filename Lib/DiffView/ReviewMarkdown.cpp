@@ -72,17 +72,6 @@ Json::Value toArray(const std::vector<std::string>& lines)
     return array;
 }
 
-bool startsWith(std::string_view text, std::string_view prefix)
-{
-    return text.substr(0, prefix.size()) == prefix;
-}
-
-bool endsWith(std::string_view text, std::string_view suffix)
-{
-    return text.size() >= suffix.size()
-           && text.substr(text.size() - suffix.size()) == suffix;
-}
-
 std::string fenceMarker(std::string_view line)
 {
     if (line.empty() || (line[0] != '`' && line[0] != '~'))
@@ -134,7 +123,7 @@ bool isDigits(std::string_view text)
 // "### src/a.cpp:12-14 (old) · open, stale · #4". Anything else is prose.
 std::optional<Heading> parseHeading(std::string_view line)
 {
-    if (!startsWith(line, "### "))
+    if (!line.starts_with("### "))
         return std::nullopt;
 
     auto rest = trim(line.substr(4));
@@ -155,14 +144,14 @@ std::optional<Heading> parseHeading(std::string_view line)
 
     auto heading = Heading {};
 
-    if (parts.size() >= 2 && startsWith(parts.back(), "#")
+    if (parts.size() >= 2 && parts.back().starts_with("#")
         && isDigits(parts.back().substr(1)))
     {
         heading.id = toInt(std::string_view {parts.back()}.substr(1));
         parts.pop_back();
     }
 
-    if (parts.size() >= 3 && startsWith(parts.back(), "@")
+    if (parts.size() >= 3 && parts.back().starts_with("@")
         && parts.back().size() > 1)
     {
         heading.owner = trim(std::string_view {parts.back()}.substr(1));
@@ -204,7 +193,7 @@ std::optional<Heading> parseHeading(std::string_view line)
         return heading;
     }
 
-    if (endsWith(where, wholeFile))
+    if (where.ends_with(wholeFile))
     {
         heading.fileLevel = true;
         heading.path =
@@ -212,7 +201,7 @@ std::optional<Heading> parseHeading(std::string_view line)
         return heading;
     }
 
-    if (endsWith(where, oldSide))
+    if (where.ends_with(oldSide))
     {
         heading.old = true;
         where.remove_suffix(oldSide.size());
@@ -259,12 +248,12 @@ std::vector<std::string> splitParts(std::string_view text)
 
 std::optional<Reply> parseReplyHeading(std::string_view line)
 {
-    if (!startsWith(line, replyMark))
+    if (!line.starts_with(replyMark))
         return std::nullopt;
 
     auto rest = line.substr(replyMark.size());
 
-    if (!rest.empty() && !startsWith(rest, separator) && trim(rest) != "")
+    if (!rest.empty() && !rest.starts_with(separator) && trim(rest) != "")
         return std::nullopt;
 
     auto parts = splitParts(line.substr(5));
@@ -289,7 +278,7 @@ std::optional<Reply> parseReplyHeading(std::string_view line)
 // (Markdown shows "\###" as "###"); one is taken off on the way back in.
 bool isSection(std::string_view line)
 {
-    return startsWith(line, "## ");
+    return line.starts_with("## ");
 }
 
 bool needsEscape(std::string_view line)
