@@ -1042,8 +1042,11 @@ Element Viewer::renderConfirm()
 
 Element Viewer::renderHelp()
 {
-    auto row = [](const std::string& keys, const std::string& what)
-    { return hbox({text(keys) | bold | size(WIDTH, EQUAL, 18), text(what)}); };
+    auto row = [](const std::string& keyNames, const std::string& description)
+    {
+        return hbox(
+            {text(keyNames) | bold | size(WIDTH, EQUAL, 18), text(description)});
+    };
 
     return window(
                text(" Keys "),

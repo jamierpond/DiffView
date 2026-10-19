@@ -23,4 +23,20 @@ function(set_strict_warnings_level target)
                 -Wmissing-declarations
                 -Werror)
     endif ()
+
+    if (CMAKE_CXX_COMPILER_ID MATCHES "Clang" AND NOT MSVC)
+        target_compile_options(${target} PRIVATE
+                -Wshadow-all
+                -Wunreachable-code-aggressive
+                -Wunused-member-function
+                -Wunused-template
+                -Wunused-macros
+                -Wcomma
+                -Wdeprecated
+                -Wundef
+                -Wfloat-equal
+                -Wextra-semi-stmt
+                -Wzero-as-null-pointer-constant
+                -Wimplicit-int-conversion)
+    endif ()
 endfunction()
