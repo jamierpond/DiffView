@@ -22,9 +22,9 @@ configure:
 build: configure
     cmake --build {{build_dir}} --target DiffView
 
-# Build and run the unit tests.
+# Build everything (app + every test binary, all under -Werror), run the tests.
 test: configure
-    cmake --build {{build_dir}} --target DiffViewTests
+    cmake --build {{build_dir}}
     ctest --test-dir {{build_dir}} --output-on-failure
 
 # Build, then run it (on this repo unless given a path / --base).
