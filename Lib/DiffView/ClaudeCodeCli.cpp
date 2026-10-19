@@ -1,5 +1,6 @@
 #include "AgentCli.h"
 #include "StreamEvents.h"
+#include "Text.h"
 
 namespace diffview
 {
@@ -39,6 +40,20 @@ std::optional<std::string> summariseAssistant(const Value& event,
     }
 
     return std::nullopt;
+}
+
+// With --replay-user-messages, a stdin message comes back as a user line when
+// it takes it, after any turn in flight.
+bool isClaudeEchoOf(std::string_view line, const std::string& sent)
+{
+    auto event = Miro::Json::getParsedValue(line);
+
+    if (getString(event, "type") != "user"
+        || !getString(event, "parent_tool_use_id").empty())
+        return false;
+
+    const auto& content = getField(getField(event, "message"), "content");
+    return trim(joinTextBlocks(content)) == trim(sent);
 }
 
 // --output-format stream-json --verbose: whole messages, one per line.
@@ -100,6 +115,7 @@ AgentCli makeClaudeCodeCli()
         summariseClaudeStreamLine,
         [](std::string_view line)
         { return getString(Miro::Json::getParsedValue(line), "type") == "result"; },
+        isClaudeEchoOf,
     };
 }
 } // namespace diffview

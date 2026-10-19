@@ -45,8 +45,11 @@ struct AgentCli
     std::function<std::optional<std::string>(std::string_view line,
                                              const std::string& worktree)>
         summariseStreamLine;
-    // In a stdin session: the line that ends its answer to one message.
+    // In a stdin session: the line that ends a turn, its own or one it started
+    // itself.
     std::function<bool(std::string_view line)> isEndOfTurn;
+    // In a stdin session: the line saying it took `sent`, starting its turn.
+    std::function<bool(std::string_view line, const std::string& sent)> isEchoOf;
 };
 
 const std::vector<AgentCli>& getAgentClis();

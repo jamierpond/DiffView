@@ -52,36 +52,6 @@ TranscriptRow
     return row;
 }
 
-std::string joinTextBlocks(const Value& content)
-{
-    if (content.isString())
-        return content.asString();
-
-    if (!content.isArray())
-        return {};
-
-    auto joined = std::string {};
-
-    for (const auto& block: content.asArray())
-    {
-        auto type = getString(block, "type");
-        auto said = type == "text" ? getString(block, "text") : std::string {};
-
-        if (type == "image")
-            said = "[Image]";
-
-        if (said.empty())
-            continue;
-
-        if (!joined.empty())
-            joined += "\n";
-
-        joined += said;
-    }
-
-    return joined;
-}
-
 bool isTrue(const Value& value)
 {
     return value.isBool() && value.asBool();

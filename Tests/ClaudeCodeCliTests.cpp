@@ -128,3 +128,22 @@ auto tActivityQuiet = test(
     check(!summarise("Error: not logged in"));
     check(!summarise(""));
 };
+
+auto tClaudeCodeEcho =
+    test("ClaudeCodeCli/a message's echo is a user line with its text") = []
+{
+    const auto& cli = getAgentCli("claude");
+
+    check(cli.isEchoOf(
+        R"({"type":"user","message":{"role":"user","content":[{"type":"text","text":"dv: round\n"}]}})",
+        "dv: round"));
+    check(cli.isEchoOf(R"({"type":"user","message":{"content":"hi"}})", "hi"));
+    check(!cli.isEchoOf(R"({"type":"user","message":{"content":"hi"}})", "other"));
+    check(!cli.isEchoOf(
+        R"({"type":"user","parent_tool_use_id":"t1","message":{"content":"hi"}})",
+        "hi"));
+    check(!cli.isEchoOf(
+        R"({"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"t1","content":"hi"}]}})",
+        "hi"));
+    check(!cli.isEchoOf(R"({"type":"result"})", ""));
+};

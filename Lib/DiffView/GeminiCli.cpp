@@ -69,6 +69,7 @@ AgentCli makeGeminiCli()
         "",
         summariseGeminiStreamLine,
         [](std::string_view) { return false; },
+        [](std::string_view, const std::string&) { return false; },
     };
 }
 } // namespace diffview

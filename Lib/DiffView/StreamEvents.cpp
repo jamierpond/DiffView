@@ -20,6 +20,36 @@ std::string makeRelative(const std::string& path, const std::string& worktree)
 }
 } // namespace
 
+std::string joinTextBlocks(const Miro::Json::Value& content)
+{
+    if (content.isString())
+        return content.asString();
+
+    if (!content.isArray())
+        return {};
+
+    auto joined = std::string {};
+
+    for (const auto& block: content.asArray())
+    {
+        auto type = getString(block, "type");
+        auto said = type == "text" ? getString(block, "text") : std::string {};
+
+        if (type == "image")
+            said = "[Image]";
+
+        if (said.empty())
+            continue;
+
+        if (!joined.empty())
+            joined += "\n";
+
+        joined += said;
+    }
+
+    return joined;
+}
+
 const Value& getField(const Value& value, std::string_view key)
 {
     static const auto missing = Value {};

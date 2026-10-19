@@ -272,6 +272,7 @@ void Responder::finish()
     queue.clear();
     hasQueueChanged = true;
     current.reset();
+    isCurrentPickedUp = false;
     doing.clear();
 
     if (!process)
@@ -344,6 +345,7 @@ void Responder::sendNext()
 
     current = std::move(queue.front());
     queue.pop_front();
+    isCurrentPickedUp = false;
     hasQueueChanged = true;
     doing = "starting";
     log("dv: sending " + describeMessageOrigin(*current) + ": " + current->text);
@@ -411,8 +413,9 @@ void Responder::readOutput()
     partialLine.erase(0, start);
 }
 
-// A resume that fails ends with a result line before anything starts: not
-// the end of a turn.
+// Only a turn that took the message in flight answers it: one the CLI started
+// itself, say on a background subagent finishing, or a failed resume's result
+// line, comes before its echo.
 void Responder::readLine(std::string_view line)
 {
     auto said = getString(Miro::Json::getParsedValue(line), "session_id");
@@ -427,13 +430,20 @@ void Responder::readLine(std::string_view line)
         hasReportedActivity = true;
     }
 
-    if (hasReportedActivity && settings.cli.isEndOfTurn(line))
+    if (current && !isCurrentPickedUp && settings.cli.isEchoOf(line, current->text))
+    {
+        isCurrentPickedUp = true;
+        return;
+    }
+
+    if (isCurrentPickedUp && settings.cli.isEndOfTurn(line))
         finishTurn();
 }
 
 void Responder::finishTurn()
 {
     current.reset();
+    isCurrentPickedUp = false;
     doing.clear();
     sendNext();
 }
@@ -457,6 +467,7 @@ void Responder::handleExit(int exitCode)
     }
 
     current.reset();
+    isCurrentPickedUp = false;
     doing.clear();
 
     if (isResuming && !hasReportedActivity)

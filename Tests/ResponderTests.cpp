@@ -32,6 +32,12 @@ const auto claudeResult =
     std::string {R"({"type":"result","subtype":"success","session_id":"session-1"})"}
     + "\n";
 
+// What Claude Code writes back on taking a message, with --replay-user-messages.
+std::string makeEcho(const std::string& text)
+{
+    return frameUserMessage(text);
+}
+
 Annotation makeCommentThread(int id, const std::string& owner)
 {
     auto comment = Annotation {};
@@ -271,7 +277,7 @@ auto tResponderOneProcess =
     check(responder.findActivities().front().commentThread == 4);
     check(responder.findActivities().front().doing == "starting");
 
-    writeOutput(dir, claudeResult);
+    writeOutput(dir, makeEcho("first") + claudeResult);
     responder.poll();
     check(launcher.started.size() == 1);
     check(process.written.find("second") != std::string::npos);
@@ -283,6 +289,76 @@ auto tResponderOneProcess =
     check(process.isInputClosed && responder.isFinishing());
 };
 
+auto tResponderResultBeforeEcho =
+    test("Responder/a turn's end before the message's echo doesn't answer it") = []
+{
+    auto dir = makeEmptyDirectory("ResponderResultBeforeEcho");
+    auto launcher = FakeLauncher {};
+    auto responder = Responder {makeSettings(dir), launcher.makeStart()};
+
+    responder.send({"first", {4}});
+    responder.send({"second", {5}});
+    writeOutput(dir, claudeInit + claudeResult);
+    responder.poll();
+
+    check(responder.findActivities().front().commentThread == 4);
+    check(launcher.started.front()->written.find("second") == std::string::npos);
+    check(responder.countQueuedMessages() == 1);
+};
+
+auto tResponderEchoThenResult =
+    test("Responder/the first turn's end after its echo answers a message") = []
+{
+    auto dir = makeEmptyDirectory("ResponderEchoThenResult");
+    auto launcher = FakeLauncher {};
+    auto responder = Responder {makeSettings(dir), launcher.makeStart()};
+
+    responder.send({"first", {4}});
+    responder.send({"second", {5}});
+    writeOutput(dir, claudeInit + makeEcho("first"));
+    responder.poll();
+    check(responder.findActivities().front().commentThread == 4);
+
+    writeOutput(dir, claudeResult);
+    responder.poll();
+    check(responder.findActivities().front().commentThread == 5);
+    check(readMessageText(launcher.started.front()->written.substr(
+              launcher.started.front()->written.find('\n') + 1))
+          == "second");
+};
+
+auto tResponderSpontaneousTurn =
+    test("Responder/a turn the agent starts itself between two rounds doesn't "
+         "answer the second") = []
+{
+    const auto subagentNotification =
+        std::string {
+            R"({"type":"system","subtype":"task_notification","task_id":"a1","status":"completed"})"}
+        + "\n";
+    auto dir = makeEmptyDirectory("ResponderSpontaneousTurn");
+    auto launcher = FakeLauncher {};
+    auto responder = Responder {makeSettings(dir), launcher.makeStart()};
+
+    responder.send({"first", {4}});
+    writeOutput(dir, claudeInit + makeEcho("first") + claudeResult);
+    responder.poll();
+    check(responder.findActivities().empty());
+
+    responder.send({"second", {5}});
+    writeOutput(dir, subagentNotification + claudeResult);
+    responder.poll();
+    check(responder.findActivities().size() == 1);
+    check(responder.findActivities().front().commentThread == 5);
+
+    responder.send({"third", {6}});
+    check(launcher.started.front()->written.find("third") == std::string::npos);
+
+    writeOutput(dir, makeEcho("second") + claudeResult);
+    responder.poll();
+    check(responder.findActivities().front().commentThread == 6);
+    check(launcher.started.front()->written.find("third") != std::string::npos);
+};
+
 auto tResponderResumes =
     test("Responder/its session id is kept and the next one resumes it") = []
 {
@@ -292,7 +368,7 @@ auto tResponderResumes =
     {
         auto responder = Responder {makeSettings(dir), launcher.makeStart()};
         responder.send({"first", {4}});
-        writeOutput(dir, claudeInit + claudeResult);
+        writeOutput(dir, claudeInit + makeEcho("first") + claudeResult);
         responder.poll();
     }
 
@@ -371,7 +447,7 @@ auto tResponderIdleCrash =
     auto responder = Responder {makeSettings(dir), launcher.makeStart()};
 
     responder.send({"first", {4}});
-    writeOutput(dir, claudeInit + claudeResult);
+    writeOutput(dir, claudeInit + makeEcho("first") + claudeResult);
     responder.poll();
     launcher.started.front()->exitCode = crashExitCode;
     responder.poll();
@@ -440,7 +516,7 @@ auto tResponderReadsOutputByOffset =
     responder.poll();
     check(responder.findActivities().front().doing == "starting");
 
-    writeOutput(dir, claudeInit.substr(half) + claudeResult);
+    writeOutput(dir, claudeInit.substr(half) + makeEcho("first") + claudeResult);
     responder.poll();
     check(responder.findActivities().front().commentThread == 5);
 };
@@ -538,7 +614,7 @@ auto tResponderTypedMessageStarts =
     responder.send(makeTypedResponderMessage("and then"));
     check(process.written.find("and then") == std::string::npos);
 
-    writeOutput(dir, claudeInit + claudeResult);
+    writeOutput(dir, claudeInit + makeEcho("hello") + claudeResult);
     responder.poll();
     check(process.written.find("and then") != std::string::npos);
 
