@@ -40,7 +40,7 @@ merge-base of HEAD and `name`, as in `git diff main...`; anything else
 | `Space pf` | Find a changed file | `F1` `g?` | Help |
 | `Space ps` | Grep every changed line | `q` `:q` | Quit (asks about an unsent draft) |
 | `Space pc` | Every comment, newest first; Enter amends | `:` | Commands (Tab completes): `submit q base comments note resolved edit help` |
-| `b` `:base` | Change base |  |  |
+| `b` `:base` | Change base | `R` | Reply on the comment's thread |
 | `r` | Refresh | `a` | All files / changed files only |
 | | | `s` | Tree / flat list by size of change |
 
@@ -56,7 +56,7 @@ file names.
 The comment box is a small vim: it opens in insert mode for a new comment and
 normal mode for an existing one. `i a o O I A`, `h j k l w b e 0 $ gg G`,
 `x dd dw cw ciw cc C D yy p P J r u ^R`, `/ ? n N`, and `^W ^U ^H` in insert
-mode. `:w`
+mode; `Tab` after `@` completes an agent's name. `:w`
 saves, `:wq` or `:x` (or `^S`) saves and closes, `:q` closes, `:q!` throws the
 edit away. Long lines wrap, and `j`/`k` move by wrapped line. `^V` pastes; on
 macOS an image on the clipboard (a screenshot) is saved to
@@ -74,8 +74,19 @@ Like a GitHub review: sent comments stay in the diff tagged "submitted
 HH:MM"; resolved ones fold into one "✓ N resolved" line (`X` shows them).
 Editing, resolving or deleting a sent comment puts that change in the draft,
 and the next round says it is an update ("updated from review …"), resolved,
-or withdrawn. An agent resolves a comment by changing its `· open` to
-`· resolved` in the file it was given; DiffView picks that up.
+or withdrawn.
+
+Each comment is a thread. Agents answer with `dv reply` and close with `dv
+resolve`; their replies show under the comment as they arrive. `R` replies
+on a thread; like a GitHub review reply it waits in the draft and goes out
+with the next round, which carries the whole thread, your new reply marked
+`new`.
+
+`@name` in a comment gives its thread to that agent, and the owner is shown
+after the status. An unaddressed thread is everyone's until an agent
+answers it, which claims it. An agent can't answer another's thread without
+`--force`. Agents waiting with `dv monitor --as <name>` show in the status
+bar (`◉ @name`).
 
 ### The files are the store
 
@@ -91,7 +102,8 @@ A whole review looks like this:
 Review comments on this repo's changes, diffed against `main...` at 9170e37a2e0379475705c0f3439feb76c832e44a.
 Each `### path:lines · status · #id` heading is one comment: working-tree line numbers, `(old)` the base's, `(whole file)` the whole file.
 In the block under it `>` marks the lines the comment is about (line number, then `+` added, `-` removed, space unchanged); the comment follows the block.
-Act on `open` comments; `resolved` and `withdrawn` ones need nothing. When you have dealt with one, change its `· open` to `· resolved` here.
+Replies follow a comment as `#### reply · author · time`: `you` is the reviewer, `new` marks theirs new in this round. `@name` after the status is the agent the thread belongs to.
+Act on `open` comments; `resolved` and `withdrawn` ones need nothing. Answer with `dv reply <id> "text"`; when you have dealt with one, `dv resolve <id>` (or change its `· open` to `· resolved` here).
 
 ## General
 
@@ -101,7 +113,7 @@ The search UX feels off overall.
 
 ## src/Focus.cpp
 
-### src/Focus.cpp:48-49 · open, updated from review 2026-10-16-170000 · #4
+### src/Focus.cpp:48-49 · open, updated from review 2026-10-16-170000 · @diffview-dev · #4
 
 ```text
   46 │         return std::nullopt;
@@ -113,6 +125,14 @@ The search UX feels off overall.
 ```
 
 Why a reference here? It was a copy.
+
+#### reply · diffview-dev · 2026-10-16 17:10
+
+It aliases the map entry.
+
+#### reply · you · 2026-10-16 18:15 · new
+
+Then say so in a name.
 ````
 
 - One `###` heading per comment: where (path and working-tree lines; `(old)`
@@ -124,22 +144,42 @@ Why a reference here? It was a copy.
   diff the comment is marked stale).
 - The comment is plain Markdown after the block, up to the next heading;
   code blocks and blank lines in it are fine.
+- Replies follow it, each under `#### reply · author · YYYY-MM-DD HH:MM`
+  (`you` is the reviewer; `· new` marks yours new in this round).
+- `@name` between the status and the id is the agent the thread belongs to.
 
 Tell an agent:
 
-> I review your changes in DiffView. Read `.diffview/latest.md` and act on
-> every `open` comment; the `>` lines in each block are the ones it is about.
-> When you've dealt with one, change its `· open` to `· resolved` in that
-> file. Don't edit anything else under `.diffview/`.
+> I review your changes in DiffView. Run `dv --help` and follow its agent
+> loop, as `--as <your name>`.
 
-An agent that can watch a command's output (Claude Code's Monitor tool) can
-run `dv monitor [repo]` to hear when you submit. It needs no terminal, prints
-one line per round submitted after it starts, and runs until killed
-(`--once`: until the first round):
+### The agent side
+
+No terminal needed; every command takes `--repo <dir>` (default: the repo
+around the working directory) and `dv <command> --help` has an example.
+
+| Command | Does |
+|---|---|
+| `dv monitor --once --as <name> --after <round>` | Wait for a round with something for you; print one line and exit |
+| `dv comments [--open] [--as <name>]` | One line per thread: id, status, owner, where, first line |
+| `dv show <id>` | One thread: the code block, the comment, every reply |
+| `dv reply <id> [-m] "<text>"` | Answer (text from stdin if not given) |
+| `dv resolve <id> ["<note>"]` | Resolve, with an optional closing note |
+
+The loop: run the `monitor` as a background shell task, so it costs nothing
+while nobody reviews (a watcher tool that times out would be re-armed all
+night). When it exits it prints the round:
 
 ```
-dv: review round 2026-10-17-142300 submitted · 3 open · read /abs/repo/.diffview/latest.md
+dv: review round 2026-10-17-142300 submitted · for @dev · 3 open · 1 with new replies · read /abs/repo/.diffview/latest.md
 ```
+
+Read the threads (`dv comments --open --as dev`, `dv show <id>`), act,
+`dv reply`/`dv resolve`, and run the monitor again with `--after
+2026-10-17-142300`. A round already newer than `--after` exits it at once,
+so nothing slips in between. With `--as`, rounds holding nothing for you
+(only other agents' threads) are skipped; without it every round counts.
+Plain `dv monitor` still streams a line per round until killed.
 
 `.diffview` has its own `.gitignore` (`*`), so none of it shows up in `git
 status`, the diff, or an agent's `git add -A`. Images pasted into comments
