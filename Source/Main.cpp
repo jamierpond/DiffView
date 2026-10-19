@@ -73,8 +73,10 @@ constexpr auto usage =
     "every command sees the whole repo from any of them.\n"
     "\n"
     "Nobody listening: a send resumes the owner's last `dv monitor` session\n"
-    "with `claude -p --resume`. ~/.config/diffview/config or .diffview/config:\n"
-    "  wake = resume|fresh|off    wakeCommand = claude\n";
+    "with `claude --dangerously-skip-permissions -p --resume`.\n"
+    "~/.config/diffview/config or .diffview/config:\n"
+    "  wake = resume|fresh|off\n"
+    "  wakeCommand = claude --dangerously-skip-permissions\n";
 
 const std::map<std::string, std::string>& commandHelp()
 {
@@ -444,7 +446,7 @@ int main(int argc, char* argv[])
     options.repo = *root;
     options.store = *store;
     options.mergeNotes = diffview::mergeWorktreeStores(*store);
-    options.wake = readWakeConfig(*store);
+    options.readWakeConfig = [store = *store] { return readWakeConfig(store); };
     options.launchWake = diffview::launchDetached;
     return eacp::Apps::run<diffview::Viewer>(options);
 }

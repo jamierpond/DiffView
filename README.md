@@ -102,9 +102,11 @@ every listening agent, and whoever answers it takes it over.
 ### Waking an agent nobody is listening for
 
 When you send a round or a reply and no agent is listening, dv starts the
-owner's Claude Code session again, detached, in this worktree: `claude -p
---resume <session> "<the monitor line> Handle it with dv … as <name>, then
-exit."`, falling back to a fresh `claude -p` if the resume fails. The session
+owner's Claude Code session again, detached, in this worktree: `claude
+--dangerously-skip-permissions -p --resume <session> "<the monitor line> Handle
+it with dv … as <name>, then exit."`, falling back to a fresh `claude -p` if
+the resume fails. Headless, nobody can answer a permission prompt, so without
+the flag the woken agent can't run `dv` at all. The session
 is the one the agent last ran `dv monitor --as <name>` from
 (`.diffview/sessions/<name>`). A session that is still open isn't resumed
 (two writers on one transcript); a fresh one is started and the status bar
@@ -115,8 +117,9 @@ Set it in `~/.config/diffview/config`, or per repo in `.diffview/config`
 (the repo's wins, as with git):
 
 ```
-wake = resume          # resume | fresh | off
-wakeCommand = claude   # run by /bin/sh as `<wakeCommand> -p [--resume <id>] <prompt>`
+wake = resume   # resume | fresh | off
+wakeCommand = claude --dangerously-skip-permissions
+# run by /bin/sh as `<wakeCommand> -p [--resume <id>] <prompt>`; yours replaces it whole
 ```
 
 ### The files are the store

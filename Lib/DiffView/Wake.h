@@ -23,7 +23,7 @@ enum class WakeMode
 struct WakeConfig
 {
     WakeMode mode = WakeMode::resume;
-    std::string command = "claude";
+    std::string command = "claude --dangerously-skip-permissions";
 };
 
 // "key = value" lines, as git's config reads; later files override earlier.

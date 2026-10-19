@@ -39,7 +39,7 @@ struct Options
     std::string repo;
     StoreLayout store;
     std::vector<std::string> mergeNotes;
-    WakeConfig wake;
+    std::function<WakeConfig()> readWakeConfig = [] { return WakeConfig {}; };
     std::function<void(const WakeLaunch&)> launchWake = [](const WakeLaunch&) {};
     git::BaseSpec base;
 };

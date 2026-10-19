@@ -49,7 +49,8 @@ auto tWakeResume =
     auto launch = makeWakeLaunch(decisions[0], {}, "prompt", "/r/main", "/r/log");
     check(launch.arguments.size() == 6);
     check(launch.arguments[2]
-          == "claude -p --resume \"$2\" \"$1\" || claude -p \"$1\"");
+          == "claude --dangerously-skip-permissions -p --resume \"$2\" \"$1\" || "
+             "claude --dangerously-skip-permissions -p \"$1\"");
     check(launch.arguments[4] == "prompt" && launch.arguments[5] == "session-1");
 };
 
@@ -63,7 +64,9 @@ auto tWakeOpenSession =
     check(describeWakes(decisions) == "woke @dev (fresh: its session is open)");
 
     auto launch = makeWakeLaunch(decisions[0], {}, "prompt", "/r/main", "/r/log");
-    check(launch.arguments.size() == 5 && launch.arguments[2] == "claude -p \"$1\"");
+    check(launch.arguments.size() == 5
+          && launch.arguments[2]
+                 == "claude --dangerously-skip-permissions -p \"$1\"");
 };
 
 auto tWakeNoSession =

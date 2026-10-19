@@ -237,10 +237,9 @@ void Viewer::sendReply(Annotation& note, const std::string& text)
 std::string Viewer::wakeAgentsFor(const ReviewFile& round, const std::string& path)
 {
     listening = findListeningAgents(store.directory.str());
-    auto decisions = decideWakes(round,
-                                 listening,
-                                 readKnownSessions(store.directory.str()),
-                                 options.wake.mode);
+    auto config = options.readWakeConfig();
+    auto decisions = decideWakes(
+        round, listening, readKnownSessions(store.directory.str()), config.mode);
 
     for (const auto& decision: decisions)
     {
@@ -256,7 +255,7 @@ std::string Viewer::wakeAgentsFor(const ReviewFile& round, const std::string& pa
                                      decision.agent);
 
         options.launchWake(makeWakeLaunch(
-            decision, options.wake, prompt, store.worktree.str(), log.str()));
+            decision, config, prompt, store.worktree.str(), log.str()));
     }
 
     return describeWakes(decisions);
