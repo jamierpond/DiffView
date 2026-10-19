@@ -3,7 +3,8 @@
 Review comments on this repo's changes, diffed against `main...` at 9170e37a2e0379475705c0f3439feb76c832e44a.
 Each `### path:lines · status · #id` heading is one comment: working-tree line numbers, `(old)` the base's, `(whole file)` the whole file.
 In the block under it `>` marks the lines the comment is about (line number, then `+` added, `-` removed, space unchanged); the comment follows the block.
-Act on `open` comments; `resolved` and `withdrawn` ones need nothing. When you have dealt with one, change its `· open` to `· resolved` here.
+Replies follow a comment as `#### reply · author · time`: `you` is the reviewer, `new` marks theirs new in this round. `@name` after the status is the agent the thread belongs to.
+Act on `open` comments; `resolved` and `withdrawn` ones need nothing. Answer with `dv reply <id> "text"`; when you have dealt with one, `dv resolve <id>` (or change its `· open` to `· resolved` here).
 
 ## General
 
@@ -19,7 +20,7 @@ Look at nvim.
 
 Split this file?
 
-### src/Focus.cpp:48-49 · open, updated from review 2026-10-16-170000 · #4
+### src/Focus.cpp:48-49 · open, updated from review 2026-10-16-170000 · @diffview-dev · #4
 
 ```text
   46 │         return std::nullopt;
@@ -32,6 +33,19 @@ Split this file?
 
 Why a reference here?
 It was a copy.
+
+#### reply · diffview-dev · 2026-10-16 17:10
+
+It aliases the map entry.
+
+#### reply · you · 2026-10-16 18:15 · new
+
+Then say so:
+
+\#### reply · not one
+```
+#### reply · nor this
+```
 
 ### src/Focus.cpp:41 (old) · open, stale: its lines have left the diff · #6
 

@@ -46,6 +46,10 @@ ReviewFile sampleReview()
     auto line = makeAnnotation(
         focusFile(), {4, 5}, 4, "Why a reference here?\nIt was a copy.");
     line.updates = "2026-10-16-170000";
+    line.owner = "diffview-dev";
+    line.replies = {
+        {"diffview-dev", "2026-10-16 17:10", "It aliases the map entry.", false},
+        {"you", "2026-10-16 18:15", "Then say so:\n\n#### reply · not one\n```\n#### reply · nor this\n```", true}};
     review.comments.push_back(line);
 
     auto removed = makeAnnotation(
@@ -259,4 +263,44 @@ auto tDraft =
         "# DiffView draft · not sent yet\n\nYour comments on the changes"));
     check(text.find("change its `· open` to `· resolved`") == std::string::npos);
     check(fromMarkdown(text) == draft);
+};
+
+auto tReplies = test("ReviewMarkdown/replies and the owner read back") = []
+{
+    auto text = toMarkdown(sampleReview());
+
+    check(text.find("### src/Focus.cpp:48-49 · open, updated from review "
+                    "2026-10-16-170000 · @diffview-dev · #4")
+          != std::string::npos);
+    check(text.find("#### reply · diffview-dev · 2026-10-16 17:10\n\nIt aliases")
+          != std::string::npos);
+    check(text.find("#### reply · you · 2026-10-16 18:15 · new\n") != std::string::npos);
+    check(text.find("\\#### reply · not one") != std::string::npos);
+
+    auto review = fromMarkdown(text);
+    auto* back = byId(review, 4);
+    check(back != nullptr && back->replies.size() == 2);
+    check(back->text == "Why a reference here?\nIt was a copy.");
+};
+
+auto tHandReply = test("ReviewMarkdown/a reply written by hand") = []
+{
+    auto back = fromMarkdown("### src/a.cpp:3 · open · #2\n\nWhy?\n\n#### reply\n\nBecause.\n"
+                             "#### reply · dev\nAlso.\n#### replying is prose\n");
+
+    check(back.comments.size() == 1);
+    const auto& replies = back.comments[0].replies;
+    check(replies.size() == 2);
+    check(replies[0].author.empty() && replies[0].text == "Because.");
+    check(replies[1].author == "dev" && replies[1].time.empty());
+    check(replies[1].text == "Also.\n#### replying is prose");
+};
+
+auto tShowOne = test("ReviewMarkdown/one comment's block for dv show") = []
+{
+    auto text = commentMarkdown(*byId(sampleReview(), 4));
+
+    check(text.starts_with("### src/Focus.cpp:48-49 · open"));
+    check(text.find("> 48 │+") != std::string::npos);
+    check(text.ends_with("```\n#### reply · nor this\n```\n"));
 };

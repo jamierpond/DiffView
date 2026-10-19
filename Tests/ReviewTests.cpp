@@ -149,9 +149,170 @@ auto tNewRounds =
 };
 
 auto tRoundNotice =
-    test("Review/the monitor's line names the round and the file") = []
+    test("Review/the monitor's line names the round, the counts and the file") = []
 {
-    check(roundNotice("2026-10-17-142300", 3, "/r/.diffview/latest.md")
+    check(roundNotice("2026-10-17-142300", {3, 0}, {}, "/r/.diffview/latest.md")
           == "dv: review round 2026-10-17-142300 submitted · 3 open · read "
              "/r/.diffview/latest.md");
+    check(roundNotice("2026-10-17-142300", {1, 2}, "dev", "/r/.diffview/latest.md")
+          == "dv: review round 2026-10-17-142300 submitted · for @dev · 1 open · "
+             "2 with new replies · read /r/.diffview/latest.md");
+};
+
+namespace
+{
+Reply said(const std::string& author, const std::string& time, const std::string& text)
+{
+    return {author, time, text, false};
+}
+} // namespace
+
+auto tMergeReplies =
+    test("Review/replies are gathered from every version of a thread") = []
+{
+    auto first = comment(1, "q");
+    first.replies = {said("dev", "2026-10-18 10:00", "a1")};
+    auto second = comment(1, "q");
+    second.replies = {said("you", "2026-10-18 10:05", "h1")};
+    second.replies[0].fresh = true; // new in that round
+    auto drafted = comment(1, "q");
+    drafted.replies = {said("you", "2026-10-18 10:05", "h1"),
+                       said("you", "2026-10-18 10:09", "h2")};
+
+    auto reviews = mergeReviews(
+        {{"r1", {}, {}, {first}}, {"r2", {}, {}, {second}}}, {"draft", {}, {}, {drafted}});
+    const auto& thread = reviews.annotations[0].replies;
+
+    check(thread.size() == 3);
+    check(thread[0].text == "a1" && !thread[0].fresh);
+    check(thread[1].text == "h1" && !thread[1].fresh);
+    check(thread[2].text == "h2" && thread[2].fresh);
+};
+
+auto tMergeOwner = test("Review/an owner, once set, is kept") = []
+{
+    auto claimed = comment(1, "q");
+    claimed.owner = "dev";
+    auto reviews =
+        mergeReviews({{"r1", {}, {}, {claimed}}}, {"draft", {}, {}, {comment(1, "q2")}});
+
+    check(reviews.annotations[0].owner == "dev");
+    check(reviews.annotations[0].text == "q2");
+};
+
+auto tSubmitReplies =
+    test("Review/a reply goes out marked new, with its thread, then isn't") = []
+{
+    auto sent = comment(1, "q");
+    sent.replies = {said("dev", "2026-10-18 10:00", "a1")};
+    auto drafted = sent;
+    drafted.replies.push_back(said("you", "2026-10-18 10:05", "h1"));
+
+    auto annotations =
+        mergeReviews({{"r1", {}, {}, {sent}}}, {"draft", {}, {}, {drafted}}).annotations;
+    auto round = submitDraft(annotations, "r2", {}, {});
+
+    check(round.comments.size() == 1);
+    check(round.comments[0].updates == "r1");
+    check(round.comments[0].replies.size() == 2);
+    check(!round.comments[0].replies[0].fresh && round.comments[0].replies[1].fresh);
+    check(!annotations[0].replies[1].fresh);
+};
+
+auto tMentions = test("Review/@names in a text, not e-mail addresses") = []
+{
+    auto names = mentionsIn("@diffview-dev, look. Ask @b_2. not me@host.com (@c)");
+
+    check(names.size() == 3);
+    check(names[0] == "diffview-dev" && names[1] == "b_2" && names[2] == "c");
+
+    auto note = comment(1, "for @dev");
+    check(ownerOf(note) == "dev");
+    note.owner = "other";
+    check(ownerOf(note) == "other");
+};
+
+auto tRoundFor = test("Review/which rounds wake which agent") = []
+{
+    auto mine = comment(1, "@dev rename this");
+    auto theirs = comment(2, "@ops fix the build");
+    auto anyone = comment(3, "typo");
+    auto replied = comment(4, "q");
+    replied.owner = "ops";
+    replied.replies = {said("you", "t", "and @dev, check this"), };
+    replied.replies[0].fresh = true;
+    replied.resolved = true;
+
+    auto round = ReviewFile {"r", {}, {}, {mine, theirs, anyone, replied}};
+
+    auto forDev = roundFor(round, "dev");
+    check(forDev.open == 2 && forDev.replied == 1 && forDev.wakes());
+
+    auto forOps = roundFor(round, "ops");
+    check(forOps.open == 2 && forOps.replied == 1);
+
+    auto everyone = roundFor(round, {});
+    check(everyone.open == 3 && everyone.replied == 1);
+
+    auto onlyOps = ReviewFile {"r", {}, {}, {theirs}};
+    check(!roundFor(onlyOps, "dev").wakes());
+    check(roundFor(onlyOps, "ops").wakes());
+
+    auto resolvedAnyone = anyone;
+    resolvedAnyone.resolved = true;
+    check(!roundFor({"r", {}, {}, {resolvedAnyone}}, "dev").wakes());
+};
+
+auto tRoundsUpTo = test("Review/--after drops the rounds up to it") = []
+{
+    auto kept = roundsUpTo(
+        {"2026-10-16-100000.md", "2026-10-16-120000.md", "2026-10-16-120000-2.md"},
+        "2026-10-16-120000");
+
+    check(kept.size() == 2);
+    check(kept[1] == "2026-10-16-120000.md");
+};
+
+auto tChangeThread = test("Review/reply and resolve claim, refuse, force") = []
+{
+    auto round = ReviewFile {"r", {}, {}, {comment(1, "q"), comment(2, "@ops look")}};
+
+    auto change = ThreadChange {"dev", true, false, false, "on it", "2026-10-18 11:00"};
+    check(!changeThread(round, 1, change));
+    check(round.comments[0].owner == "dev");
+    check(round.comments[0].replies.size() == 1);
+    check(round.comments[0].replies[0].author == "dev");
+
+    auto refused = changeThread(round, 2, change);
+    check(refused && refused->find("@ops") != std::string::npos
+          && refused->find("--force") != std::string::npos);
+    check(round.comments[1].replies.empty());
+
+    change.force = true;
+    change.resolve = true;
+    change.text.clear();
+    check(!changeThread(round, 2, change));
+    check(round.comments[1].resolved && round.comments[1].owner == "ops");
+    check(round.comments[1].replies.empty());
+
+    check(changeThread(round, 9, change).has_value());
+
+    // Unnamed agents answer but don't claim.
+    auto unnamed = ThreadChange {};
+    unnamed.text = "x";
+    auto open = ReviewFile {"r", {}, {}, {comment(3, "q")}};
+    check(!changeThread(open, 3, unnamed));
+    check(open.comments[0].owner.empty());
+};
+
+auto tResolutionsCarryReplies =
+    test("Review/a reply written into latest.md goes into the round") = []
+{
+    auto round = ReviewFile {"r", {}, {}, {comment(1, "q")}};
+    auto latest = round;
+    latest.comments[0].replies = {said("dev", "t", "done")};
+
+    auto updated = resolutionsFrom(latest, round);
+    check(updated && updated->comments[0].replies.size() == 1);
+    check(!resolutionsFrom(round, round));
 };

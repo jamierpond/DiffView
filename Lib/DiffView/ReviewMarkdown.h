@@ -30,6 +30,10 @@ namespace diffview
 //
 //   Why hold a reference here? It was a copy before.
 //
+//   #### reply · diffview-dev · 2026-10-18 14:02
+//
+//   It aliases the map entry; a copy would be lost.
+//
 // The heading is the only metadata ("path:12 (old)" for removed lines,
 // "path (whole file)", "General"); the context block is what re-anchors the
 // comment when the code moves. By hand, a heading alone is enough: the
@@ -56,4 +60,7 @@ Miro::JSON parseMarkdown(std::string_view text);
 
 std::string toMarkdown(const ReviewFile& review);
 ReviewFile fromMarkdown(std::string_view text);
+
+// One comment's block as a round writes it, for `dv show`.
+std::string commentMarkdown(const Annotation& comment);
 } // namespace diffview

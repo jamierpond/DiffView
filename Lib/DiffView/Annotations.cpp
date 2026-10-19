@@ -354,4 +354,46 @@ std::string lineLabel(const Annotation& annotation)
 
     return label;
 }
+std::vector<std::string> mentionsIn(const std::string& text)
+{
+    auto names = std::vector<std::string> {};
+
+    auto isNameChar = [](char c)
+    {
+        return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
+               || (c >= '0' && c <= '9') || c == '-' || c == '_' || c == '.';
+    };
+
+    for (std::size_t i = 0; i < text.size(); ++i)
+    {
+        if (text[i] != '@' || (i > 0 && isNameChar(text[i - 1])))
+            continue;
+
+        auto end = i + 1;
+
+        while (end < text.size() && isNameChar(text[end]))
+            ++end;
+
+        auto name = text.substr(i + 1, end - i - 1);
+
+        while (!name.empty() && (name.back() == '.' || name.back() == '-'))
+            name.pop_back();
+
+        if (!name.empty())
+            names.push_back(name);
+
+        i = end - 1;
+    }
+
+    return names;
+}
+
+std::string ownerOf(const Annotation& annotation)
+{
+    if (!annotation.owner.empty())
+        return annotation.owner;
+
+    auto names = mentionsIn(annotation.text);
+    return names.empty() ? std::string {} : names.front();
+}
 } // namespace diffview

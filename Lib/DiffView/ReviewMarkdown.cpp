@@ -18,6 +18,8 @@ constexpr auto oldSide = std::string_view {" (old)"};
 constexpr auto generalLocation = std::string_view {"General"};
 constexpr auto unchangedNote = std::string_view {"unchanged file"};
 constexpr auto updatedFrom = std::string_view {"updated from review "};
+constexpr auto replyMark = std::string_view {"#### reply"};
+constexpr auto freshMark = std::string_view {"new"};
 
 const Json::Value* field(const Json::Value& object, std::string_view key)
 {
@@ -105,6 +107,7 @@ struct Heading
     bool stale = false;
     std::string updates;
     bool unchangedFile = false;
+    std::string owner;
     int id = 0;
 };
 
@@ -151,6 +154,12 @@ std::optional<Heading> parseHeading(std::string_view line)
         && isDigits(parts.back().substr(1)))
     {
         heading.id = toInt(std::string_view {parts.back()}.substr(1));
+        parts.pop_back();
+    }
+
+    if (parts.size() >= 3 && startsWith(parts.back(), "@") && parts.back().size() > 1)
+    {
+        heading.owner = trim(std::string_view {parts.back()}.substr(1));
         parts.pop_back();
     }
 
@@ -222,6 +231,54 @@ std::optional<Heading> parseHeading(std::string_view line)
     return heading;
 }
 
+std::vector<std::string> splitParts(std::string_view text)
+{
+    auto parts = std::vector<std::string> {};
+    auto from = std::size_t {0};
+
+    while (true)
+    {
+        auto at = text.find(separator, from);
+        parts.push_back(trim(text.substr(
+            from, at == std::string_view::npos ? std::string_view::npos : at - from)));
+
+        if (at == std::string_view::npos)
+            return parts;
+
+        from = at + separator.size();
+    }
+}
+
+// "#### reply · diffview-dev · 2026-10-18 14:02", "· new" on the reviewer's
+// first sent in this round. Author and time may be left off by hand.
+std::optional<Reply> parseReplyHeading(std::string_view line)
+{
+    if (!startsWith(line, replyMark))
+        return std::nullopt;
+
+    auto rest = line.substr(replyMark.size());
+
+    if (!rest.empty() && !startsWith(rest, separator) && trim(rest) != "")
+        return std::nullopt;
+
+    auto parts = splitParts(line.substr(5));
+    auto reply = Reply {};
+
+    while (parts.size() > 1 && parts.back() == freshMark)
+    {
+        reply.fresh = true;
+        parts.pop_back();
+    }
+
+    if (parts.size() > 1)
+        reply.author = parts[1];
+
+    if (parts.size() > 2)
+        reply.time = parts[2];
+
+    return reply;
+}
+
 // A prose line that would read as a comment heading gets a backslash
 // (Markdown shows "\###" as "###"); one is taken off on the way back in.
 bool isSection(std::string_view line)
@@ -232,7 +289,8 @@ bool isSection(std::string_view line)
 bool needsEscape(std::string_view line)
 {
     auto stripped = line.substr(std::min(line.find_first_not_of('\\'), line.size()));
-    return isSection(stripped) || parseHeading(stripped).has_value();
+    return isSection(stripped) || parseHeading(stripped).has_value()
+           || parseReplyHeading(stripped).has_value();
 }
 
 std::string fenceFor(const std::vector<const std::vector<std::string>*>& groups)
@@ -306,6 +364,29 @@ void writeContext(std::string& out, const Json::Value& comment)
     out += fence + "\n\n";
 }
 
+void writeProse(std::string& out, const std::string& text)
+{
+    auto fence = std::string {};
+
+    for (const auto& line: splitLines(text))
+    {
+        if (fence.empty())
+        {
+            fence = fenceMarker(line);
+            out += (fence.empty() && needsEscape(line) ? "\\" : "") + line + "\n";
+        }
+        else
+        {
+            if (closesFence(line, fence))
+                fence.clear();
+
+            out += line + "\n";
+        }
+    }
+
+    out += "\n";
+}
+
 void writeComment(std::string& out, const Json::Value& comment)
 {
     auto path = stringField(comment, "path");
@@ -343,6 +424,9 @@ void writeComment(std::string& out, const Json::Value& comment)
 
     out += "### " + location + std::string {separator} + status;
 
+    if (auto owner = stringField(comment, "owner"); !owner.empty())
+        out += std::string {separator} + "@" + owner;
+
     if (auto id = intField(comment, "id"); id > 0)
         out += std::string {separator} + "#" + std::to_string(id);
 
@@ -351,25 +435,24 @@ void writeComment(std::string& out, const Json::Value& comment)
     if (!boolField(comment, "fileLevel"))
         writeContext(out, comment);
 
-    auto fence = std::string {};
+    writeProse(out, stringField(comment, "text"));
 
-    for (const auto& line: splitLines(stringField(comment, "text")))
-    {
-        if (fence.empty())
+    if (auto* replies = field(comment, "replies");
+        replies != nullptr && replies->isArray())
+        for (const auto& reply: replies->asArray())
         {
-            fence = fenceMarker(line);
-            out += (fence.empty() && needsEscape(line) ? "\\" : "") + line + "\n";
-        }
-        else
-        {
-            if (closesFence(line, fence))
-                fence.clear();
+            out += std::string {replyMark};
 
-            out += line + "\n";
-        }
-    }
+            for (const auto* key: {"author", "time"})
+                if (auto value = stringField(reply, key); !value.empty())
+                    out += std::string {separator} + value;
 
-    out += "\n";
+            if (boolField(reply, "fresh"))
+                out += std::string {separator} + std::string {freshMark};
+
+            out += "\n\n";
+            writeProse(out, stringField(reply, "text"));
+        }
 }
 
 std::optional<std::pair<bool, std::string>> parseContextLine(std::string_view line)
@@ -410,6 +493,7 @@ Json::Value commentValue(const Block& block)
     comment["stale"] = heading.stale;
     comment["updates"] = heading.updates;
     comment["unchangedFile"] = heading.unchangedFile;
+    comment["owner"] = heading.owner;
 
     auto before = std::vector<std::string> {};
     auto lines = std::vector<std::string> {};
@@ -476,7 +560,10 @@ Json::Value commentValue(const Block& block)
     comment["lines"] = toArray(lines);
     comment["after"] = toArray(after);
 
-    auto text = std::vector<std::string> {};
+    // The comment, then each reply: prose split at reply headings outside
+    // fences.
+    auto segments = std::vector<std::vector<std::string>> {{}};
+    auto replies = Json::Array {};
     auto fence = std::string {};
 
     for (; i < body.size(); ++i)
@@ -485,6 +572,17 @@ Json::Value commentValue(const Block& block)
 
         if (fence.empty())
         {
+            if (auto reply = parseReplyHeading(line))
+            {
+                auto value = Json::Object {};
+                value["author"] = reply->author;
+                value["time"] = reply->time;
+                value["fresh"] = reply->fresh;
+                replies.push_back(std::move(value));
+                segments.emplace_back();
+                continue;
+            }
+
             fence = fenceMarker(line);
 
             if (fence.empty() && line.starts_with("\\")
@@ -494,21 +592,31 @@ Json::Value commentValue(const Block& block)
         else if (closesFence(line, fence))
             fence.clear();
 
-        text.push_back(line);
+        segments.back().push_back(line);
     }
 
-    while (!text.empty() && trim(text.front()).empty())
-        text.erase(text.begin());
+    auto joined = [](std::vector<std::string> text)
+    {
+        while (!text.empty() && trim(text.front()).empty())
+            text.erase(text.begin());
 
-    while (!text.empty() && trim(text.back()).empty())
-        text.pop_back();
+        while (!text.empty() && trim(text.back()).empty())
+            text.pop_back();
 
-    auto joined = std::string {};
+        auto result = std::string {};
 
-    for (std::size_t k = 0; k < text.size(); ++k)
-        joined += (k == 0 ? "" : "\n") + text[k];
+        for (std::size_t k = 0; k < text.size(); ++k)
+            result += (k == 0 ? "" : "\n") + text[k];
 
-    comment["text"] = joined;
+        return result;
+    };
+
+    comment["text"] = joined(segments.front());
+
+    for (std::size_t k = 0; k < replies.size(); ++k)
+        replies[k].asObject()["text"] = joined(segments[k + 1]);
+
+    comment["replies"] = std::move(replies);
     return comment;
 }
 } // namespace
@@ -543,10 +651,13 @@ std::string printMarkdown(const Miro::JSON& review)
             "In the block under it `>` marks the lines the comment is about (line "
             "number, then `+` added, `-` removed, space unchanged); the comment "
             "follows the block.\n";
+        out += "Replies follow a comment as `#### reply · author · time`: `you` is "
+               "the reviewer, `new` marks theirs new in this round. `@name` after "
+               "the status is the agent the thread belongs to.\n";
         out +=
             "Act on `open` comments; `resolved` and `withdrawn` ones need nothing. "
-            "When you have dealt with one, change its `· open` to `· resolved` "
-            "here.\n\n";
+            "Answer with `dv reply <id> \"text\"`; when you have dealt with one, "
+            "`dv resolve <id>` (or change its `· open` to `· resolved` here).\n\n";
     }
 
     auto section = std::optional<std::string> {};
@@ -662,6 +773,18 @@ Miro::JSON parseMarkdown(std::string_view input)
 
     review["comments"] = std::move(comments);
     return review;
+}
+
+std::string commentMarkdown(const Annotation& comment)
+{
+    auto out = std::string {};
+    writeComment(out, Miro::toJSON(comment));
+
+    while (out.size() >= 2 && out[out.size() - 1] == '\n'
+           && out[out.size() - 2] == '\n')
+        out.pop_back();
+
+    return out;
 }
 
 std::string toMarkdown(const ReviewFile& review)
