@@ -10,6 +10,7 @@ add_library(DiffViewCore STATIC
         GeminiCli.cpp
         Git.cpp
         Keymap.cpp
+        Listener.cpp
         Responder.cpp
         Review.cpp
         ReviewMarkdown.cpp

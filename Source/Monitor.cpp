@@ -21,7 +21,7 @@ int runMonitor(const StoreLayout& store, const MonitorOptions& options)
         seen = keepRoundsUpTo(seen, *options.after);
 
     if (!options.agent.empty())
-        registerAgent(root.str(), options.agent);
+        registerAgent(root.str(), options.agent, options.agentPid);
 
     auto listening = std::vector<std::string> {};
 
@@ -53,7 +53,7 @@ int runMonitor(const StoreLayout& store, const MonitorOptions& options)
 
         if (woke && options.once)
         {
-            unregisterAgent();
+            markAgentBusy();
             return 0;
         }
 

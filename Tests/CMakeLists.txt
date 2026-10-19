@@ -10,6 +10,7 @@ add_executable(DiffViewTests
         GeminiCliTests.cpp
         GitTests.cpp
         KeymapTests.cpp
+        ListenerTests.cpp
         ReviewMarkdownTests.cpp
         ResponderTests.cpp
         ReviewTests.cpp

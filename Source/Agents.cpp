@@ -1,8 +1,8 @@
 #include "Agents.h"
 
+#include <Listener.h>
 #include <Review.h>
 #include <Store.h>
-#include <Text.h>
 
 #include <algorithm>
 #include <array>
@@ -11,7 +11,6 @@
 #include <cstdio>
 #include <eacp/Core/Utils/Files.h>
 #include <filesystem>
-#include <fstream>
 #include <unistd.h>
 
 namespace diffview
@@ -26,16 +25,16 @@ bool isAlive(pid_t pid)
     return pid > 0 && (kill(pid, checkOnly) == 0 || errno == EPERM);
 }
 
-std::optional<pid_t> readListenerProcessId(const std::filesystem::path& registration)
+ListenerRegistration readRegistration(const std::filesystem::path& path)
 {
-    auto in = std::ifstream {registration};
-    auto word = std::string {};
-    auto pid = pid_t {0};
+    return parseListenerRegistration(
+        eacp::Files::readFile(eacp::FilePath {path.string()}));
+}
 
-    if (!(in >> word >> pid) || word != "pid" || !isAlive(pid))
-        return std::nullopt;
-
-    return pid;
+std::optional<int> readListenerProcessId(const std::filesystem::path& path)
+{
+    return findLiveListenerPid(readRegistration(path),
+                               [](int pid) { return isAlive(pid); });
 }
 
 std::filesystem::path makeRegistrationPath(const std::string& store,
@@ -47,23 +46,35 @@ std::filesystem::path makeRegistrationPath(const std::string& store,
     return dir / name;
 }
 
-constexpr auto responderMark = std::string_view {"responder"};
-
-void writeRegistration(const std::filesystem::path& path, std::string_view mark)
+ListenerRegistration makeRegistration()
 {
     auto startedMs = static_cast<std::int64_t>(std::time(nullptr)) * 1000;
-    std::ofstream {path} << "pid " << getpid() << "\nstarted " << roundId(startedMs)
-                         << "\n"
-                         << mark;
+    auto registration = ListenerRegistration {};
+    registration.monitorPid = static_cast<int>(getpid());
+    registration.started = roundId(startedMs);
+    return registration;
 }
+
+void writeRegistration(const std::filesystem::path& path,
+                       const ListenerRegistration& registration)
+{
+    writeText(eacp::FilePath {path.string()},
+              formatListenerRegistration(registration));
+}
+
+auto registeredAgent = ListenerRegistration {};
 } // namespace
 
-void registerAgent(const std::string& store, const std::string& name)
+void registerAgent(const std::string& store,
+                   const std::string& name,
+                   std::optional<int> agentPid)
 {
     createStoreDirectory(store);
     auto path = makeRegistrationPath(store, name).string();
     std::snprintf(registered.data(), registered.size(), "%s", path.c_str());
-    writeRegistration(path, {});
+    registeredAgent = makeRegistration();
+    registeredAgent.agentPid = agentPid.value_or(0);
+    writeRegistration(path, registeredAgent);
 
     for (auto signal: {SIGINT, SIGTERM, SIGHUP, SIGPIPE})
         std::signal(signal,
@@ -76,10 +87,20 @@ void registerAgent(const std::string& store, const std::string& name)
                     });
 }
 
-void unregisterAgent()
+void markAgentBusy()
 {
-    if (registered[0] != 0)
+    if (registered[0] == 0)
+        return;
+
+    if (registeredAgent.agentPid > 0)
+    {
+        registeredAgent.isBusy = true;
+        writeRegistration(registered.data(), registeredAgent);
+    }
+    else
+    {
         unlink(registered.data());
+    }
 
     registered[0] = 0;
 }
@@ -87,27 +108,23 @@ void unregisterAgent()
 void registerResponder(const std::string& store, const std::string& name)
 {
     createStoreDirectory(store);
-    writeRegistration(makeRegistrationPath(store, name),
-                      std::string {responderMark} + "\n");
+    auto registration = makeRegistration();
+    registration.isResponder = true;
+    writeRegistration(makeRegistrationPath(store, name), registration);
 }
 
 void unregisterResponder(const std::string& store, const std::string& name)
 {
     auto path = std::filesystem::path {store} / agentDirectory / name;
 
-    if (readListenerProcessId(path) == getpid())
+    if (readListenerProcessId(path) == static_cast<int>(getpid()))
         unlink(path.c_str());
 }
 
 bool isRunningResponder(const std::string& store, const std::string& name)
 {
     auto path = std::filesystem::path {store} / agentDirectory / name;
-
-    if (!readListenerProcessId(path))
-        return false;
-
-    auto lines = splitLines(eacp::Files::readFile(eacp::FilePath {path.string()}));
-    return std::find(lines.begin(), lines.end(), responderMark) != lines.end();
+    return readListenerProcessId(path) && readRegistration(path).isResponder;
 }
 
 std::vector<std::string> findListeningAgents(const std::string& store)

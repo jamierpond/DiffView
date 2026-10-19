@@ -11,9 +11,12 @@
 
 namespace diffview
 {
-// For `dv monitor --as`: listed until it exits, however it exits.
-void registerAgent(const std::string& store, const std::string& name);
-void unregisterAgent();
+// For `dv monitor --as`: listed while it runs, and after a `--once` exit as
+// busy while the agent CLI process it runs under lives.
+void registerAgent(const std::string& store,
+                   const std::string& name,
+                   std::optional<int> agentPid);
+void markAgentBusy();
 
 // For the responder: listed while this process lives.
 void registerResponder(const std::string& store, const std::string& name);

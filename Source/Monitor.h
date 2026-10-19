@@ -14,6 +14,9 @@ struct MonitorOptions
     std::optional<std::string> after;
 
     std::string agent;
+
+    // The agent CLI process it runs under.
+    std::optional<int> agentPid;
 };
 
 int runMonitor(const StoreLayout& store, const MonitorOptions& options);

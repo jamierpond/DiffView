@@ -2,6 +2,7 @@
 #include "Agents.h"
 #include "Commands.h"
 #include "Monitor.h"
+#include "ProcessInfo.h"
 #include "Viewer.h"
 
 #include <Review.h>
@@ -100,7 +101,8 @@ const std::map<std::string, std::string>& commandHelp()
          "                   already there (exits at once with --once)\n"
          "  --as <name>      only rounds with something for you: threads you own\n"
          "                   or nobody does, or that name you; also shows you as\n"
-         "                   listening in the UI\n"
+         "                   listening in the UI, and after --once as busy while\n"
+         "                   the claude/gemini process it runs under lives\n"
          "\n"
          "Each line names the round to pass to the next --after:\n"
          "  dv: review round 2026-10-17-142300 submitted · for @dev · 2 open · "
@@ -366,6 +368,8 @@ int runCommand(const std::string& command, int argc, char* argv[])
         auto options = diffview::MonitorOptions {};
         options.once = arguments.flags["--once"];
         options.agent = agent;
+        options.agentPid = diffview::findAgentCliAncestor(
+            static_cast<int>(getppid()), diffview::readProcessInfo);
 
         if (arguments.values.contains("after"))
             options.after = arguments.values["after"];

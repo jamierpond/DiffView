@@ -78,6 +78,7 @@ AgentCli makeClaudeCodeCli()
 {
     return {
         std::string {defaultAgentCliName},
+        "claude",
         {"claude", "--dangerously-skip-permissions"},
         {"-p", "--output-format", "stream-json", "--verbose"},
         {"--input-format", "stream-json"},

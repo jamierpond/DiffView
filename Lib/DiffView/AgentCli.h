@@ -16,6 +16,8 @@ constexpr auto defaultAgentCliName = std::string_view {"claude"};
 struct AgentCli
 {
     std::string name;
+    // Its process's executable, or the script an interpreter runs.
+    std::string processName;
     // Every permission granted: nobody is there to answer a prompt.
     std::vector<std::string> unattendedCommand;
     // Headless, printing one JSON event per line.
@@ -41,6 +43,17 @@ bool isKnownAgentCli(std::string_view name);
 
 // The default CLI for an unknown name.
 const AgentCli& getAgentCli(std::string_view name);
+
+struct ProcessInfo
+{
+    int parentPid = 0;
+    std::vector<std::string> arguments;
+};
+
+using ReadProcessInfo = std::function<std::optional<ProcessInfo>(int pid)>;
+
+// The nearest process at or above `pid` that is an agent CLI.
+std::optional<int> findAgentCliAncestor(int pid, const ReadProcessInfo& readProcess);
 
 bool canResume(const AgentCli& cli);
 bool hasStdinSession(const AgentCli& cli);

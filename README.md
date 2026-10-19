@@ -104,9 +104,12 @@ isn't folded away before you read it.
 after the status. An unaddressed thread is everyone's until an agent
 answers it, which claims it. An agent can't answer another's thread without
 `--force`. Agents waiting with `dv monitor --as <name>` show in the status
-bar (`◉ @name`) while their monitor runs. A thread whose owner isn't
-listening is everyone's again: it wakes every listening agent, and whoever
-answers it takes it over.
+bar (`◉ @name`) while their monitor runs. After a `--once` monitor exits
+the agent is busy acting on it, and still counts as listening while the
+`claude` or `gemini` process it ran under lives (`dv monitor` records it);
+sends wait in the store for its next `--once --after`. A thread whose owner
+isn't listening is everyone's again: it wakes every listening agent, and
+whoever answers it takes it over.
 
 ### The responder: dv's own agent
 

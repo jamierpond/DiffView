@@ -59,6 +59,7 @@ AgentCli makeGeminiCli()
 {
     return {
         "gemini",
+        "gemini",
         {"gemini", "--yolo"},
         {"--output-format", "stream-json"},
         {},
