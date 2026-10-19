@@ -56,9 +56,8 @@ ReviewFile readReviewOrEmpty(const eacp::FilePath& path);
 
 void writeText(const eacp::FilePath& path, std::string_view text);
 
-// What was added since the last read, for following a growing log; eacp's
-// Files only reads whole files.
-std::string readFileFrom(const eacp::FilePath& path, std::uint64_t offset);
+// eacp's Files only reads whole files.
+std::string readFileFromByteOffset(const eacp::FilePath& path, std::uint64_t offset);
 
 std::vector<eacp::FilePath> listDraftFiles(const StoreLayout& store);
 

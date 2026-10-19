@@ -216,7 +216,7 @@ void ActivityWatcher::follow(const eacp::FilePath& path,
 {
     auto isFirstRead = !log.hasBeenRead;
     log.hasBeenRead = true;
-    auto added = readFileFrom(path, log.offset);
+    auto added = readFileFromByteOffset(path, log.offset);
     log.offset += added.size();
     readWakeLog(log.progress, added, worktree);
 

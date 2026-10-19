@@ -616,7 +616,7 @@ void writeText(const eacp::FilePath& path, std::string_view text)
     eacp::Files::writeFileAtomically(path, bytes);
 }
 
-std::string readFileFrom(const eacp::FilePath& path, std::uint64_t offset)
+std::string readFileFromByteOffset(const eacp::FilePath& path, std::uint64_t offset)
 {
     auto in = std::ifstream {path.str(), std::ios::binary};
     in.seekg(static_cast<std::streamoff>(offset));
