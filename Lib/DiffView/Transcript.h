@@ -55,6 +55,8 @@ public:
     // Sent but not yet read back: the CLI replays a message only once it
     // takes it, after any turn in flight.
     void addQueuedPrompt(const std::string& text);
+    // Never sent after all.
+    void withdrawQueuedPrompt(const std::string& text);
 
     // Sent to another agent's session, whose stream isn't this one: shown
     // as a prompt at once.
@@ -113,7 +115,8 @@ constexpr auto collapsedSubagentRowCount = 3;
 using ExpandedSubagents = std::set<std::string>;
 
 // Claude Code's look, every row at most `width` columns, indent included. An
-// open turn says how many messages wait behind it.
+// open turn says how many messages wait behind it; with none open, a queued
+// prompt is followed by a spinner until the CLI takes it.
 std::vector<TranscriptRow>
     layoutTranscript(const Transcript& transcript,
                      int width,

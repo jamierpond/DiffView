@@ -368,6 +368,36 @@ auto tTranscriptSentPrompt =
     check(transcript.getEntries().back().text == "@ops rebase on main");
 };
 
+auto tTranscriptSendingSpinner =
+    test("Transcript/a prompt sent between turns spins until the CLI takes it") = []
+{
+    auto transcript = makeTranscript(prompt + result);
+    transcript.addQueuedPrompt("are you there?");
+
+    auto rows = layoutTranscript(transcript, wideWidth);
+    check(rows.back().style == TranscriptRowStyle::working);
+    check(rows.back().isInFlight);
+    check(rows.back().text == "Sending…");
+    check(rows[rows.size() - 3].style == TranscriptRowStyle::queuedPrompt);
+
+    transcript.append(
+        R"({"type":"user","message":{"role":"user","content":[{"text":"are you there?","type":"text"}]},"isReplay":true})"
+        + std::string {"\n"});
+    check(layoutTranscript(transcript, wideWidth).back().text == "Working…");
+};
+
+auto tTranscriptWithdrawnPrompt =
+    test("Transcript/a withdrawn queued prompt leaves the pane") = []
+{
+    auto transcript = makeTranscript(prompt + result);
+    transcript.addQueuedPrompt("never sent");
+    transcript.withdrawQueuedPrompt("never sent");
+
+    check(transcript.getQueuedPrompts().empty());
+    check(layoutTranscript(transcript, wideWidth).back().style
+          != TranscriptRowStyle::working);
+};
+
 auto tTranscriptSubagentNested =
     test("Transcript/a subagent's run nests under its Agent call") = []
 {

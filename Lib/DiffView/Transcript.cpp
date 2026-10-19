@@ -591,6 +591,14 @@ void Transcript::addSentPrompt(const std::string& text)
     addEntry(entries, makeEntry(TranscriptEntryKind::prompt, trim(text)));
 }
 
+void Transcript::withdrawQueuedPrompt(const std::string& text)
+{
+    auto queued = std::find(queuedPrompts.begin(), queuedPrompts.end(), trim(text));
+
+    if (queued != queuedPrompts.end())
+        queuedPrompts.erase(queued);
+}
+
 const std::vector<std::string>& Transcript::getQueuedPrompts() const
 {
     return queuedPrompts;
@@ -728,6 +736,15 @@ std::vector<TranscriptRow>
 
         addWrappedRows(
             rows, TranscriptRowStyle::queuedPrompt, promptLead, queued, width);
+    }
+
+    if (!transcript.isTurnOpen() && !transcript.getQueuedPrompts().empty())
+    {
+        rows.push_back({});
+        auto sending =
+            makeRow(TranscriptRowStyle::working, thinkingLead, "Sending…");
+        sending.isInFlight = true;
+        rows.push_back(std::move(sending));
     }
 
     return rows;

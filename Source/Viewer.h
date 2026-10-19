@@ -127,6 +127,8 @@ private:
     void sendTypedMessage(const std::string& text);
     void postTypedMessageToAgent(const TypedMessageRoute& route,
                                  const std::string& text);
+    void withdrawTypedMessages(const std::vector<std::string>& typed);
+    bool hasTranscriptSpinner() const;
     void deliverNewRounds();
     bool isPreviousResponderFinishing(const ResponderConfig& config) const;
     bool claimResponder(const ResponderConfig& config);

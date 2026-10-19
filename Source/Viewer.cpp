@@ -179,7 +179,7 @@ void Viewer::pollTranscript(std::int64_t now)
     if (!isAgentPaneShown)
         return;
 
-    if (transcript && (transcript->isTurnOpen() || transcript->hasRunningSubagent())
+    if (transcript && hasTranscriptSpinner()
         && now - lastSpinnerRedraw >= spinnerFrameMs)
     {
         lastSpinnerRedraw = now;
@@ -191,6 +191,12 @@ void Viewer::pollTranscript(std::int64_t now)
 
     lastTranscriptPoll = now;
     readTranscriptTail();
+}
+
+bool Viewer::hasTranscriptSpinner() const
+{
+    return transcript->isTurnOpen() || transcript->hasRunningSubagent()
+           || !transcript->getQueuedPrompts().empty();
 }
 
 // Opened partway into a long stream, it starts at the first whole line of the
@@ -323,6 +329,11 @@ void Viewer::sendTypedMessage(const std::string& text)
     switch (route.destination)
     {
         case TypedMessageDestination::responder:
+            if (!transcript)
+                readTranscriptTail();
+
+            transcript->addQueuedPrompt(text);
+            isTranscriptLayoutDirty = true;
             typedAwaitingResponder.push_back(text);
             followTranscript();
             deliverNewRounds();
@@ -461,7 +472,7 @@ void Viewer::deliverNewRounds()
             say("@" + config.name + " is off (responder = off): nothing sent");
 
         roundsAwaitingResponder.clear();
-        typedAwaitingResponder.clear();
+        withdrawTypedMessages(std::exchange(typedAwaitingResponder, {}));
         isWaitingForPreviousResponder = false;
         return;
     }
@@ -504,17 +515,20 @@ void Viewer::deliverNewRounds()
         if (!claimResponder(config))
         {
             say("@" + config.name + " runs in another dv: type to it there");
+            withdrawTypedMessages({typed});
             continue;
         }
 
         responder->send(makeTypedResponderMessage(typed));
-
-        if (!transcript)
-            readTranscriptTail();
-
-        transcript->addQueuedPrompt(typed);
-        isTranscriptLayoutDirty = true;
     }
+}
+
+void Viewer::withdrawTypedMessages(const std::vector<std::string>& typed)
+{
+    for (const auto& text: typed)
+        transcript->withdrawQueuedPrompt(text);
+
+    isTranscriptLayoutDirty = true;
 }
 
 bool Viewer::isPreviousResponderFinishing(const ResponderConfig& config) const
