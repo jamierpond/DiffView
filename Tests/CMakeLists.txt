@@ -6,6 +6,7 @@ add_executable(DiffViewTests
         DiffTests.cpp
         FileTreeTests.cpp
         GitTests.cpp
+        IntraLineTests.cpp
         KeymapTests.cpp
         ReviewMarkdownTests.cpp
         ReviewTests.cpp

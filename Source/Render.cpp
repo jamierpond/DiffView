@@ -1,5 +1,6 @@
 #include "Viewer.h"
 
+#include <IntraLine.h>
 #include <Text.h>
 
 #include <ftxui/dom/elements.hpp>
@@ -127,6 +128,8 @@ std::string describeKeys(const Annotation& note)
 
 // A dark background rather than inverted, so +/- colours stay readable.
 const auto selectionBackground = Color::RGB(38, 58, 96);
+const auto removedSpanBackground = Color::RGB(90, 30, 34);
+const auto addedSpanBackground = Color::RGB(26, 72, 38);
 
 Element cursorLine(Element line, bool focused)
 {
@@ -172,6 +175,53 @@ Element withMatch(const std::string& text, std::size_t start, std::size_t length
                  ftxui::text(text.substr(start, length)) | bgcolor(Color::Yellow)
                      | color(Color::Black),
                  ftxui::text(text.substr(start + length))});
+}
+
+struct TextRange
+{
+    std::size_t start = 0;
+    std::size_t end = 0;
+
+    bool contains(std::size_t index) const { return index >= start && index < end; }
+};
+
+// The search match's yellow wins over the changed span's background.
+Element withChangedSpan(const std::string& text,
+                        const ChangedSpan& changed,
+                        Color changedBackground,
+                        std::optional<TextRange> match)
+{
+    auto changedRange = TextRange {changed.start, changed.start + changed.length};
+    auto cuts = std::vector<std::size_t> {
+        0, text.size(), changedRange.start, changedRange.end};
+
+    if (match)
+    {
+        cuts.push_back(match->start);
+        cuts.push_back(match->end);
+    }
+
+    for (auto& cut: cuts)
+        cut = std::min(cut, text.size());
+
+    std::sort(cuts.begin(), cuts.end());
+    cuts.erase(std::unique(cuts.begin(), cuts.end()), cuts.end());
+
+    auto pieces = Elements {};
+
+    for (auto i = std::size_t {1}; i < cuts.size(); ++i)
+    {
+        auto piece = ftxui::text(text.substr(cuts[i - 1], cuts[i] - cuts[i - 1]));
+
+        if (match && match->contains(cuts[i - 1]))
+            piece = piece | bgcolor(Color::Yellow) | color(Color::Black);
+        else if (changedRange.contains(cuts[i - 1]))
+            piece = piece | bgcolor(changedBackground);
+
+        pieces.push_back(piece);
+    }
+
+    return hbox(std::move(pieces));
 }
 
 std::string modeName(vim::Mode mode)
@@ -680,7 +730,8 @@ Element Viewer::renderRow(const DiffRow& row, int index, int width)
             auto marker = line.kind == LineKind::added     ? "+"
                           : line.kind == LineKind::removed ? "-"
                                                            : " ";
-            auto content = hbox({text(marker), body(displayable(line.text))});
+            auto shown = displayable(line.text);
+            auto content = hbox({text(marker), body(shown)});
 
             // A whole unchanged file: one line number, no +/- column.
             if (file.status == FileStatus::unchanged)
@@ -689,6 +740,26 @@ Element Viewer::renderRow(const DiffRow& row, int index, int width)
                                 text(" │ ") | dim,
                                 body(displayable(line.text))});
                 break;
+            }
+
+            const auto& hunk = file.hunks[static_cast<std::size_t>(row.hunk)];
+            auto lineIndex = static_cast<std::size_t>(row.line);
+
+            if (auto changed = findChangedSpanOfLine(hunk, lineIndex))
+            {
+                auto changedBackground = line.kind == LineKind::added
+                                             ? addedSpanBackground
+                                             : removedSpanBackground;
+                auto matchRange = std::optional<TextRange> {};
+
+                if (match)
+                    matchRange =
+                        TextRange {match->start, match->start + match->length};
+
+                content =
+                    hbox({text(marker),
+                          withChangedSpan(
+                              shown, *changed, changedBackground, matchRange)});
             }
 
             if (line.kind == LineKind::added)
