@@ -3,7 +3,8 @@
 <p align="center"><b>Watch your coding agents work in a live terminal diff, and tell them what you think, line by line.</b></p>
 
 Point it at a repo an agent is editing (or just run `dv` inside it). The left pane is a tree of every
-changed file, the right pane the selected file's diff. It refreshes as files
+changed file, the right pane the selected file's diff, coloured like GitHub's dark view and
+syntax highlighted by file extension. It refreshes as files
 change. Files you haven't looked at since they last changed get a dot, and
 files touched in the last ten seconds are highlighted, so you can see where
 the agent is working. Comment on a line, a range, a hunk or a whole file, then

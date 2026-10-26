@@ -6,6 +6,7 @@
 #include <DiffRows.h>
 #include <FileTree.h>
 #include <Git.h>
+#include <Highlight.h>
 #include <Keymap.h>
 #include <Review.h>
 #include <Store.h>
@@ -201,6 +202,15 @@ private:
     ftxui::Element render();
     ftxui::Element renderTree(int width, int height);
     ftxui::Element renderDiff(int width, int height);
+    enum class RowEmphasis
+    {
+        none,
+        cursor,
+        selected
+    };
+
+    RowEmphasis findRowEmphasis(const DiffRow& row, int index) const;
+    const std::vector<Token>& findLineTokens(const DiffRow& row) const;
     ftxui::Element renderRow(const DiffRow& row, int index, int width);
     ftxui::Element renderThreadRow(const DiffRow& row,
                                    const Annotation& note,
@@ -266,6 +276,7 @@ private:
 
     std::string selectedPath;
     std::vector<DiffRow> rows;
+    FileTokens lineTokens;
     int diffCursor = 0;
     int diffTop = 0;
     int diffHeight = 20;

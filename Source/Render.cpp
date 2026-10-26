@@ -1,5 +1,6 @@
 #include "Viewer.h"
 
+#include <Highlight.h>
 #include <IntraLine.h>
 #include <Text.h>
 
@@ -128,12 +129,18 @@ std::string describeKeys(const Annotation& note)
 
 // A dark background rather than inverted, so +/- colours stay readable.
 const auto selectionBackground = Color::RGB(38, 58, 96);
-const auto removedSpanBackground = Color::RGB(90, 30, 34);
-const auto addedSpanBackground = Color::RGB(26, 72, 38);
+
+const auto addedCursorRowBackground = Color::RGB(28, 70, 42);
+const auto removedCursorRowBackground = Color::RGB(86, 32, 38);
+
+Color cursorBackground(bool focused)
+{
+    return focused ? Color::RGB(58, 62, 84) : Color::RGB(40, 42, 54);
+}
 
 Element cursorLine(Element line, bool focused)
 {
-    return line | bgcolor(focused ? Color::RGB(58, 62, 84) : Color::RGB(40, 42, 54));
+    return line | bgcolor(cursorBackground(focused));
 }
 
 std::string padLeft(const std::string& text, int width)
@@ -185,20 +192,82 @@ struct TextRange
     bool contains(std::size_t index) const { return index >= start && index < end; }
 };
 
-// The search match's yellow wins over the changed span's background.
-Element withChangedSpan(const std::string& text,
-                        const ChangedSpan& changed,
-                        Color changedBackground,
-                        std::optional<TextRange> match)
+Color tokenColor(TokenKind kind)
 {
-    auto changedRange = TextRange {changed.start, changed.start + changed.length};
-    auto cuts = std::vector<std::size_t> {
-        0, text.size(), changedRange.start, changedRange.end};
-
-    if (match)
+    switch (kind)
     {
-        cuts.push_back(match->start);
-        cuts.push_back(match->end);
+        case TokenKind::keyword:
+            return Color::RGB(255, 123, 114);
+        case TokenKind::function:
+            return Color::RGB(210, 168, 255);
+        case TokenKind::type:
+        case TokenKind::namespaceName:
+        case TokenKind::number:
+        case TokenKind::preprocessor:
+            return Color::RGB(121, 192, 255);
+        case TokenKind::string:
+            return Color::RGB(165, 214, 255);
+        case TokenKind::comment:
+            return Color::RGB(139, 148, 158);
+        case TokenKind::plain:
+        case TokenKind::punctuation:
+            break;
+    }
+
+    return Color::RGB(230, 237, 243);
+}
+
+struct LineTheme
+{
+    std::optional<Color> rowBackground;
+    std::optional<Color> gutterBackground;
+    std::optional<Color> changedBackground;
+    Color marker = Color::Default;
+};
+
+LineTheme findLineTheme(LineKind kind)
+{
+    switch (kind)
+    {
+        case LineKind::added:
+            return {.rowBackground = Color::RGB(18, 48, 30),
+                    .gutterBackground = Color::RGB(22, 66, 38),
+                    .changedBackground = Color::RGB(30, 96, 50),
+                    .marker = Color::RGB(126, 231, 135)};
+        case LineKind::removed:
+            return {.rowBackground = Color::RGB(60, 22, 26),
+                    .gutterBackground = Color::RGB(84, 30, 36),
+                    .changedBackground = Color::RGB(120, 40, 46),
+                    .marker = Color::RGB(255, 161, 152)};
+        case LineKind::context:
+            break;
+    }
+
+    return {};
+}
+
+// The search match's yellow wins over the changed span's background.
+Element highlightText(const std::string& text,
+                      const std::vector<Token>& tokens,
+                      std::optional<TextRange> changed,
+                      std::optional<Color> changedBackground,
+                      std::optional<TextRange> match)
+{
+    auto cuts = std::vector<std::size_t> {0, text.size()};
+
+    for (const auto& token: tokens)
+    {
+        cuts.push_back(token.start);
+        cuts.push_back(token.start + token.length);
+    }
+
+    for (const auto& range: {changed, match})
+    {
+        if (!range)
+            continue;
+
+        cuts.push_back(range->start);
+        cuts.push_back(range->end);
     }
 
     for (auto& cut: cuts)
@@ -208,15 +277,28 @@ Element withChangedSpan(const std::string& text,
     cuts.erase(std::unique(cuts.begin(), cuts.end()), cuts.end());
 
     auto pieces = Elements {};
+    auto token = tokens.begin();
 
     for (auto i = std::size_t {1}; i < cuts.size(); ++i)
     {
-        auto piece = ftxui::text(text.substr(cuts[i - 1], cuts[i] - cuts[i - 1]));
+        auto start = cuts[i - 1];
 
-        if (match && match->contains(cuts[i - 1]))
+        while (token != tokens.end() && token->start + token->length <= start)
+            ++token;
+
+        auto kind = TokenKind::plain;
+
+        if (token != tokens.end() && token->start <= start)
+            kind = token->kind;
+
+        auto piece = ftxui::text(text.substr(start, cuts[i] - start));
+
+        if (match && match->contains(start))
             piece = piece | bgcolor(Color::Yellow) | color(Color::Black);
-        else if (changedRange.contains(cuts[i - 1]))
-            piece = piece | bgcolor(changedBackground);
+        else if (changed && changedBackground && changed->contains(start))
+            piece = piece | bgcolor(*changedBackground) | color(tokenColor(kind));
+        else
+            piece = piece | color(tokenColor(kind));
 
         pieces.push_back(piece);
     }
@@ -671,13 +753,42 @@ Element Viewer::renderEditor(int width, int boxHeight)
            | size(HEIGHT, EQUAL, boxHeight);
 }
 
+Viewer::RowEmphasis Viewer::findRowEmphasis(const DiffRow& row, int index) const
+{
+    if (editing)
+    {
+        const auto& target = drawnTarget;
+        auto inTarget = target && row.kind == RowKind::line
+                        && row.flat >= target->first && row.flat <= target->last;
+
+        return inTarget ? RowEmphasis::selected : RowEmphasis::none;
+    }
+
+    if (index == diffCursor)
+        return RowEmphasis::cursor;
+
+    auto inVisual = visualAnchor && index >= std::min(*visualAnchor, diffCursor)
+                    && index <= std::max(*visualAnchor, diffCursor);
+
+    return inVisual ? RowEmphasis::selected : RowEmphasis::none;
+}
+
+const std::vector<Token>& Viewer::findLineTokens(const DiffRow& row) const
+{
+    static const auto noTokens = std::vector<Token> {};
+    auto hunk = static_cast<std::size_t>(row.hunk);
+    auto line = static_cast<std::size_t>(row.line);
+
+    if (hunk >= lineTokens.size() || line >= lineTokens[hunk].size())
+        return noTokens;
+
+    return lineTokens[hunk][line];
+}
+
 Element Viewer::renderRow(const DiffRow& row, int index, int width)
 {
     const auto& file = selectedFile()->get();
     auto element = Element {};
-
-    auto inVisual = visualAnchor && index >= std::min(*visualAnchor, diffCursor)
-                    && index <= std::max(*visualAnchor, diffCursor);
 
     // incsearch without hlsearch: only while typing.
     auto match = prompt == Prompt::search && searchPane == Pane::diff && liveHit
@@ -725,52 +836,75 @@ Element Viewer::renderRow(const DiffRow& row, int index, int width)
 
         case RowKind::line:
         {
-            const auto& line = file.hunks[static_cast<std::size_t>(row.hunk)]
-                                   .lines[static_cast<std::size_t>(row.line)];
-            auto marker = line.kind == LineKind::added     ? "+"
-                          : line.kind == LineKind::removed ? "-"
-                                                           : " ";
+            const auto& hunk = file.hunks[static_cast<std::size_t>(row.hunk)];
+            auto lineIndex = static_cast<std::size_t>(row.line);
+            const auto& line = hunk.lines[lineIndex];
             auto shown = displayable(line.text);
-            auto content = hbox({text(marker), body(shown)});
+            const auto& tokens = findLineTokens(row);
+            auto matchRange = std::optional<TextRange> {};
+
+            if (match)
+                matchRange = TextRange {match->start, match->start + match->length};
 
             // A whole unchanged file: one line number, no +/- column.
             if (file.status == FileStatus::unchanged)
             {
                 element = hbox({text(lineNumber(line.newLine)) | dim,
                                 text(" │ ") | dim,
-                                body(displayable(line.text))});
+                                highlightText(shown, tokens, {}, {}, matchRange)});
                 break;
             }
 
-            const auto& hunk = file.hunks[static_cast<std::size_t>(row.hunk)];
-            auto lineIndex = static_cast<std::size_t>(row.line);
+            auto theme = findLineTheme(line.kind);
+            auto changedRange = std::optional<TextRange> {};
 
             if (auto changed = findChangedSpanOfLine(hunk, lineIndex))
+                changedRange =
+                    TextRange {changed->start, changed->start + changed->length};
+
+            auto emphasis = findRowEmphasis(row, index);
+
+            if (theme.rowBackground && emphasis == RowEmphasis::selected)
             {
-                auto changedBackground = line.kind == LineKind::added
-                                             ? addedSpanBackground
-                                             : removedSpanBackground;
-                auto matchRange = std::optional<TextRange> {};
+                theme.rowBackground = selectionBackground;
+                theme.gutterBackground = selectionBackground;
+            }
+            else if (theme.rowBackground && emphasis != RowEmphasis::none)
+            {
+                theme.gutterBackground = cursorBackground(focus == Pane::diff);
+                theme.rowBackground = removedCursorRowBackground;
 
-                if (match)
-                    matchRange =
-                        TextRange {match->start, match->start + match->length};
-
-                content =
-                    hbox({text(marker),
-                          withChangedSpan(
-                              shown, *changed, changedBackground, matchRange)});
+                if (line.kind == LineKind::added)
+                    theme.rowBackground = addedCursorRowBackground;
             }
 
-            if (line.kind == LineKind::added)
-                content = content | color(Color::Green);
-            else if (line.kind == LineKind::removed)
-                content = content | color(Color::Red);
+            auto marker = [&]
+            {
+                if (line.kind == LineKind::added)
+                    return "+";
+                if (line.kind == LineKind::removed)
+                    return "-";
+                return " ";
+            }();
 
-            element = hbox({text(lineNumber(line.oldLine)) | dim,
-                            text(lineNumber(line.newLine)) | dim,
-                            text(" │") | dim,
-                            content});
+            auto gutter = hbox({text(lineNumber(line.oldLine)),
+                                text(lineNumber(line.newLine)),
+                                text(" │")})
+                          | dim;
+            auto content = hbox({text(marker) | color(theme.marker),
+                                 highlightText(shown,
+                                               tokens,
+                                               changedRange,
+                                               theme.changedBackground,
+                                               matchRange),
+                                 filler()});
+
+            if (theme.gutterBackground)
+                gutter = gutter | bgcolor(*theme.gutterBackground);
+            if (theme.rowBackground)
+                content = content | bgcolor(*theme.rowBackground);
+
+            element = hbox({gutter, content | flex});
             break;
         }
 
@@ -789,20 +923,15 @@ Element Viewer::renderRow(const DiffRow& row, int index, int width)
 
     element = element | size(WIDTH, LESS_THAN, width + 1);
 
-    if (editing)
+    switch (findRowEmphasis(row, index))
     {
-        const auto& target = drawnTarget;
-        auto inTarget = target && row.kind == RowKind::line
-                        && row.flat >= target->first && row.flat <= target->last;
-
-        return inTarget ? element | bgcolor(selectionBackground) : element;
+        case RowEmphasis::selected:
+            return element | bgcolor(selectionBackground);
+        case RowEmphasis::cursor:
+            return cursorLine(element, focus == Pane::diff);
+        case RowEmphasis::none:
+            break;
     }
-
-    if (index == diffCursor)
-        return cursorLine(element, focus == Pane::diff);
-
-    if (inVisual)
-        return element | bgcolor(selectionBackground);
 
     return element;
 }

@@ -5,6 +5,7 @@ add_library(DiffViewCore STATIC
         DiffRows.cpp
         FileTree.cpp
         Git.cpp
+        Highlight.cpp
         IntraLine.cpp
         Keymap.cpp
         Review.cpp

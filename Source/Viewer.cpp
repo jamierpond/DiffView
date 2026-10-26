@@ -463,6 +463,7 @@ void Viewer::rebuildRows(const CursorKey& key, int offset)
     auto selected = selectedFile();
 
     rows = selected ? rowsFor(selected->get()) : std::vector<DiffRow> {};
+    lineTokens = selected ? highlightFile(selected->get()) : FileTokens {};
     restoreCursor(key);
     diffTop = std::max(0, diffCursor - offset);
 }
@@ -478,7 +479,8 @@ void Viewer::select(const std::string& path)
 
         auto selected = findOrReadFile(path);
         rows = selected ? rowsFor(selected->get()) : std::vector<DiffRow> {};
-    
+        lineTokens = selected ? highlightFile(selected->get()) : FileTokens {};
+
         for (std::size_t i = 0; i < rows.size(); ++i)
             if (rows[i].kind == RowKind::line)
             {
