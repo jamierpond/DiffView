@@ -47,6 +47,7 @@ const std::vector<std::string>& commandNames()
                                                         "comments",
                                                         "edit",
                                                         "files",
+                                                        "full",
                                                         "grep",
                                                         "help",
                                                         "q",
@@ -240,6 +241,9 @@ void Viewer::run(const Command& command)
             allFiles = !allFiles;
             say(allFiles ? "All files" : "Changed files only");
             refresh();
+            break;
+        case Action::toggleFullContext:
+            toggleFullContext();
             break;
         case Action::toggleTreeSort:
             flatBySize = !flatBySize;
@@ -636,6 +640,8 @@ void Viewer::runCommandLine(const std::string& line)
     }
     else if (name == "note")
         commentGeneral();
+    else if (name == "full")
+        toggleFullContext();
     else if (name == "resolved")
         clearResolved();
     else if (name == "comments")
@@ -654,6 +660,13 @@ void Viewer::runCommandLine(const std::string& line)
         modal = Modal::help;
     else
         say("Not a command: " + name);
+}
+
+void Viewer::toggleFullContext()
+{
+    fullContext = !fullContext;
+    say(fullContext ? "Full file" : "Diff context");
+    refresh();
 }
 
 void Viewer::openPicker(PickerKind kind)

@@ -901,6 +901,9 @@ Element Viewer::renderStatus()
         text(std::to_string(files.size()) + " files"),
     };
 
+    if (fullContext)
+        parts.push_back(text("  full file") | dim);
+
     if (unseen > 0)
         parts.push_back(text("  ● " + std::to_string(unseen) + " unseen")
                         | color(Color::Cyan));
@@ -1129,6 +1132,7 @@ Element Viewer::renderHelp()
                    row("h l  Tab", "tree / diff / switch pane"),
                    row("Enter  l", "tree: toggle directory, open file"),
                    row("a  s", "all files / changed only, tree / by size"),
+                   row("f  :full", "whole file inline / diff context"),
                    row("]c [c  ]f [f", "next / previous hunk, file"),
                    row("]u [u  ]a [a", "next / previous unseen file, comment"),
                    row("/ ?  n N", "search forward / back, next / previous"),

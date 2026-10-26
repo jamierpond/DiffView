@@ -41,6 +41,7 @@ enum class Action
     commentFile,
     generalNote,
     toggleAllFiles,
+    toggleFullContext,
     toggleTreeSort,
     submitRound,
     commandLine,

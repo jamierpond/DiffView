@@ -84,6 +84,29 @@ auto tWorkingTree = test("Git/diffs the working tree and lists untracked files")
     check(untracked.size() == 1 && untracked[0] == "new file.txt");
 };
 
+auto tWholeFileContext =
+    test("Git/whole file context puts every line in one hunk") = []
+{
+    auto repo = freshRepo("whole-file");
+    write(repo,
+          "tracked.txt",
+          "one\ntwo\nthree\nfour\nfive\nsix\nseven\neight\nnine\nten\n");
+    git::run(git::command(repo, {"commit", "-q", "-am", "ten lines"}));
+    write(repo,
+          "tracked.txt",
+          "one\ntwo\nthree\nfour\nFIVE\nsix\nseven\neight\nnine\nten\n");
+
+    auto sha = trim(*git::run(git::resolveBase(repo, {})));
+    auto context = parseDiff(*git::run(git::diff(repo, sha)));
+    auto whole =
+        parseDiff(*git::run(git::diff(repo, sha, git::wholeFileContextLines)));
+
+    check(context.size() == 1 && context[0].hunks.size() == 1);
+    check(context[0].hunks[0].lines.size() == 8);
+    check(whole.size() == 1 && whole[0].hunks.size() == 1);
+    check(whole[0].hunks[0].lines.size() == 11);
+};
+
 auto tMergeBase = test("Git/resolves a merge-base") = []
 {
     auto repo = freshRepo("merge-base");

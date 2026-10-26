@@ -181,7 +181,10 @@ eacp::Threads::Async<void> Viewer::refresh()
             }
         }
 
-        auto diffResult = co_await eacp::Processes::runAsync(git::diff(repo, sha));
+        auto diffResult = co_await eacp::Processes::runAsync(git::diff(
+            repo,
+            sha,
+            fullContext ? git::wholeFileContextLines : git::defaultContextLines));
         auto untrackedResult =
             co_await eacp::Processes::runAsync(git::untracked(repo));
 
@@ -258,6 +261,8 @@ void Viewer::apply(std::vector<FileDiff> diffs, const std::string& sha)
               [&](const FileDiff& a, const FileDiff& b)
               { return rank[a.path] < rank[b.path]; });
 
+    auto key = cursorKey();
+    auto offset = diffCursor - diffTop;
     auto baseMoved = sha != baseSha;
     baseSha = sha;
     files = std::move(diffs);
@@ -297,7 +302,7 @@ void Viewer::apply(std::vector<FileDiff> diffs, const std::string& sha)
     }
     else
     {
-        rebuildRows();
+        rebuildRows(key, offset);
         tracker.markSeen(selectedPath);
     }
 
@@ -450,8 +455,11 @@ void Viewer::rebuildTree()
 
 void Viewer::rebuildRows()
 {
-    auto key = cursorKey();
-    auto offset = diffCursor - diffTop;
+    rebuildRows(cursorKey(), diffCursor - diffTop);
+}
+
+void Viewer::rebuildRows(const CursorKey& key, int offset)
+{
     auto selected = selectedFile();
 
     rows = selected ? rowsFor(selected->get()) : std::vector<DiffRow> {};
@@ -470,7 +478,7 @@ void Viewer::select(const std::string& path)
 
         auto selected = findOrReadFile(path);
         rows = selected ? rowsFor(selected->get()) : std::vector<DiffRow> {};
-
+    
         for (std::size_t i = 0; i < rows.size(); ++i)
             if (rows[i].kind == RowKind::line)
             {

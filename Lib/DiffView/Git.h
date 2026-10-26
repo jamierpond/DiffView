@@ -31,8 +31,12 @@ eacp::Processes::ProcessOptions command(const std::string& repo,
 eacp::Processes::ProcessOptions resolveBase(const std::string& repo,
                                             const BaseSpec& spec);
 
+constexpr auto defaultContextLines = 3;
+constexpr auto wholeFileContextLines = 1'000'000;
+
 eacp::Processes::ProcessOptions diff(const std::string& repo,
-                                     const std::string& baseSha);
+                                     const std::string& baseSha,
+                                     int contextLines = defaultContextLines);
 
 eacp::Processes::ProcessOptions untracked(const std::string& repo);
 eacp::Processes::ProcessOptions tracked(const std::string& repo);

@@ -48,6 +48,13 @@ auto tSequences = test("Keymap/two-key sequences") = []
     check(command->action == Action::nextAnnotation && command->count == 2);
 };
 
+auto tFullContext = test("Keymap/f toggles full file context") = []
+{
+    auto keys = KeyParser {};
+
+    check(keys.feed("f")->action == Action::toggleFullContext);
+};
+
 auto tBadSequence = test("Keymap/an unknown sequence clears") = []
 {
     auto keys = KeyParser {};

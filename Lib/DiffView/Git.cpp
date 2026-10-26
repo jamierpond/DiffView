@@ -49,8 +49,8 @@ eacp::Processes::ProcessOptions resolveBase(const std::string& repo,
                    {"rev-parse", "--verify", "--quiet", spec.ref + "^{commit}"});
 }
 
-eacp::Processes::ProcessOptions diff(const std::string& repo,
-                                     const std::string& baseSha)
+eacp::Processes::ProcessOptions
+    diff(const std::string& repo, const std::string& baseSha, int contextLines)
 {
     return command(repo,
                    {"diff",
@@ -60,7 +60,7 @@ eacp::Processes::ProcessOptions diff(const std::string& repo,
                     "--no-relative",
                     "--src-prefix=a/",
                     "--dst-prefix=b/",
-                    "-U3",
+                    "-U" + std::to_string(contextLines),
                     baseSha,
                     "--"});
 }

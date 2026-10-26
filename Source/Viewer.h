@@ -116,6 +116,8 @@ private:
     std::vector<std::string> fileOrder() const;
     void rebuildTree();
     void rebuildRows();
+    void toggleFullContext();
+    void rebuildRows(const CursorKey& key, int offset);
     void select(const std::string& path);
     CursorKey cursorKey() const;
     void restoreCursor(const CursorKey& key);
@@ -226,6 +228,7 @@ private:
     // (unchanged ones read by findOrReadFile, kept until the next apply); a
     // flat list by size.
     bool allFiles = false;
+    bool fullContext = false;
     bool flatBySize = false;
     std::vector<std::string> allPaths;
     std::map<std::string, FileDiff> unchangedFiles;
