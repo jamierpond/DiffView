@@ -47,6 +47,7 @@ const std::vector<std::string>& commandNames()
                                                         "comments",
                                                         "edit",
                                                         "files",
+                                                        "filter",
                                                         "full",
                                                         "grep",
                                                         "help",
@@ -243,7 +244,13 @@ void Viewer::run(const Command& command)
             refresh();
             break;
         case Action::toggleFullContext:
-            toggleFullContext();
+            if (focus == Pane::tree)
+                openPrompt(Prompt::filter, true);
+            else
+                toggleFullContext();
+            break;
+        case Action::clearFilter:
+            clearPathFilter();
             break;
         case Action::toggleTreeSort:
             flatBySize = !flatBySize;
@@ -356,12 +363,33 @@ void Viewer::openPrompt(Prompt kind, bool forward)
             : std::string {};
     searchOriginTop = focus == Pane::tree ? treeTop : diffTop;
     liveHit.reset();
+
+    if (kind == Prompt::filter)
+    {
+        filterBeforePrompt = pathFilter ? pathFilter->pattern : std::string {};
+        isFilterPromptInvalid = false;
+        promptLine.set(filterBeforePrompt);
+    }
+}
+
+void Viewer::updateLiveFilter()
+{
+    const auto& typed = promptLine.text();
+    auto parsed = parsePathFilter(typed);
+    auto isNoFilter = typed.empty() || typed == "!";
+    isFilterPromptInvalid = !parsed && !isNoFilter;
+
+    if (!isFilterPromptInvalid)
+        setPathFilter(std::move(parsed));
 }
 
 bool Viewer::onPromptEvent(const std::string& key)
 {
     auto restoreOrigin = [&]
     {
+        if (prompt == Prompt::filter)
+            setPathFilter(parsePathFilter(filterBeforePrompt));
+
         if (prompt != Prompt::search)
             return;
 
@@ -408,6 +436,15 @@ bool Viewer::onPromptEvent(const std::string& key)
             return true;
         }
 
+        if (prompt == Prompt::filter)
+        {
+            if (isFilterPromptInvalid)
+                setPathFilter(parsePathFilter(filterBeforePrompt));
+
+            close();
+            return true;
+        }
+
         if (text.empty())
         {
             close();
@@ -431,8 +468,13 @@ bool Viewer::onPromptEvent(const std::string& key)
         return true;
     }
 
-    if (promptLine.feed(key) && prompt == Prompt::search)
+    if (!promptLine.feed(key))
+        return true;
+
+    if (prompt == Prompt::search)
         updateIncrementalSearch();
+    else if (prompt == Prompt::filter)
+        updateLiveFilter();
 
     return true;
 }
@@ -640,6 +682,15 @@ void Viewer::runCommandLine(const std::string& line)
     }
     else if (name == "note")
         commentGeneral();
+    else if (name == "filter")
+    {
+        if (argument.empty())
+            clearPathFilter();
+        else if (auto filter = parsePathFilter(argument))
+            setPathFilter(std::move(filter));
+        else
+            say("Not a valid regex: " + argument);
+    }
     else if (name == "full")
         toggleFullContext();
     else if (name == "resolved")

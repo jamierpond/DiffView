@@ -363,9 +363,17 @@ Element Viewer::renderTree(int width, int height)
     auto now = nowMs();
     auto lines = Elements {};
 
-    auto title = std::string {allFiles ? " All files · " : " Changes · "}
-                 + std::to_string(allFiles ? paths().size() : files.size())
-                 + (flatBySize ? " · by size" : "");
+    auto title = [&]
+    {
+        if (pathFilter)
+            return " Files  /" + pathFilter->pattern + "/  "
+                   + std::to_string(visiblePaths().size()) + " of "
+                   + std::to_string(paths().size()) + " ";
+
+        return std::string {allFiles ? " All files · " : " Changes · "}
+               + std::to_string(allFiles ? paths().size() : files.size())
+               + (flatBySize ? " · by size" : "");
+    }();
     lines.push_back(text(title) | bold | (focus == Pane::tree ? inverted : dim));
 
     if (!loaded)
@@ -1072,15 +1080,29 @@ Element Viewer::renderStatus()
 
 Element Viewer::renderPrompt()
 {
-    auto lead = prompt == Prompt::command ? ":" : searchForward ? "/" : "?";
+    auto lead = [&]
+    {
+        if (prompt == Prompt::command)
+            return ":";
+
+        if (prompt == Prompt::filter)
+            return "filter: ";
+
+        return searchForward ? "/" : "?";
+    }();
     const auto& typed = promptLine.text();
     auto at = promptLine.cursor();
+    auto typedColour = Color {Color::Default};
 
-    return hbox({text(lead),
-                 text(typed.substr(0, at)),
-                 text(at < typed.size() ? typed.substr(at, 1) : " ") | inverted,
-                 text(at < typed.size() ? typed.substr(at + 1) : ""),
-                 filler()});
+    if (prompt == Prompt::filter && isFilterPromptInvalid)
+        typedColour = Color::Red;
+
+    return hbox(
+        {text(lead),
+         text(typed.substr(0, at)) | color(typedColour),
+         text(at < typed.size() ? typed.substr(at, 1) : " ") | inverted,
+         text(at < typed.size() ? typed.substr(at + 1) : "") | color(typedColour),
+         filler()});
 }
 
 Element Viewer::renderModal()
@@ -1262,6 +1284,8 @@ Element Viewer::renderHelp()
                    row("Enter  l", "tree: toggle directory, open file"),
                    row("a  s", "all files / changed only, tree / by size"),
                    row("f  :full", "whole file inline / diff context"),
+                   row("f F  :filter",
+                       "tree: filter files by regex (!re inverts) / clear"),
                    row("]c [c  ]f [f", "next / previous hunk, file"),
                    row("]u [u  ]a [a", "next / previous unseen file, comment"),
                    row("/ ?  n N", "search forward / back, next / previous"),

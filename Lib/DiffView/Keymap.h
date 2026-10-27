@@ -42,6 +42,7 @@ enum class Action
     generalNote,
     toggleAllFiles,
     toggleFullContext,
+    clearFilter,
     toggleTreeSort,
     submitRound,
     commandLine,

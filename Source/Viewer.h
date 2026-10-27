@@ -8,6 +8,7 @@
 #include <Git.h>
 #include <Highlight.h>
 #include <Keymap.h>
+#include <PathFilter.h>
 #include <Review.h>
 #include <Store.h>
 #include <Telescope.h>
@@ -70,6 +71,7 @@ private:
     {
         none,
         search,
+        filter,
         command
     };
 
@@ -113,6 +115,10 @@ private:
     OptionalFileDiff findFile(const std::string& path) const;
     OptionalFileDiff findOrReadFile(const std::string& path);
     std::vector<std::string> paths() const;
+    std::vector<std::string> visiblePaths() const;
+    void setPathFilter(std::optional<PathFilter> filter);
+    void clearPathFilter();
+    void updateLiveFilter();
     OptionalFileDiff changedFile(const std::string& path) const;
     std::vector<std::string> fileOrder() const;
     void rebuildTree();
@@ -307,6 +313,10 @@ private:
     int searchOriginTop = 0;
     std::optional<SearchHit> liveHit;
     std::string lastSearch;
+
+    std::optional<PathFilter> pathFilter;
+    std::string filterBeforePrompt;
+    bool isFilterPromptInvalid = false;
     bool lastSearchForward = true;
 
     telescope::Picker picker;

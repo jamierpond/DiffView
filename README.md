@@ -40,10 +40,10 @@ merge-base of HEAD and `name`, as in `git diff main...`; anything else
 | `/` `?` `n` `N` | Search (incremental, smartcase) | `o` | Open the file with the OS |
 | `Space pf` | Find a changed file | `F1` `g?` | Help |
 | `Space ps` | Grep every changed line | `q` `:q` | Quit (asks about an unsent draft) |
-| `Space pc` | Every comment, newest first; Enter amends | `:` | Commands (Tab completes): `submit q base comments note resolved full edit help` |
+| `Space pc` | Every comment, newest first; Enter amends | `:` | Commands (Tab completes): `submit q base comments note resolved full filter edit help` |
 | `b` `:base` | Change base | `R` | Reply on the comment's thread |
 | `r` | Refresh | `a` | All files / changed files only |
-| `f` `:full` | Whole file inline / diff context | | |
+| `f` `:full` | Whole file inline / diff context | `f` `F` `:filter` | Tree: filter files by regex (`!re` inverts) / clear |
 | | | `s` | Tree / flat list by size of change |
 
 `a` shows every file in the repo, not just the changed ones: an unchanged

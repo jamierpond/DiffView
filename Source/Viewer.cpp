@@ -392,6 +392,39 @@ std::vector<std::string> Viewer::paths() const
     return list;
 }
 
+std::vector<std::string> Viewer::visiblePaths() const
+{
+    return filterPaths(paths(), pathFilter);
+}
+
+// A selected file the filter hides stays in the diff pane; only the tree
+// cursor moves, to the first file still shown.
+void Viewer::setPathFilter(std::optional<PathFilter> filter)
+{
+    pathFilter = std::move(filter);
+    rebuildTree();
+
+    if (auto row = rowOf(treeRows, selectedPath); row >= 0)
+    {
+        treeCursor = row;
+        return;
+    }
+
+    auto firstFile = std::find_if(treeRows.begin(),
+                                  treeRows.end(),
+                                  [](const TreeRow& row)
+                                  { return !row.isDirectory && !row.path.empty(); });
+
+    if (firstFile != treeRows.end())
+        treeCursor = static_cast<int>(firstFile - treeRows.begin());
+}
+
+void Viewer::clearPathFilter()
+{
+    setPathFilter(std::nullopt);
+    say("Filter cleared");
+}
+
 OptionalFileDiff Viewer::changedFile(const std::string& path) const
 {
     for (const auto& file: files)
@@ -404,10 +437,10 @@ OptionalFileDiff Viewer::changedFile(const std::string& path) const
 std::vector<std::string> Viewer::fileOrder() const
 {
     if (!flatBySize)
-        return treeOrder(paths());
+        return treeOrder(visiblePaths());
 
     // Biggest change first; unchanged files (all-files mode) last.
-    auto list = paths();
+    auto list = visiblePaths();
     auto size = [&](const std::string& path)
     {
         auto file = changedFile(path);
@@ -439,7 +472,7 @@ void Viewer::rebuildTree()
     }
     else
     {
-        treeRows = buildTree(paths(), collapsed);
+        treeRows = buildTree(visiblePaths(), collapsed);
     }
 
     auto hasGeneral = std::any_of(annotations.begin(),

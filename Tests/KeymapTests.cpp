@@ -55,6 +55,13 @@ auto tFullContext = test("Keymap/f toggles full file context") = []
     check(keys.feed("f")->action == Action::toggleFullContext);
 };
 
+auto tClearFilter = test("Keymap/F clears the tree filter") = []
+{
+    auto keys = KeyParser {};
+
+    check(keys.feed("F")->action == Action::clearFilter);
+};
+
 auto tBadSequence = test("Keymap/an unknown sequence clears") = []
 {
     auto keys = KeyParser {};

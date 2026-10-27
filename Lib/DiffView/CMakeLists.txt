@@ -8,6 +8,7 @@ add_library(DiffViewCore STATIC
         Highlight.cpp
         IntraLine.cpp
         Keymap.cpp
+        PathFilter.cpp
         Review.cpp
         ReviewMarkdown.cpp
         Search.cpp
