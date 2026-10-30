@@ -233,7 +233,30 @@ eacp::Threads::Async<void> Viewer::refresh()
                 continue;
             }
 
-            diffs.push_back(diffForNewFile(path, eacp::Files::readFile(full)));
+            auto deletedFromIndex = std::ranges::find_if(
+                diffs,
+                [&](const FileDiff& file)
+                { return file.path == path && file.status == FileStatus::deleted; });
+
+            if (deletedFromIndex == diffs.end())
+            {
+                diffs.push_back(diffForNewFile(path, eacp::Files::readFile(full)));
+                continue;
+            }
+
+            auto againstBase = git::diffBaseCopyAgainstWorkingFile(
+                repo,
+                sha,
+                path,
+                fullContext ? git::wholeFileContextLines : git::defaultContextLines);
+
+            if (!againstBase)
+                continue;
+
+            if (againstBase->status == FileStatus::unchanged)
+                diffs.erase(deletedFromIndex);
+            else
+                *deletedFromIndex = std::move(*againstBase);
         }
 
         std::erase_if(diffs, [](const FileDiff& file) { return isOurs(file.path); });

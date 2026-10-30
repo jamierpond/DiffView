@@ -1,5 +1,7 @@
 #pragma once
 
+#include "Diff.h"
+
 #include <eacp/Core/Process/Process.h>
 
 #include <optional>
@@ -63,6 +65,15 @@ std::vector<BaseChoice> baseChoices(const std::vector<std::string>& branchNames,
                                     const std::vector<Commit>& commits);
 
 std::optional<std::string> run(eacp::Processes::ProcessOptions options);
+
+// A path taken out of the index but left in the working tree (git rm --cached,
+// or the old name of a staged rename) is both deleted in git diff and listed
+// as untracked. This diffs the base's copy against the working tree file;
+// identical copies come back with status unchanged.
+std::optional<FileDiff> diffBaseCopyAgainstWorkingFile(const std::string& repo,
+                                                       const std::string& baseSha,
+                                                       const std::string& path,
+                                                       int contextLines);
 
 std::optional<std::string> findRoot(const std::string& path);
 

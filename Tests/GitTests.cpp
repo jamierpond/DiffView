@@ -84,6 +84,28 @@ auto tWorkingTree = test("Git/diffs the working tree and lists untracked files")
     check(untracked.size() == 1 && untracked[0] == "new file.txt");
 };
 
+auto tRemovedFromIndex = test(
+    "Git/a path removed from the index but kept on disk diffs against the base") = []
+{
+    auto repo = freshRepo("removed-from-index");
+    git::run(git::command(repo, {"rm", "-q", "--cached", "tracked.txt"}));
+    write(repo, "tracked.txt", "one\nTWO\nthree\n");
+
+    auto sha = trim(*git::run(git::resolveBase(repo, {})));
+    auto file = git::diffBaseCopyAgainstWorkingFile(
+        repo, sha, "tracked.txt", git::defaultContextLines);
+
+    check(file.has_value());
+    check(file->path == "tracked.txt");
+    check(file->status == FileStatus::modified);
+    check(file->added == 1 && file->removed == 1);
+
+    write(repo, "tracked.txt", "one\ntwo\nthree\n");
+    auto same = git::diffBaseCopyAgainstWorkingFile(
+        repo, sha, "tracked.txt", git::defaultContextLines);
+    check(same.has_value() && same->status == FileStatus::unchanged);
+};
+
 auto tWholeFileContext =
     test("Git/whole file context puts every line in one hunk") = []
 {

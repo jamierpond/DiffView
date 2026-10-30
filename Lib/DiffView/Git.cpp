@@ -1,6 +1,11 @@
 #include "Git.h"
 #include "Text.h"
 
+#include <eacp/Core/Utils/Files.h>
+
+#include <filesystem>
+#include <functional>
+
 namespace diffview::git
 {
 BaseSpec BaseSpec::parse(const std::string& text)
@@ -136,6 +141,55 @@ std::optional<std::string> run(eacp::Processes::ProcessOptions options)
         return std::nullopt;
 
     return result.output;
+}
+
+std::optional<FileDiff> diffBaseCopyAgainstWorkingFile(const std::string& repo,
+                                                       const std::string& baseSha,
+                                                       const std::string& path,
+                                                       int contextLines)
+{
+    auto baseCopy = git::run(command(repo, {"show", baseSha + ":" + path}));
+
+    if (!baseCopy)
+        return std::nullopt;
+
+    auto uniqueName = std::to_string(std::hash<std::string> {}(repo + "\n" + path));
+    auto baseCopyFile =
+        std::filesystem::temp_directory_path() / ("dv-base-" + uniqueName);
+    auto bytes = std::span {reinterpret_cast<const std::uint8_t*>(baseCopy->data()),
+                            baseCopy->size()};
+    eacp::Files::writeFile(baseCopyFile, bytes);
+
+    auto result = eacp::Processes::run(command(repo,
+                                               {"diff",
+                                                "--no-color",
+                                                "--no-ext-diff",
+                                                "--no-index",
+                                                "--src-prefix=a/",
+                                                "--dst-prefix=b/",
+                                                "-U" + std::to_string(contextLines),
+                                                "--",
+                                                baseCopyFile.string(),
+                                                path}));
+    auto error = std::error_code {};
+    std::filesystem::remove(baseCopyFile, error);
+
+    constexpr auto noIndexExitCodeForDifferences = 1;
+
+    if (!result.launched || result.exitCode > noIndexExitCodeForDifferences)
+        return std::nullopt;
+
+    auto files = parseDiff(result.output);
+
+    if (files.empty())
+        return unchangedFile(
+            path, eacp::Files::readFile(std::filesystem::path {repo} / path));
+
+    auto file = std::move(files.front());
+    file.path = path;
+    file.status = FileStatus::modified;
+    finalize(file);
+    return file;
 }
 
 std::optional<std::string> findRoot(const std::string& path)
