@@ -125,7 +125,7 @@ private:
     void rebuildRows();
     void toggleFullContext();
     void rebuildRows(const CursorKey& key, int offset);
-    void select(const std::string& path);
+    void select(std::string path);
     CursorKey cursorKey() const;
     void restoreCursor(const CursorKey& key);
     int annotationAtCursor() const;

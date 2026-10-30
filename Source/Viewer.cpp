@@ -524,7 +524,7 @@ void Viewer::rebuildRows(const CursorKey& key, int offset)
     diffTop = std::max(0, diffCursor - offset);
 }
 
-void Viewer::select(const std::string& path)
+void Viewer::select(std::string path)
 {
     if (path != selectedPath)
     {
