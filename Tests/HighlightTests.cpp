@@ -94,6 +94,28 @@ auto tBlockComment = test("Highlight/a block comment carries to the next line") 
     check(findKindOf(secondLine, second, "int") == TokenKind::keyword);
 };
 
+auto tOpenerEndsLine =
+    test("Highlight/an opener that ends the line is a token and carries") = []
+{
+    auto carry = LexerState {};
+    auto comment = tokenizeLine("/**", Language::cFamily, carry);
+
+    check(carry.inBlockComment);
+    check(findKindOf("/**", comment, "/**") == TokenKind::comment);
+
+    auto pythonCarry = LexerState {};
+    auto quotes = tokenizeLine("x = \"\"\"", Language::python, pythonCarry);
+
+    check(!pythonCarry.openStringEnd.empty());
+    check(quotes.back().kind == TokenKind::string);
+
+    auto rawCarry = LexerState {};
+    auto raw = tokenizeLine("R\"x(", Language::cFamily, rawCarry);
+
+    check(!rawCarry.openStringEnd.empty());
+    check(findKindOf("R\"x(", raw, "R\"x(") == TokenKind::string);
+};
+
 auto tPreprocessor = test("Highlight/a preprocessor line is one token") = []
 {
     auto tokens = tokenizeCpp("#include <vector>");

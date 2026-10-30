@@ -394,30 +394,37 @@ private:
 
     void continueOpenString()
     {
-        auto close = text.find(carry.openStringEnd, position);
-
-        if (close == std::string_view::npos)
-        {
-            emit(position, text.size(), TokenKind::string);
-            return;
-        }
-
-        emit(position, close + carry.openStringEnd.size(), TokenKind::string);
-        carry.openStringEnd.clear();
+        auto start = position;
+        emit(start, endOfOpenString(), TokenKind::string);
     }
 
     void continueBlockComment()
     {
+        auto start = position;
+        emit(start, endOfBlockComment(), TokenKind::comment);
+    }
+
+    std::size_t endOfOpenString()
+    {
+        auto close = text.find(carry.openStringEnd, position);
+
+        if (close == std::string_view::npos)
+            return text.size();
+
+        auto end = close + carry.openStringEnd.size();
+        carry.openStringEnd.clear();
+        return end;
+    }
+
+    std::size_t endOfBlockComment()
+    {
         auto close = text.find(rules.blockClose, position);
 
         if (close == std::string_view::npos)
-        {
-            emit(position, text.size(), TokenKind::comment);
-            return;
-        }
+            return text.size();
 
-        emit(position, close + rules.blockClose.size(), TokenKind::comment);
         carry.inBlockComment = false;
+        return close + rules.blockClose.size();
     }
 
     void lexNext()
@@ -438,12 +445,10 @@ private:
 
         if (startsAt(text, position, rules.blockOpen))
         {
+            auto start = position;
             carry.inBlockComment = true;
             position += rules.blockOpen.size();
-            auto start = position - rules.blockOpen.size();
-            continueBlockComment();
-            tokens.back().start = start;
-            tokens.back().length = position - start;
+            emit(start, endOfBlockComment(), TokenKind::comment);
             return;
         }
 
@@ -460,9 +465,7 @@ private:
             auto start = position;
             carry.openStringEnd = std::string(text.substr(position, 3));
             position += 3;
-            continueOpenString();
-            tokens.back().start = start;
-            tokens.back().length = position - start;
+            emit(start, endOfOpenString(), TokenKind::string);
             return;
         }
 
@@ -503,9 +506,7 @@ private:
         auto delimiter = text.substr(position + 2, open - position - 2);
         carry.openStringEnd = ")" + std::string(delimiter) + "\"";
         position = open + 1;
-        continueOpenString();
-        tokens.back().start = start;
-        tokens.back().length = position - start;
+        emit(start, endOfOpenString(), TokenKind::string);
     }
 
     void lexQuoted(char quote)
