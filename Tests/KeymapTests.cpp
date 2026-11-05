@@ -106,7 +106,8 @@ auto tUnseenAndSearch = test("Keymap/]u [u for unseen, n N for search") = []
     check(keys.feed("N")->action == Action::searchPrevious);
     check(keys.feed("?")->action == Action::searchBackward);
     check(keys.feed("c")->action == Action::annotate);
-    check(keys.feed("a")->action == Action::toggleAllFiles);
+    check(!keys.feed("z"));
+    check(keys.feed("A")->action == Action::toggleAllFiles);
     check(!keys.feed("g"));
     check(keys.feed("h")->action == Action::annotateHunk);
     check(keys.feed("C")->action == Action::commentFile);

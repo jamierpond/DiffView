@@ -43,7 +43,8 @@ std::string keyName(const ftxui::Event& event)
 
 const std::vector<std::string>& commandNames()
 {
-    static const auto names = std::vector<std::string> {"base",
+    static const auto names = std::vector<std::string> {"all",
+                                                        "base",
                                                         "comments",
                                                         "edit",
                                                         "files",
@@ -109,6 +110,10 @@ bool Viewer::onEvent(const ftxui::Event& event)
         case Modal::confirmSubmit:
         case Modal::confirmQuit:
             return onConfirmEvent(key);
+        case Modal::confirmDiscard:
+        case Modal::confirmPushUpstream:
+        case Modal::output:
+            return onGitModalEvent(key);
         case Modal::none:
             break;
     }
@@ -122,6 +127,9 @@ bool Viewer::onEvent(const ftxui::Event& event)
         requestQuit();
         return true;
     }
+
+    if (focus == Pane::tree && keys.pending().empty() && onTreeGitKey(key))
+        return true;
 
     if (auto command = keys.feed(key))
         run(*command);
@@ -593,6 +601,8 @@ void Viewer::runCommandLine(const std::string& line)
             refresh();
         }
     }
+    else if (name == "all")
+        run({Action::toggleAllFiles, 1});
     else if (name == "note")
         commentGeneral();
     else if (name == "resolved")

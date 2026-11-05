@@ -471,3 +471,37 @@ auto tSearchNotFound = test("VimEditor/a missing pattern says so") = []
     check(editor.message() == "E486: Pattern not found: z");
     check(editor.row() == 0 && editor.column() == 0);
 };
+
+auto tShorthands = test("VimEditor/C D change and delete to the end, S and Y") = []
+{
+    auto editor = Editor {"hello world\nnext"};
+    type(editor, {"w", "C"});
+    check(editor.mode() == Mode::insert);
+    typeText(editor, "there");
+    editor.feed("Esc");
+    check(editor.text() == "hello there\nnext");
+
+    type(editor, {"0", "w", "D"});
+    check(editor.text() == "hello \nnext");
+
+    type(editor, {"S"});
+    check(editor.mode() == Mode::insert);
+    typeText(editor, "fresh");
+    editor.feed("Esc");
+    check(editor.text() == "fresh\nnext");
+
+    type(editor, {"Y", "p"});
+    check(editor.text() == "fresh\nfresh\nnext");
+};
+
+auto tInsertCtrlC = test("VimEditor/C-c in insert mode is Esc") = []
+{
+    auto editor = Editor {"abc"};
+    type(editor, {"A"});
+    typeText(editor, "d");
+    editor.feed("C-c");
+
+    check(editor.mode() == Mode::normal);
+    check(editor.text() == "abcd");
+    check(editor.column() == 3);
+};

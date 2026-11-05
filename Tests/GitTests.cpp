@@ -120,3 +120,77 @@ auto tAffectsDiff = test("Git/only HEAD, the index and refs count inside .git") 
     check(!git::affectsDiff(".git/objects/ab/cdef"));
     check(!git::affectsDiff(".git/logs/HEAD"));
 };
+
+auto tParseStatus = test("Git/parseStatus reads porcelain -z, renames included") = []
+{
+    auto entries = git::parseStatus(
+        std::string {"M  staged.txt\0 M unstaged.txt\0MM both.txt\0?? new file.txt\0"
+                     "R  new.txt\0old.txt\0",
+                     74});
+
+    check(entries.size() == 5);
+    check(entries[0].path == "staged.txt" && entries[0].staged()
+          && !entries[0].unstaged());
+    check(!entries[1].staged() && entries[1].unstaged());
+    check(entries[2].staged() && entries[2].unstaged());
+    check(entries[3].path == "new file.txt" && entries[3].untracked());
+    check(entries[4].path == "new.txt" && entries[4].index == 'R');
+};
+
+auto tBuilders = test("Git/index and remote commands") = []
+{
+    auto args = [](const eacp::Processes::ProcessOptions& options)
+    {
+        // Past the shared "-C repo -c ... -c ..." prefix.
+        return std::vector<std::string> {options.arguments.begin() + 6,
+                                         options.arguments.end()};
+    };
+
+    using Args = std::vector<std::string>;
+
+    check(args(git::stage("r", {"a", "b c"}))
+          == Args {"add", "-A", "--", "a", "b c"});
+    check(args(git::unstage("r", {"a"}, true))
+          == Args {"restore", "--staged", "--", "a"});
+    check(args(git::unstage("r", {"a"}, false))
+          == Args {"rm", "--cached", "-r", "-q", "--", "a"});
+    check(args(git::unstageAll("r", true)) == Args {"reset", "-q"});
+    check(args(git::commit("r", "Fix it\n\nBody", false))
+          == Args {"commit", "-q", "-m", "Fix it\n\nBody"});
+    check(args(git::commit("r", "m", true))
+          == Args {"commit", "-q", "--amend", "-m", "m"});
+    check(args(git::discard("r", {"x"}))
+          == Args {"restore", "--source=HEAD", "--staged", "--worktree", "--", "x"});
+    check(args(git::pull("r")) == Args {"pull", "--ff-only"});
+    check(args(git::pushSettingUpstream("r", "origin", "main"))
+          == Args {"push", "-u", "origin", "main"});
+    check(git::push("r").mergeErrorOutput);
+};
+
+auto tStageCommit = test("Git/stage, unstage and commit in a real repo") = []
+{
+    auto repo = freshRepo("stage-commit");
+    write(repo, "tracked.txt", "changed\n");
+    write(repo, "new.txt", "hi\n");
+
+    git::run(git::stage(repo, {"tracked.txt"}));
+    auto entry = [&](const std::string& path)
+    {
+        for (const auto& item: git::parseStatus(*git::run(git::status(repo))))
+            if (item.path == path)
+                return item;
+
+        return git::StatusEntry {};
+    };
+
+    check(entry("new.txt").untracked());
+    check(entry("tracked.txt").staged() && !entry("tracked.txt").unstaged());
+
+    git::run(git::unstage(repo, {"tracked.txt"}, true));
+    check(!entry("tracked.txt").staged() && entry("tracked.txt").unstaged());
+
+    git::run(git::stageAll(repo));
+    check(git::run(git::commit(repo, "second\n\nwith a body", false)).has_value());
+    check(trim(*git::run(git::lastCommitMessage(repo))) == "second\n\nwith a body");
+    check(git::parseStatus(*git::run(git::status(repo))).empty());
+};

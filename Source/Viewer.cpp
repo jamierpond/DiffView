@@ -104,7 +104,13 @@ void Viewer::tick()
     auto fading = tracker.anyRecent(now, recentWindowMs + 1000)
                   || (!message.empty() && now - messageAt < 6000);
 
-    if (fading && now - lastRecentRedraw >= 1000)
+    // The spinner turns while git works.
+    if (!busy.empty() && now - lastRecentRedraw >= 100)
+    {
+        lastRecentRedraw = now;
+        redraw();
+    }
+    else if (fading && now - lastRecentRedraw >= 1000)
     {
         lastRecentRedraw = now;
         redraw();
@@ -186,6 +192,15 @@ eacp::Threads::Async<void> Viewer::refresh()
         }
 
         auto diffs = parseDiff(diffResult.output);
+
+        auto statusResult = co_await eacp::Processes::runAsync(git::status(repo));
+        auto headResult = co_await eacp::Processes::runAsync(
+            git::command(repo, {"rev-parse", "--verify", "--quiet", "HEAD"}));
+        hasHead = headResult.exitCode == 0;
+        stageStatus.clear();
+
+        for (auto& entry: git::parseStatus(statusResult.output))
+            stageStatus[entry.path] = entry;
 
         if (allFiles)
         {

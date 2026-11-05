@@ -37,6 +37,57 @@ eacp::Processes::ProcessOptions diff(const std::string& repo,
 eacp::Processes::ProcessOptions untracked(const std::string& repo);
 eacp::Processes::ProcessOptions tracked(const std::string& repo);
 
+// --- working the index and the remote (the tree pane's lazygit keys) -------
+
+// One path's two status columns, as `git status --porcelain` has them:
+// `index` the staged change, `worktree` the unstaged one ('?' both for
+// untracked).
+struct StatusEntry
+{
+    std::string path;
+    char index = ' ';
+    char worktree = ' ';
+
+    bool staged() const { return index != ' ' && index != '?'; }
+    bool unstaged() const { return worktree != ' '; }
+    bool untracked() const { return index == '?'; }
+
+    bool operator==(const StatusEntry&) const = default;
+};
+
+eacp::Processes::ProcessOptions status(const std::string& repo);
+std::vector<StatusEntry> parseStatus(const std::string& output);
+
+eacp::Processes::ProcessOptions stage(const std::string& repo,
+                                      const std::vector<std::string>& paths);
+
+// Without a first commit there is no HEAD to restore the index from, so
+// the paths are dropped from the index instead.
+eacp::Processes::ProcessOptions unstage(const std::string& repo,
+                                        const std::vector<std::string>& paths,
+                                        bool hasHead);
+
+eacp::Processes::ProcessOptions stageAll(const std::string& repo);
+eacp::Processes::ProcessOptions unstageAll(const std::string& repo, bool hasHead);
+
+eacp::Processes::ProcessOptions
+    commit(const std::string& repo, const std::string& message, bool amend);
+
+eacp::Processes::ProcessOptions lastCommitMessage(const std::string& repo);
+
+// Both the staged and unstaged changes to tracked paths, back to HEAD.
+// Untracked files aren't git's to discard: the caller deletes them.
+eacp::Processes::ProcessOptions discard(const std::string& repo,
+                                        const std::vector<std::string>& paths);
+
+eacp::Processes::ProcessOptions currentBranch(const std::string& repo);
+eacp::Processes::ProcessOptions upstream(const std::string& repo);
+eacp::Processes::ProcessOptions push(const std::string& repo);
+eacp::Processes::ProcessOptions pushSettingUpstream(const std::string& repo,
+                                                    const std::string& remote,
+                                                    const std::string& branch);
+eacp::Processes::ProcessOptions pull(const std::string& repo);
+
 eacp::Processes::ProcessOptions branches(const std::string& repo);
 
 eacp::Processes::ProcessOptions recentCommits(const std::string& repo, int count);

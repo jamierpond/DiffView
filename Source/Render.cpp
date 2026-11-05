@@ -202,11 +202,22 @@ Element Viewer::renderTree(int width, int height)
 
             const auto* file = changedFile(row.path);
             auto recent = tracker.isRecent(row.path, now, recentWindowMs);
-            auto letter = file != nullptr ? statusLetter(file->status) : ' ';
 
-            parts.push_back(text(std::string(1, letter) + " ")
-                            | color(file != nullptr ? statusColor(file->status)
-                                                    : Color::Default));
+            // lazygit's two columns: staged change green, unstaged red.
+            if (auto entry = stageStatus.find(row.path); entry != stageStatus.end())
+            {
+                parts.push_back(text(std::string(1, entry->second.index))
+                                | color(Color::Green));
+                parts.push_back(text(std::string(1, entry->second.worktree) + " ")
+                                | color(Color::Red));
+            }
+            else
+            {
+                auto letter = file != nullptr ? statusLetter(file->status) : ' ';
+                parts.push_back(text(std::string(" ") + letter + " ")
+                                | color(file != nullptr ? statusColor(file->status)
+                                                        : Color::Default));
+            }
 
             auto name = text(row.name);
 
@@ -256,6 +267,19 @@ Element Viewer::renderTree(int width, int height)
 Element Viewer::renderDiff(int width, int height)
 {
     auto lines = Elements {};
+
+    // A commit message: the box at the top, the diff it commits below.
+    if (editing && editorPurpose != EditorPurpose::comment)
+    {
+        auto boxHeight = std::min(editorHeight(width), std::max(3, height - 1));
+        lines.push_back(renderEditor(width, boxHeight));
+        auto end = std::min(static_cast<int>(rows.size()), height - boxHeight);
+
+        for (auto i = 0; i < end; ++i)
+            lines.push_back(renderRow(rows[static_cast<std::size_t>(i)], i, width));
+
+        return vbox(std::move(lines)) | flex;
+    }
 
     if (selectedFile() == nullptr)
         return vbox(std::move(lines)) | flex;
@@ -691,7 +715,16 @@ Element Viewer::renderStatus()
 
     auto pending = keys.pending();
 
-    if (editing)
+    if (!busy.empty())
+    {
+        static const auto frames = std::vector<std::string> {
+            "⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"};
+        auto frame =
+            static_cast<std::size_t>((nowMs() - busySince) / 100) % frames.size();
+        parts.push_back(text(frames[frame] + " " + busy + "… ")
+                        | color(Color::Cyan));
+    }
+    else if (editing)
         parts.push_back(text("Ctrl-S save · :wq · :q! ") | bold);
     else if (!pending.empty())
         parts.push_back(text(pending + " ") | bold);
@@ -727,6 +760,10 @@ Element Viewer::renderModal()
             return renderConfirm();
         case Modal::help:
             return renderHelp();
+        case Modal::confirmDiscard:
+        case Modal::confirmPushUpstream:
+        case Modal::output:
+            return renderGitModal();
         case Modal::none:
             break;
     }
@@ -890,12 +927,17 @@ Element Viewer::renderHelp()
                    row("Ctrl-d Ctrl-u", "half page down / up"),
                    row("h l  Tab", "tree / diff / switch pane"),
                    row("Enter  l", "tree: toggle directory, open file"),
-                   row("a  s", "all files / changed only, tree / by size"),
+                   row("zA  s", "all files / changed only, tree / by size"),
                    row("]c [c  ]f [f", "next / previous hunk, file"),
                    row("]u [u  ]a [a", "next / previous unseen file, comment"),
                    row("/ ?  n N", "search forward / back, next / previous"),
-                   row("Space pf / ps", "find a file / grep the diff"),
-                   row("Space pc", "all comments (Enter amends)"),
+                   row("Space pf ps pc", "diff pane: files / grep / comments"),
+                   separator(),
+                   text("Tree pane, like lazygit") | bold,
+                   row("Space  a", "stage / unstage file or dir, everything"),
+                   row("c  A", "commit / amend (:wq commits, empty aborts)"),
+                   row("P  p", "push / pull --ff-only"),
+                   row("d", "discard a file's changes (asks first)"),
                    separator(),
                    row("Enter  c", "comment on line (edits one already there)"),
                    row("V … c", "comment on a range"),

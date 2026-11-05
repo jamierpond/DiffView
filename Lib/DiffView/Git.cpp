@@ -75,6 +75,134 @@ eacp::Processes::ProcessOptions tracked(const std::string& repo)
     return command(repo, {"ls-files", "-z"});
 }
 
+eacp::Processes::ProcessOptions status(const std::string& repo)
+{
+    return command(repo,
+                   {"status", "--porcelain=v1", "-z", "--untracked-files=all"});
+}
+
+std::vector<StatusEntry> parseStatus(const std::string& output)
+{
+    auto entries = std::vector<StatusEntry> {};
+    auto parts = splitNul(output);
+
+    for (std::size_t i = 0; i < parts.size(); ++i)
+    {
+        const auto& part = parts[i];
+
+        if (part.size() < 4)
+            continue;
+
+        entries.push_back({part.substr(3), part[0], part[1]});
+
+        // A rename or copy is followed by the path it came from.
+        if (part[0] == 'R' || part[0] == 'C')
+            ++i;
+    }
+
+    return entries;
+}
+
+namespace
+{
+std::vector<std::string> withPaths(std::vector<std::string> args,
+                                   const std::vector<std::string>& paths)
+{
+    args.push_back("--");
+    args.insert(args.end(), paths.begin(), paths.end());
+    return args;
+}
+} // namespace
+
+eacp::Processes::ProcessOptions stage(const std::string& repo,
+                                      const std::vector<std::string>& paths)
+{
+    return command(repo, withPaths({"add", "-A"}, paths));
+}
+
+eacp::Processes::ProcessOptions unstage(const std::string& repo,
+                                        const std::vector<std::string>& paths,
+                                        bool hasHead)
+{
+    if (!hasHead)
+        return command(repo, withPaths({"rm", "--cached", "-r", "-q"}, paths));
+
+    return command(repo, withPaths({"restore", "--staged"}, paths));
+}
+
+eacp::Processes::ProcessOptions stageAll(const std::string& repo)
+{
+    return command(repo, {"add", "-A"});
+}
+
+eacp::Processes::ProcessOptions unstageAll(const std::string& repo, bool hasHead)
+{
+    if (!hasHead)
+        return command(repo, {"rm", "--cached", "-r", "-q", "."});
+
+    return command(repo, {"reset", "-q"});
+}
+
+eacp::Processes::ProcessOptions
+    commit(const std::string& repo, const std::string& message, bool amend)
+{
+    auto args = std::vector<std::string> {"commit", "-q"};
+
+    if (amend)
+        args.push_back("--amend");
+
+    args.push_back("-m");
+    args.push_back(message);
+    return command(repo, args);
+}
+
+eacp::Processes::ProcessOptions lastCommitMessage(const std::string& repo)
+{
+    return command(repo, {"log", "-1", "--format=%B"});
+}
+
+eacp::Processes::ProcessOptions discard(const std::string& repo,
+                                        const std::vector<std::string>& paths)
+{
+    return command(
+        repo,
+        withPaths({"restore", "--source=HEAD", "--staged", "--worktree"}, paths));
+}
+
+eacp::Processes::ProcessOptions currentBranch(const std::string& repo)
+{
+    return command(repo, {"rev-parse", "--abbrev-ref", "HEAD"});
+}
+
+eacp::Processes::ProcessOptions upstream(const std::string& repo)
+{
+    return command(repo,
+                   {"rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"});
+}
+
+eacp::Processes::ProcessOptions push(const std::string& repo)
+{
+    auto options = command(repo, {"push"});
+    options.mergeErrorOutput = true; // git reports progress on stderr
+    return options;
+}
+
+eacp::Processes::ProcessOptions pushSettingUpstream(const std::string& repo,
+                                                    const std::string& remote,
+                                                    const std::string& branch)
+{
+    auto options = command(repo, {"push", "-u", remote, branch});
+    options.mergeErrorOutput = true;
+    return options;
+}
+
+eacp::Processes::ProcessOptions pull(const std::string& repo)
+{
+    auto options = command(repo, {"pull", "--ff-only"});
+    options.mergeErrorOutput = true;
+    return options;
+}
+
 eacp::Processes::ProcessOptions branches(const std::string& repo)
 {
     return command(repo,

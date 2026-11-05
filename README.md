@@ -41,13 +41,34 @@ merge-base of HEAD and `name`, as in `git diff main...`; anything else
 | `Space ps` | Grep every changed line | `q` `:q` | Quit (asks about an unsent draft) |
 | `Space pc` | Every comment, newest first; Enter amends | `:` | Commands (Tab completes): `submit q base comments note resolved edit help` |
 | `b` `:base` | Change base |  |  |
-| `r` | Refresh | `a` | All files / changed files only |
+| `r` | Refresh | `zA` `:all` | All files / changed files only |
 | | | `s` | Tree / flat list by size of change |
 
-`a` shows every file in the repo, not just the changed ones: an unchanged
+`zA` shows every file in the repo, not just the changed ones: an unchanged
 file opens whole, and you comment on it as on a diff (its review block says
 "unchanged file"). `s` flattens the tree into a list sorted by the size of
 each change. `Space pf` follows both.
+
+### In the tree pane: lazygit keys
+
+The tree pane is also a small lazygit. Its file column shows `git status`'s
+two letters: the staged change in green, the unstaged one in red (`??`
+untracked).
+
+| Key | Action |
+|---|---|
+| `Space` | Stage / unstage the file, or everything under a directory |
+| `a` | Stage / unstage everything |
+| `c` | Commit: the message goes in the inline editor box; `:wq` or `^S` commits, an empty message aborts |
+| `A` | Amend the last commit (its message prefilled) |
+| `P` | Push. With no upstream it offers `push -u origin <branch>` |
+| `p` | Pull, `--ff-only` |
+| `d` | Discard a file's changes (asks; an untracked file is deleted) |
+
+Push and pull run in the background with a spinner in the status bar; git's
+output, or its error, comes up in a popup any key closes. The review keys
+(`c` comment, `Space` pickers) belong to the diff pane; the pickers are also
+`:files` and `:grep`.
 
 `/` and `?` move to the match as you type; Esc goes back to where you were,
 Enter stays. `n`/`N` repeat it and centre the line. `/` in the tree searches

@@ -11,6 +11,7 @@
 #include <Telescope.h>
 #include <VimEditor.h>
 
+#include <eacp/Core/Process/Process.h>
 #include <eacp/Core/Threads/Async.h>
 #include <eacp/Core/Threads/Timer.h>
 
@@ -59,7 +60,18 @@ private:
         help,
         picker,
         confirmSubmit,
-        confirmQuit
+        confirmQuit,
+        confirmDiscard,
+        confirmPushUpstream,
+        output
+    };
+
+    // What the inline editor box is writing.
+    enum class EditorPurpose
+    {
+        comment,
+        commit,
+        amend
     };
 
     enum class Prompt
@@ -132,6 +144,23 @@ private:
     void stepAnnotation(int direction, int count);
     void stepUnseen(int direction);
     void openInEditor();
+
+    // GitActions.cpp: the tree pane's lazygit keys
+    bool onTreeGitKey(const std::string& key);
+    void toggleStageAtCursor();
+    void toggleStageAll();
+    eacp::Threads::Async<void> startCommit(bool amend);
+    void finishCommit(const std::string& message, bool amend);
+    void askDiscard();
+    void discardConfirmed();
+    eacp::Threads::Async<void> pushChanges();
+    eacp::Threads::Async<void> pushSettingUpstream();
+    eacp::Threads::Async<void> runGit(std::string label,
+                                      eacp::Processes::ProcessOptions options,
+                                      bool showOutput);
+    void showOutput(std::string title, std::string text);
+    bool onGitModalEvent(const std::string& key);
+    ftxui::Element renderGitModal();
     void openWithSystem();
 
     // Comments.cpp
@@ -195,6 +224,18 @@ private:
     std::string baseSha;
 
     std::vector<FileDiff> files;
+
+    // `git status` per path, for the tree's staged/unstaged columns.
+    std::map<std::string, git::StatusEntry> stageStatus;
+    bool hasHead = true;
+    std::string busy;
+    std::int64_t busySince = 0;
+    std::string outputTitle;
+    std::string outputText;
+    std::string discardPath;
+    bool discardUntracked = false;
+    std::string pushBranch;
+    EditorPurpose editorPurpose = EditorPurpose::comment;
 
     // The tree's modes: every file in the repo, not just the changed ones
     // (unchanged ones read lazily into the cache); a flat list by size.

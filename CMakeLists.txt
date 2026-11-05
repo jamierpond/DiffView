@@ -50,6 +50,7 @@ add_subdirectory(Lib)
 
 add_executable(DiffView
         Source/Comments.cpp
+        Source/GitActions.cpp
         Source/Input.cpp
         Source/Main.cpp
         Source/Render.cpp

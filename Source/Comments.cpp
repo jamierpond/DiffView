@@ -361,6 +361,36 @@ bool Viewer::onEditorEvent(const ftxui::Event& event)
     if (key.empty())
         return true;
 
+    if (editorPurpose != EditorPurpose::comment)
+    {
+        switch (editor.feed(key))
+        {
+            case vim::Outcome::save:
+            case vim::Outcome::saveAndClose:
+            {
+                auto message = trimmedEnd(editor.text());
+                auto amend = editorPurpose == EditorPurpose::amend;
+                closeEditor(false);
+                focus = Pane::tree; // back where c was pressed
+                finishCommit(message, amend);
+                break;
+            }
+            case vim::Outcome::close:
+            case vim::Outcome::discard:
+                closeEditor(false);
+                focus = Pane::tree;
+                say("Commit aborted");
+                break;
+            case vim::Outcome::paste:
+                editor.insertText(eacp::Clipboard::getText());
+                break;
+            case vim::Outcome::none:
+                break;
+        }
+
+        return true;
+    }
+
     switch (editor.feed(key))
     {
         case vim::Outcome::none:
@@ -456,6 +486,7 @@ void Viewer::closeEditor(bool)
 
     auto id = editingId;
     editing = false;
+    editorPurpose = EditorPurpose::comment;
     editingId = 0;
     pendingAnnotation.reset();
     pastedImages.clear();
