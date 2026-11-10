@@ -21,7 +21,8 @@ CPMAddPackage(
         NAME Miro
         GITHUB_REPOSITORY eyalamirmusic/Miro
         GIT_TAG 996af8bcfe68d8c707960663c1447197ff5dd5b9
-        SYSTEM YES)
+        SYSTEM YES
+        EXCLUDE_FROM_ALL YES)
 
 # Only eacp's Core is used, so its graphics stack stays unbuilt. Work against
 # a local eacp checkout with:
@@ -31,6 +32,7 @@ CPMAddPackage(
         GITHUB_REPOSITORY eyalamirmusic/eacp
         GIT_TAG b8081e15d88b8cc3031c89bd676deb5db20a038f
         SYSTEM YES
+        EXCLUDE_FROM_ALL YES
         OPTIONS
             "EACP_BUILD_GRAPHICS OFF"
             "EACP_ENABLE_EXAMPLES OFF"
@@ -45,6 +47,7 @@ CPMAddPackage(
         GITHUB_REPOSITORY ArthurSonzogni/FTXUI
         GIT_TAG v7.0.3
         SYSTEM YES
+        EXCLUDE_FROM_ALL YES
         OPTIONS
             "FTXUI_ENABLE_INSTALL OFF"
             "FTXUI_QUIET ON")
@@ -96,7 +99,8 @@ if (NOT TARGET NanoTest)
             NAME NanoTest
             GITHUB_REPOSITORY eyalamirmusic/NanoTest
             GIT_TAG main
-            SYSTEM YES)
+            SYSTEM YES
+            EXCLUDE_FROM_ALL YES)
 endif ()
 
 enable_testing()
