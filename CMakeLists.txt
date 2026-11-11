@@ -13,8 +13,9 @@ endif ()
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+# No source this project compiles uses C++20 modules, so scanning each one for them is wasted work.
+set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
 
 # Only eacp's Core is used, so its graphics stack stays unbuilt. eacp brings
 # Miro, the reflection under the review Markdown; lockstep.lock pins both. Work against
@@ -96,5 +97,7 @@ if (NOT TARGET NanoTest)
             EXCLUDE_FROM_ALL YES)
 endif ()
 
-enable_testing()
-add_subdirectory(Tests)
+if (PROJECT_IS_TOP_LEVEL)
+    enable_testing()
+    add_subdirectory(Tests)
+endif ()
