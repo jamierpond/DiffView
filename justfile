@@ -10,16 +10,13 @@ build_type := "Release"
 default:
     @just --list
 
-[doc('Configure the CMake build tree (idempotent; first run fetches deps via lockstep)')]
-configure:
-    cmake -S . -B {{build_dir}} -G Ninja -DCMAKE_BUILD_TYPE={{build_type}}
-
-[doc('Build the app')]
-build: configure
+[doc('Configure + build the app; extra arguments go to the configure step')]
+build *cmake_args:
+    cmake -S . -B {{build_dir}} -G Ninja -DCMAKE_BUILD_TYPE={{build_type}} {{cmake_args}}
     cmake --build {{build_dir}} --target DiffView
 
 [doc('Build everything (app + every test binary, all under -Werror), run the tests')]
-test: configure
+test: build
     cmake --build {{build_dir}}
     ctest --test-dir {{build_dir}} --output-on-failure
 
@@ -36,6 +33,11 @@ install: build
     mv -f "$HOME/.local/bin/.diffview.new" "$HOME/.local/bin/diffview"
     ln -sf diffview "$HOME/.local/bin/dv"
     @echo "Installed ~/.local/bin/diffview (and dv)"
+
+[doc('clang-format every tracked source in place')]
+[unix]
+format:
+    git ls-files '*.h' '*.cpp' '*.mm' | xargs clang-format -i
 
 [doc('Delete the build directory')]
 clean:
