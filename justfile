@@ -14,7 +14,7 @@ build_type := "Release"
 default:
     @just --list
 
-# Configure the CMake build tree (idempotent; first run fetches deps via CPM).
+# Configure the CMake build tree (idempotent; first run fetches deps via lockstep).
 configure:
     cmake -S . -B {{build_dir}} -G Ninja -DCMAKE_BUILD_TYPE={{build_type}}
 

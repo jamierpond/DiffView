@@ -227,7 +227,7 @@ owns the main thread; a 16 ms eacp timer pumps FTXUI one non-blocking step at
 a time, git runs on eacp's process threads and lands back on the main thread,
 so nothing is shared between threads. The repo is watched with FSEvents on
 macOS and polled once a second elsewhere. Work against a local eacp checkout
-with `-DCPM_eacp_SOURCE=$HOME/projects/eacp`.
+with `-DLOCKSTEP_eacp_SOURCE=$HOME/projects/eacp`.
 
 Nothing under `Lib/` draws; each library has its own tests in `Tests/`:
 

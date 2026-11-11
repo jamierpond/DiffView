@@ -1,6 +1,7 @@
 cmake_minimum_required(VERSION 3.31)
 
 set(CMAKE_OSX_DEPLOYMENT_TARGET "11.0" CACHE STRING "")
+set(CMAKE_PROJECT_TOP_LEVEL_INCLUDES ${CMAKE_CURRENT_LIST_DIR}/cmake/lockstep.cmake)
 
 project(DiffView VERSION 0.1.0 LANGUAGES C CXX)
 
@@ -13,11 +14,9 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-include(cmake/CPM.cmake)
-
 # Reflection under the review Markdown. eacp pulls Miro at main; declaring
 # it first pins the copy both of us use.
-CPMAddPackage(
+lockstep_add_package(
         NAME Miro
         GITHUB_REPOSITORY eyalamirmusic/Miro
         GIT_TAG 996af8bcfe68d8c707960663c1447197ff5dd5b9
@@ -26,8 +25,8 @@ CPMAddPackage(
 
 # Only eacp's Core is used, so its graphics stack stays unbuilt. Work against
 # a local eacp checkout with:
-#   cmake -B build -DCPM_eacp_SOURCE=$HOME/projects/eacp
-CPMAddPackage(
+#   cmake -B build -DLOCKSTEP_eacp_SOURCE=$HOME/projects/eacp
+lockstep_add_package(
         NAME eacp
         GITHUB_REPOSITORY eyalamirmusic/eacp
         GIT_TAG b8081e15d88b8cc3031c89bd676deb5db20a038f
@@ -42,7 +41,7 @@ list(APPEND CMAKE_MODULE_PATH "${eacp_SOURCE_DIR}/CMake")
 include(cmake/StrictWarnings.cmake)
 
 # eacp has no terminal UI. FTXUI's own loop is not used: eacp's timer pumps it.
-CPMAddPackage(
+lockstep_add_package(
         NAME ftxui
         GITHUB_REPOSITORY ArthurSonzogni/FTXUI
         GIT_TAG v7.0.3
@@ -95,7 +94,7 @@ target_link_libraries(DiffView PRIVATE
 set_strict_warnings_level(DiffView)
 
 if (NOT TARGET NanoTest)
-    CPMAddPackage(
+    lockstep_add_package(
             NAME NanoTest
             GITHUB_REPOSITORY eyalamirmusic/NanoTest
             GIT_TAG main
