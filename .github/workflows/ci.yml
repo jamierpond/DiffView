@@ -30,17 +30,15 @@ jobs:
 
       - uses: extractions/setup-just@v2
 
-      - name: Install Ninja, and libcurl headers for eacp's configure
-        if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y ninja-build libcurl4-gnutls-dev
-
-      # GCC 13 flags designated initializers that leave members at their
-      # defaults (-Wmissing-field-initializers), which -Werror turns fatal.
-      - name: Build with Clang, as DiffView is built on Linux
+      # The strict warnings need Clang 19+: older Clang and GCC flag
+      # `{.field = value}` that leaves other fields at their defaults, and
+      # -Werror makes that fatal. The runner's default Clang is 18.
+      - name: Install Ninja, Clang 19, and libcurl headers for eacp's configure
         if: runner.os == 'Linux'
         run: |
-          echo "CC=clang" >> "$GITHUB_ENV"
-          echo "CXX=clang++" >> "$GITHUB_ENV"
+          sudo apt-get update && sudo apt-get install -y ninja-build clang-19 libcurl4-gnutls-dev
+          echo "CC=clang-19" >> "$GITHUB_ENV"
+          echo "CXX=clang++-19" >> "$GITHUB_ENV"
 
       - name: Install Ninja
         if: runner.os == 'macOS'
