@@ -26,7 +26,6 @@ lockstep_add_package(
         GITHUB_REPOSITORY eyalamirmusic/eacp
         GIT_TAG develop
         SYSTEM YES
-        EXCLUDE_FROM_ALL YES
         OPTIONS
             "EACP_BUILD_GRAPHICS OFF"
             "EACP_ENABLE_EXAMPLES OFF"
@@ -41,7 +40,6 @@ lockstep_add_package(
         GITHUB_REPOSITORY ArthurSonzogni/FTXUI
         GIT_TAG v7.0.3
         SYSTEM YES
-        EXCLUDE_FROM_ALL YES
         OPTIONS
             "FTXUI_ENABLE_INSTALL OFF"
             "FTXUI_QUIET ON")
@@ -93,8 +91,7 @@ if (NOT TARGET NanoTest)
             NAME NanoTest
             GITHUB_REPOSITORY eyalamirmusic/NanoTest
             GIT_TAG main
-            SYSTEM YES
-            EXCLUDE_FROM_ALL YES)
+            SYSTEM YES)
 endif ()
 
 if (PROJECT_IS_TOP_LEVEL)
