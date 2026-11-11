@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS arm64
+            os: macos-latest
+          - name: Ubuntu x64
+            os: ubuntu-24.04
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    env:
+      LOCKSTEP_CACHE: ${{ github.workspace }}/.lockstep-cache
+    steps:
+      - uses: actions/checkout@v4
+
+      # lockstep's cache holds the package sources and the library cache, so a
+      # run with an unchanged lock compiles none of the packages again.
+      - uses: actions/cache@v4
+        with:
+          path: .lockstep-cache
+          key: lockstep-${{ matrix.os }}-${{ hashFiles('lockstep.lock', 'cmake/lockstep.cmake') }}
+
+      - uses: extractions/setup-just@v2
+
+      - name: Install Ninja, and libcurl headers for eacp's configure
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y ninja-build libcurl4-gnutls-dev
+
+      - name: Install Ninja
+        if: runner.os == 'macOS'
+        run: command -v ninja || brew install ninja
+
+      - run: just build
+      - run: just test
