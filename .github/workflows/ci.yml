@@ -34,6 +34,14 @@ jobs:
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y ninja-build libcurl4-gnutls-dev
 
+      # GCC 13 flags designated initializers that leave members at their
+      # defaults (-Wmissing-field-initializers), which -Werror turns fatal.
+      - name: Build with Clang, as DiffView is built on Linux
+        if: runner.os == 'Linux'
+        run: |
+          echo "CC=clang" >> "$GITHUB_ENV"
+          echo "CXX=clang++" >> "$GITHUB_ENV"
+
       - name: Install Ninja
         if: runner.os == 'macOS'
         run: command -v ninja || brew install ninja
