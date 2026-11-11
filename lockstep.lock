@@ -18,12 +18,28 @@
       "usesGitLfs": false
     },
     {
-      "commit": "996af8bcfe68d8c707960663c1447197ff5dd5b9",
-      "hash": "52691f7d3af10864209088af270c3213985e6b213beaec7ec8d9c3f6fb3901fd",
+      "commit": "1712e729e6c292f7e73abf817bf511f35dcffe4c",
+      "hash": "99fe605149acc78215762e7f398a78f27057873450a473c51a9e9b13ea9455e3",
+      "kind": "git",
+      "name": "ESIMD",
+      "patches": [],
+      "requestedRef": "main",
+      "submoduleSelection": {
+        "isRecursive": true,
+        "isRestricted": false,
+        "paths": []
+      },
+      "submodules": [],
+      "url": "https://github.com/eyalamirmusic/ESIMD.git",
+      "usesGitLfs": false
+    },
+    {
+      "commit": "e6fc9b9acd899fbafc9431637a98198d484f6fd5",
+      "hash": "3128bcecc5b61f1e9af0b788a09221c7fd90333ce3dafd38438a5431f603ed5a",
       "kind": "git",
       "name": "Miro",
       "patches": [],
-      "requestedRef": "996af8bcfe68d8c707960663c1447197ff5dd5b9",
+      "requestedRef": "main",
       "submoduleSelection": {
         "isRecursive": true,
         "isRestricted": false,
@@ -66,12 +82,12 @@
       "usesGitLfs": false
     },
     {
-      "commit": "b8081e15d88b8cc3031c89bd676deb5db20a038f",
-      "hash": "38c0d540de0566c8da029675f35c94f2293f9c90029a14749cada88dba74e0d1",
+      "commit": "257563bee87e69bae41ecf29934c37f3eaec7e49",
+      "hash": "18142ae63e1d5485fefa46703415d6b204ff85f45db7d391c79aee146b1d1537",
       "kind": "git",
       "name": "eacp",
       "patches": [],
-      "requestedRef": "b8081e15d88b8cc3031c89bd676deb5db20a038f",
+      "requestedRef": "develop",
       "submoduleSelection": {
         "isRecursive": true,
         "isRestricted": false,
@@ -114,6 +130,6 @@
       "usesGitLfs": false
     }
   ],
-  "root": "228c82e75f05044d849cdb536488e161c4ddc20821d2d329c970b5ed4dd20d7b",
+  "root": "f0454b530ff323ebdd5f01d4c6fe34a48ab7b3fb3609369dc068f6ccf371d998",
   "version": 1
 }

@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.31)
 
 set(CMAKE_OSX_DEPLOYMENT_TARGET "11.0" CACHE STRING "")
+set(LOCKSTEP_LIBRARY_CACHE ON CACHE BOOL
+        "Link each locked package's static libraries from lockstep's shared library cache when an earlier build compiled them from the same inputs, instead of compiling them again")
 set(CMAKE_PROJECT_TOP_LEVEL_INCLUDES ${CMAKE_CURRENT_LIST_DIR}/cmake/lockstep.cmake)
 
 project(DiffView VERSION 0.1.0 LANGUAGES C CXX)
@@ -14,22 +16,14 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-# Reflection under the review Markdown. eacp pulls Miro at main; declaring
-# it first pins the copy both of us use.
-lockstep_add_package(
-        NAME Miro
-        GITHUB_REPOSITORY eyalamirmusic/Miro
-        GIT_TAG 996af8bcfe68d8c707960663c1447197ff5dd5b9
-        SYSTEM YES
-        EXCLUDE_FROM_ALL YES)
-
-# Only eacp's Core is used, so its graphics stack stays unbuilt. Work against
+# Only eacp's Core is used, so its graphics stack stays unbuilt. eacp brings
+# Miro, the reflection under the review Markdown; lockstep.lock pins both. Work against
 # a local eacp checkout with:
 #   cmake -B build -DLOCKSTEP_eacp_SOURCE=$HOME/projects/eacp
 lockstep_add_package(
         NAME eacp
         GITHUB_REPOSITORY eyalamirmusic/eacp
-        GIT_TAG b8081e15d88b8cc3031c89bd676deb5db20a038f
+        GIT_TAG develop
         SYSTEM YES
         EXCLUDE_FROM_ALL YES
         OPTIONS
