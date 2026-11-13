@@ -86,10 +86,10 @@ int changeAndWrite(const ThreadOptions& options, bool resolve)
 
     auto text = toMarkdown(round);
     auto path = root / reviewDirectory / (round.title + ".md");
-    writeText(path, text);
+    eacp::Files::writeFileAtomically(path, text);
 
     if (isNewest)
-        writeText(latestPath, text);
+        eacp::Files::writeFileAtomically(latestPath, text);
 
     std::printf("dv: %s #%d · %s\n",
                 resolve ? "resolved" : "replied to",

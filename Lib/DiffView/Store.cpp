@@ -8,9 +8,6 @@
 #include <filesystem>
 #include <map>
 #include <set>
-#include <fcntl.h>
-#include <sys/file.h>
-#include <unistd.h>
 
 namespace diffview
 {
@@ -32,7 +29,7 @@ std::string makeCanonical(const std::string& path)
     if (error)
         return path;
 
-    auto text = canonical.string();
+    auto text = eacp::FilePath {canonical}.str();
 
     while (text.size() > 1 && text.back() == '/')
         text.pop_back();
@@ -88,7 +85,7 @@ void syncLatestIntoItsRoundFile(const eacp::FilePath& directory)
     round.title = latest.title;
 
     if (auto resolved = resolutionsFrom(latest, round))
-        writeText(path, toMarkdown(*resolved));
+        eacp::Files::writeFileAtomically(path, toMarkdown(*resolved));
 }
 
 void writeNewestFullRoundAsLatest(const eacp::FilePath& directory)
@@ -105,7 +102,8 @@ void writeNewestFullRoundAsLatest(const eacp::FilePath& directory)
         auto latestPath = directory / latestReviewFileName;
 
         if (readReviewOrEmpty(latestPath).title != *id)
-            writeText(latestPath, eacp::Files::readFile(path));
+            eacp::Files::writeFileAtomically(latestPath,
+                                             eacp::Files::readFile(path));
 
         return;
     }
@@ -406,7 +404,8 @@ std::string mergeWorktreeStore(const StoreLayout& store,
     {
         renumberFile(round, renumbering, renaming);
         relinkImages(round, links);
-        writeText(getRoundPath(store.directory, round.title), toMarkdown(round));
+        eacp::Files::writeFileAtomically(getRoundPath(store.directory, round.title),
+                                         toMarkdown(round));
     }
 
     auto ownDirectory =
@@ -423,7 +422,8 @@ std::string mergeWorktreeStore(const StoreLayout& store,
         merged.baseSha = draft.baseSha;
         merged.comments.insert(
             merged.comments.end(), draft.comments.begin(), draft.comments.end());
-        writeText(ownDirectory / draftFileName, toMarkdown(merged));
+        eacp::Files::writeFileAtomically(ownDirectory / draftFileName,
+                                         toMarkdown(merged));
     }
 
     auto seen = eacp::Files::readFile(old / seenFileName);
@@ -571,7 +571,7 @@ void createStoreDirectory(const eacp::FilePath& directory)
 
     // Ignores itself, so an agent's `git add -A` never sweeps it up.
     if (!eacp::Files::exists(directory / ignoreFileName))
-        writeText(directory / ignoreFileName, "*\n");
+        eacp::Files::writeFileAtomically(directory / ignoreFileName, "*\n");
 }
 
 std::vector<std::string> listRoundIdsInOrder(const eacp::FilePath& store)
@@ -607,13 +607,6 @@ ReviewFile readReviewOrEmpty(const eacp::FilePath& path)
     return fromMarkdown(eacp::Files::readFile(path));
 }
 
-void writeText(const eacp::FilePath& path, std::string_view text)
-{
-    auto bytes =
-        std::span {reinterpret_cast<const std::uint8_t*>(text.data()), text.size()};
-    eacp::Files::writeFileAtomically(path, bytes);
-}
-
 std::vector<eacp::FilePath> listDraftFiles(const StoreLayout& store)
 {
     auto drafts = std::vector<eacp::FilePath> {};
@@ -647,18 +640,8 @@ int findHighestIdInOtherDrafts(const StoreLayout& store)
 }
 
 StoreLock::StoreLock(const eacp::FilePath& directory)
+    : lock(directory / lockFileName)
 {
-    auto path = directory / lockFileName;
-    descriptor = open(path.c_str(), O_CREAT | O_RDWR, 0644);
-
-    if (descriptor >= 0)
-        flock(descriptor, LOCK_EX);
-}
-
-StoreLock::~StoreLock()
-{
-    if (descriptor >= 0)
-        close(descriptor);
 }
 
 std::vector<std::string> mergeWorktreeStores(const StoreLayout& store)

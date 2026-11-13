@@ -1,5 +1,6 @@
 #pragma once
 
+#include <Platform.h>
 #include <Review.h>
 
 #include <eacp/Core/Utils/FilePath.h>
@@ -53,8 +54,6 @@ std::vector<ReviewFile> readRounds(const StoreLayout& store);
 
 ReviewFile readReviewOrEmpty(const eacp::FilePath& path);
 
-void writeText(const eacp::FilePath& path, std::string_view text);
-
 std::vector<eacp::FilePath> listDraftFiles(const StoreLayout& store);
 
 int findHighestIdInOtherDrafts(const StoreLayout& store);
@@ -63,13 +62,9 @@ class StoreLock
 {
 public:
     explicit StoreLock(const eacp::FilePath& directory);
-    ~StoreLock();
-
-    StoreLock(const StoreLock&) = delete;
-    StoreLock& operator=(const StoreLock&) = delete;
 
 private:
-    int descriptor = -1;
+    ExclusiveFileLock lock;
 };
 
 // Linked worktrees' own .diffview dirs from before the shared store, merged

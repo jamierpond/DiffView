@@ -1,4 +1,5 @@
 #include "Review.h"
+#include "Platform.h"
 
 #include <algorithm>
 #include <ctime>
@@ -10,8 +11,7 @@ namespace diffview
 std::string roundId(std::int64_t epochMs)
 {
     auto seconds = static_cast<std::time_t>(epochMs / 1000);
-    auto local = std::tm {};
-    localtime_r(&seconds, &local);
+    auto local = convertToLocalTime(seconds);
 
     char buffer[32];
     std::strftime(buffer, sizeof(buffer), "%Y-%m-%d-%H%M%S", &local);
@@ -51,8 +51,7 @@ std::string nextRoundId(const std::vector<std::string>& existing,
 std::string formatReplyTime(std::int64_t epochMs)
 {
     auto seconds = static_cast<std::time_t>(epochMs / 1000);
-    auto local = std::tm {};
-    localtime_r(&seconds, &local);
+    auto local = convertToLocalTime(seconds);
 
     char buffer[32];
     std::strftime(buffer, sizeof(buffer), "%Y-%m-%d %H:%M", &local);

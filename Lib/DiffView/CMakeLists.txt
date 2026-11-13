@@ -15,6 +15,12 @@ add_library(DiffViewCore STATIC
         Store.cpp
         Text.cpp)
 
+if (WIN32)
+    target_sources(DiffViewCore PRIVATE Platform-Windows.cpp)
+else ()
+    target_sources(DiffViewCore PRIVATE Platform-Posix.cpp)
+endif ()
+
 target_include_directories(DiffViewCore PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(DiffViewCore PUBLIC eacp-core TextBuffer)
 set_strict_warnings_level(DiffViewCore)

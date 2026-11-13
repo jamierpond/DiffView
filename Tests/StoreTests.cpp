@@ -6,7 +6,6 @@
 #include <NanoTest/NanoTest.h>
 
 #include <filesystem>
-#include <fstream>
 
 using namespace nano;
 using namespace diffview;
@@ -24,15 +23,15 @@ std::string runGit(const std::string& repo, std::vector<std::string> args)
 fs::path makeRepoWithWorktree(const std::string& name)
 {
     auto dir = fs::temp_directory_path() / "DiffViewTests" / name;
-    fs::remove_all(dir);
-    fs::create_directories(dir / "main");
+    eacp::Files::removeAll(dir);
+    eacp::Files::createDirectories(dir / "main");
     dir = fs::canonical(dir);
 
     auto main = (dir / "main").string();
     runGit(main, {"init", "-q", "-b", "main"});
     runGit(main, {"config", "user.email", "test@example.com"});
     runGit(main, {"config", "user.name", "Test"});
-    std::ofstream {dir / "main" / "a.txt"} << "one\n";
+    eacp::Files::writeFile(dir / "main" / "a.txt", "one\n");
     runGit(main, {"add", "."});
     runGit(main, {"commit", "-q", "-m", "first"});
     runGit(main,
@@ -54,7 +53,7 @@ Annotation makeComment(int id, const std::string& text)
 
 void writeRound(const fs::path& worktree, const ReviewFile& round)
 {
-    writeText(
+    eacp::Files::writeFileAtomically(
         eacp::FilePath {worktree / ".diffview" / "reviews" / (round.title + ".md")},
         toMarkdown(round));
 }
@@ -98,16 +97,18 @@ auto tLayoutFromBothWorktrees = test(
     auto fromLinked = findStore((dir / "main-perf").string());
 
     check(fromMain.has_value() && fromLinked.has_value());
-    check(fromMain->directory.str() == (dir / "main" / ".diffview").string());
+    check(fromMain->directory.str()
+          == eacp::FilePath {dir / "main" / ".diffview"}.str());
     check(fromLinked->directory == fromMain->directory);
     check(fromMain->worktreeName.empty());
     check(fromMain->worktreeDirectory == fromMain->directory);
     check(fromLinked->worktreeName == "main-perf");
     check(fromLinked->worktreeDirectory.str()
-          == (dir / "main" / ".diffview" / "worktrees" / "main-perf").string());
-    check(fromLinked->worktree.str() == (dir / "main-perf").string());
+          == eacp::FilePath {dir / "main" / ".diffview" / "worktrees" / "main-perf"}
+                 .str());
+    check(fromLinked->worktree.str() == eacp::FilePath {dir / "main-perf"}.str());
     check(fromMain->linkedWorktrees.size() == 1);
-    check(fromMain->linkedWorktrees[0] == (dir / "main-perf").string());
+    check(fromMain->linkedWorktrees[0] == eacp::FilePath {dir / "main-perf"}.str());
 };
 
 auto tBareLayout =
@@ -150,17 +151,20 @@ auto tMerge =
                                  .baseSha = "def",
                                  .comments = {makeComment(3, "perf three")}};
     writeRound(perf, perfLater);
-    writeText(eacp::FilePath {perf / ".diffview" / "latest.md"},
-              toMarkdown(perfLater));
-    writeText(eacp::FilePath {perf / ".diffview" / "images" / "1-1.png"}, "png");
-    writeText(eacp::FilePath {perf / ".diffview" / "seen"}, "1 2\n5 1\n");
+    eacp::Files::writeFileAtomically(
+        eacp::FilePath {perf / ".diffview" / "latest.md"}, toMarkdown(perfLater));
+    eacp::Files::writeFileAtomically(
+        eacp::FilePath {perf / ".diffview" / "images" / "1-1.png"}, "png");
+    eacp::Files::writeFileAtomically(eacp::FilePath {perf / ".diffview" / "seen"},
+                                     "1 2\n5 1\n");
 
     auto draft = ReviewFile {.title = "draft",
                              .baseLabel = "HEAD",
                              .baseSha = "def",
                              .comments = {makeComment(2, "perf draft two")}};
     draft.comments[0].draft = true;
-    writeText(eacp::FilePath {perf / ".diffview" / "draft.md"}, toMarkdown(draft));
+    eacp::Files::writeFileAtomically(
+        eacp::FilePath {perf / ".diffview" / "draft.md"}, toMarkdown(draft));
 
     auto store = findStore(perf.string());
     check(store.has_value());
@@ -168,15 +172,15 @@ auto tMerge =
     auto notes = mergeWorktreeStores(*store);
     check(notes.size() == 1);
     check(notes[0].find("#1 is now #6") != std::string::npos);
-    check(!fs::exists(perf / ".diffview"));
+    check(!eacp::Files::exists(perf / ".diffview"));
 
     auto ids = listRoundIdsInOrder(store->directory);
     check(ids.size() == 3);
     check(ids[0] == "2026-10-16-100000" && ids[1] == "2026-10-16-100000-2");
 
     auto rounds = readRounds(*store);
-    check(rounds[0].worktree == main.string());
-    check(rounds[1].worktree == perf.string());
+    check(rounds[0].worktree == eacp::FilePath {main}.str());
+    check(rounds[1].worktree == eacp::FilePath {perf}.str());
     check(rounds[1].renumbering.find("was round 2026-10-16-100000")
           != std::string::npos);
     check(rounds[1].renumbering.find("#1 is now #6") != std::string::npos);

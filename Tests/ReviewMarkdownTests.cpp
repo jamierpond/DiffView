@@ -2,10 +2,10 @@
 
 #include <NanoTest/NanoTest.h>
 
-#include <cstdlib>
+#include <eacp/Core/Utils/Environment.h>
+#include <eacp/Core/Utils/Files.h>
+
 #include <optional>
-#include <fstream>
-#include <sstream>
 
 using namespace nano;
 using namespace diffview;
@@ -75,14 +75,6 @@ std::string golden(const std::string& name)
     return std::string {DIFFVIEW_GOLDEN_DIR} + "/" + name;
 }
 
-std::string readText(const std::string& path)
-{
-    auto in = std::ifstream {path, std::ios::binary};
-    auto buffer = std::stringstream {};
-    buffer << in.rdbuf();
-    return buffer.str();
-}
-
 std::string findCommentJson(const ReviewFile& review, int id)
 {
     for (const auto& comment: review.comments)
@@ -125,15 +117,16 @@ auto tGolden = test("ReviewMarkdown/the exact output matches the golden file") =
     auto text = toMarkdown(sampleReview());
 
     // DIFFVIEW_UPDATE_GOLDEN=1 rewrites it; read the diff before committing.
-    if (std::getenv("DIFFVIEW_UPDATE_GOLDEN") != nullptr)
-        std::ofstream {golden("review.md"), std::ios::binary} << text;
+    if (eacp::getEnv("DIFFVIEW_UPDATE_GOLDEN").has_value())
+        eacp::Files::writeFile(golden("review.md"), text);
 
-    check(text == readText(golden("review.md")));
+    check(text == eacp::Files::readFile(golden("review.md")));
 };
 
 auto tGoldenParses = test("ReviewMarkdown/the golden file parses to the review") = []
 {
-    check(isSameReview(fromMarkdown(readText(golden("review.md"))), sampleReview()));
+    check(isSameReview(fromMarkdown(eacp::Files::readFile(golden("review.md"))),
+                       sampleReview()));
 };
 
 auto tReordered = test("ReviewMarkdown/blocks in any order") = []

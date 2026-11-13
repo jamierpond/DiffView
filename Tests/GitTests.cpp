@@ -4,8 +4,9 @@
 
 #include <NanoTest/NanoTest.h>
 
+#include <eacp/Core/Utils/Files.h>
+
 #include <filesystem>
-#include <fstream>
 
 using namespace nano;
 using namespace diffview;
@@ -15,15 +16,15 @@ namespace
 std::string freshRepo(const std::string& name)
 {
     auto dir = std::filesystem::temp_directory_path() / "DiffViewTests" / name;
-    std::filesystem::remove_all(dir);
-    std::filesystem::create_directories(dir);
+    eacp::Files::removeAll(dir);
+    eacp::Files::createDirectories(dir);
     auto repo = dir.string();
 
     git::run(git::command(repo, {"init", "-q", "-b", "main"}));
     git::run(git::command(repo, {"config", "user.email", "test@example.com"}));
     git::run(git::command(repo, {"config", "user.name", "Test"}));
 
-    std::ofstream {dir / "tracked.txt"} << "one\ntwo\nthree\n";
+    eacp::Files::writeFile(dir / "tracked.txt", "one\ntwo\nthree\n");
     git::run(git::command(repo, {"add", "."}));
     git::run(git::command(repo, {"commit", "-q", "-m", "first"}));
 
@@ -32,7 +33,7 @@ std::string freshRepo(const std::string& name)
 
 void write(const std::string& repo, const std::string& path, const std::string& text)
 {
-    std::ofstream {std::filesystem::path {repo} / path} << text;
+    eacp::Files::writeFile(std::filesystem::path {repo} / path, text);
 }
 } // namespace
 

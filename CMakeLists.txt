@@ -86,6 +86,12 @@ else ()
             Source/RepoWatcher-Poll.cpp)
 endif ()
 
+if (WIN32)
+    target_sources(DiffView PRIVATE Source/ProcessPlatform-Windows.cpp)
+else ()
+    target_sources(DiffView PRIVATE Source/ProcessPlatform-Posix.cpp)
+endif ()
+
 target_link_libraries(DiffView PRIVATE
         DiffViewCore
         VimEditor

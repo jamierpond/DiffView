@@ -156,9 +156,7 @@ std::optional<FileDiff> diffBaseCopyAgainstWorkingFile(const std::string& repo,
     auto uniqueName = std::to_string(std::hash<std::string> {}(repo + "\n" + path));
     auto baseCopyFile =
         std::filesystem::temp_directory_path() / ("dv-base-" + uniqueName);
-    auto bytes = std::span {reinterpret_cast<const std::uint8_t*>(baseCopy->data()),
-                            baseCopy->size()};
-    eacp::Files::writeFile(baseCopyFile, bytes);
+    eacp::Files::writeFile(baseCopyFile, *baseCopy);
 
     auto result = eacp::Processes::run(command(repo,
                                                {"diff",
@@ -171,8 +169,7 @@ std::optional<FileDiff> diffBaseCopyAgainstWorkingFile(const std::string& repo,
                                                 "--",
                                                 baseCopyFile.string(),
                                                 path}));
-    auto error = std::error_code {};
-    std::filesystem::remove(baseCopyFile, error);
+    eacp::Files::removeFile(baseCopyFile);
 
     constexpr auto noIndexExitCodeForDifferences = 1;
 

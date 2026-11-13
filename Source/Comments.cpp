@@ -103,8 +103,9 @@ void Viewer::loadStore()
 
         if (auto resolved = resolutionsFrom(latest, round))
         {
-            writeText(storeDirectory / reviewDirectory / (resolved->title + ".md"),
-                      toMarkdown(*resolved));
+            eacp::Files::writeFileAtomically(storeDirectory / reviewDirectory
+                                                 / (resolved->title + ".md"),
+                                             toMarkdown(*resolved));
             round = std::move(*resolved);
         }
     }
@@ -159,7 +160,7 @@ void Viewer::saveStore()
 
     createStoreDirectory(store.directory);
     eacp::Files::createDirectories(store.worktreeDirectory);
-    writeText(store.worktreeDirectory / draftFileName, text);
+    eacp::Files::writeFileAtomically(store.worktreeDirectory / draftFileName, text);
     lastDraftText = text;
 }
 
@@ -180,8 +181,9 @@ void Viewer::submitReview()
     auto review = toMarkdown(round);
 
     eacp::Files::createDirectories(storeDirectory / reviewDirectory);
-    writeText(storeDirectory / reviewDirectory / (id + ".md"), review);
-    writeText(storeDirectory / latestReviewFileName, review);
+    eacp::Files::writeFileAtomically(storeDirectory / reviewDirectory / (id + ".md"),
+                                     review);
+    eacp::Files::writeFileAtomically(storeDirectory / latestReviewFileName, review);
 
     rounds.push_back(id);
     lastRoundsSignature = roundsSignature();
@@ -208,7 +210,8 @@ void Viewer::sendReply(Annotation& note, const std::string& text)
     round.worktree = store.worktree.str();
 
     eacp::Files::createDirectories(storeDirectory / reviewDirectory);
-    writeText(storeDirectory / reviewDirectory / (id + ".md"), toMarkdown(round));
+    eacp::Files::writeFileAtomically(storeDirectory / reviewDirectory / (id + ".md"),
+                                     toMarkdown(round));
 
     note.replies.push_back({reviewerName, time, text, false});
     note.round = id;
@@ -290,8 +293,8 @@ void Viewer::setThreadView(int id, ThreadView view)
         threadFolds[id] = {view, note->replies.size()};
 
     eacp::Files::createDirectories(store.worktreeDirectory);
-    writeText(store.worktreeDirectory / foldsFileName,
-              formatThreadFolds(threadFolds));
+    eacp::Files::writeFileAtomically(store.worktreeDirectory / foldsFileName,
+                                     formatThreadFolds(threadFolds));
     rebuildRows();
 }
 
@@ -678,7 +681,7 @@ void Viewer::pasteIntoEditor()
                 break;
         }
 
-        writeText(dir / name, *png);
+        eacp::Files::writeFileAtomically(dir / name, *png);
 
         auto path = std::string {imageDirectory} + "/" + name;
         pastedImages.push_back(path);

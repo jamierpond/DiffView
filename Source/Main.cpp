@@ -1,5 +1,6 @@
 #include "Commands.h"
 #include "Monitor.h"
+#include "ProcessPlatform.h"
 #include "Viewer.h"
 
 #include <Review.h>
@@ -14,7 +15,6 @@
 #include <map>
 #include <optional>
 #include <string>
-#include <unistd.h>
 #include <vector>
 
 namespace
@@ -331,7 +331,7 @@ int runCommand(const std::string& command, int argc, char* argv[])
     for (const auto& word: positional)
         text += (text.empty() ? "" : " ") + word;
 
-    if (command == "reply" && text.empty() && isatty(STDIN_FILENO) == 0)
+    if (command == "reply" && text.empty() && !diffview::isStandardInputTerminal())
         text = readStdin();
 
     auto options = diffview::ThreadOptions {
@@ -382,7 +382,8 @@ int main(int argc, char* argv[])
         return 1;
     }
 
-    if (isatty(STDIN_FILENO) == 0 || isatty(STDOUT_FILENO) == 0)
+    if (!diffview::isStandardInputTerminal()
+        || !diffview::isStandardOutputTerminal())
     {
         std::fputs("diffview: needs a terminal\n", stderr);
         return 1;

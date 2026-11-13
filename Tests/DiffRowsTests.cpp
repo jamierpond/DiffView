@@ -2,6 +2,8 @@
 
 #include <NanoTest/NanoTest.h>
 
+#include <eacp/Core/Utils/Containers.h>
+
 using namespace nano;
 using namespace diffview;
 
@@ -158,11 +160,10 @@ std::vector<int> findShownReplies(const std::vector<DiffRow>& rows)
     return shown;
 }
 
-long countKind(const std::vector<DiffRow>& rows, RowKind kind)
+int countKind(const std::vector<DiffRow>& rows, RowKind kind)
 {
-    return std::count_if(rows.begin(),
-                         rows.end(),
-                         [&](const DiffRow& row) { return row.kind == kind; });
+    return EA::Vectors::countIf(
+        rows, [&](const DiffRow& row) { return row.kind == kind; });
 }
 } // namespace
 

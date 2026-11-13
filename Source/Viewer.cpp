@@ -5,9 +5,8 @@
 
 #include <eacp/Core/App/App.h>
 #include <eacp/Core/Process/Process.h>
+#include <eacp/Core/Utils/Environment.h>
 #include <eacp/Core/Utils/Files.h>
-
-#include <cstdlib>
 
 #include <algorithm>
 #include <chrono>
@@ -38,6 +37,17 @@ std::vector<std::string> splitWords(const std::string& text)
     }
 
     return words;
+}
+
+std::string getEditorCommandFromEnvironment()
+{
+    if (auto visual = eacp::getEnvValue("VISUAL"); !visual.empty())
+        return visual;
+
+    if (auto editor = eacp::getEnvValue("EDITOR"); !editor.empty())
+        return editor;
+
+    return "nvim";
 }
 
 bool isOurs(const std::string& path)
@@ -1029,18 +1039,8 @@ void Viewer::openInEditor()
     for (auto i = diffCursor; i >= 0 && line == 0; --i)
         line = lineAt(i);
 
-    auto command = std::string {};
-
-    if (const auto* fromEnv = std::getenv("VISUAL"); fromEnv != nullptr && *fromEnv)
-        command = fromEnv;
-    else if (const auto* editorEnv = std::getenv("EDITOR");
-             editorEnv != nullptr && *editorEnv)
-        command = editorEnv;
-    else
-        command = "nvim";
-
     // $EDITOR may carry its own arguments ("code -w").
-    auto words = splitWords(command);
+    auto words = splitWords(getEditorCommandFromEnvironment());
     auto processOptions = eacp::Processes::ProcessOptions {};
     processOptions.executable = words.front();
     processOptions.arguments.assign(words.begin() + 1, words.end());
