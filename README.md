@@ -1,3 +1,5 @@
+> This is a vibe-coded app for my personal productivity, it is not intended for other people or to represent great engineering work. Use at your own risk!
+
 <h1 align="center">DiffView</h1>
 
 <p align="center"><b>Watch your coding agents work in a live terminal diff, and tell them what you think, line by line.</b></p>
