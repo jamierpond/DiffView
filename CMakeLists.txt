@@ -42,6 +42,17 @@ lockstep_add_package(
             "FTXUI_ENABLE_INSTALL OFF"
             "FTXUI_QUIET ON")
 
+if (NOT TARGET NanoTest)
+    lockstep_add_package(
+            NAME NanoTest
+            GITHUB_REPOSITORY eyalamirmusic/NanoTest
+            GIT_TAG main
+            SYSTEM YES)
+endif ()
+
+# Set after the packages, so only this project's own targets build with -Werror.
+set(CMAKE_COMPILE_WARNING_AS_ERROR ON)
+
 add_subdirectory(Lib)
 
 add_executable(DiffView
@@ -83,14 +94,6 @@ target_link_libraries(DiffView PRIVATE
         ftxui::dom
         ftxui::component)
 set_strict_warnings_level(DiffView)
-
-if (NOT TARGET NanoTest)
-    lockstep_add_package(
-            NAME NanoTest
-            GITHUB_REPOSITORY eyalamirmusic/NanoTest
-            GIT_TAG main
-            SYSTEM YES)
-endif ()
 
 if (PROJECT_IS_TOP_LEVEL)
     enable_testing()
