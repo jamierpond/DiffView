@@ -59,6 +59,16 @@ lockstep_add_package(
         GIT_TAG main
         SYSTEM YES)
 
+# Only Rudder's SessionLog (the per-launch usage log) is used; RUDDER_CLIENT_ONLY
+# leaves the Rudder app unbuilt. Work against a local checkout with:
+#   cmake -B build -DLOCKSTEP_Rudder_SOURCE=$HOME/projects/Rudder
+lockstep_add_package(
+        NAME Rudder
+        GITHUB_REPOSITORY jamierpond/Rudder
+        GIT_TAG main
+        OPTIONS "RUDDER_CLIENT_ONLY ON"
+        SYSTEM YES)
+
 # Set after the packages, so only this project's own targets build with -Werror.
 set(CMAKE_COMPILE_WARNING_AS_ERROR ON)
 
@@ -72,6 +82,7 @@ add_executable(DiffView
         Source/Main.cpp
         Source/Monitor.cpp
         Source/Render.cpp
+        Source/UsageLog.cpp
         Source/Viewer.cpp)
 
 set_target_properties(DiffView PROPERTIES OUTPUT_NAME diffview)
@@ -105,6 +116,7 @@ target_link_libraries(DiffView PRIVATE
         DiffViewCore
         VimEditor
         Telescope
+        SessionLog
         ftxui::screen
         ftxui::dom
         ftxui::component)

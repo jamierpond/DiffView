@@ -72,7 +72,14 @@ Viewer::Viewer(const Options& optionsToUse)
     , base(optionsToUse.base)
     , pump([this] { tick(); }, eacp::Time::MS {16})
 {
-    root = ftxui::Renderer([this] { return render(); })
+    root = ftxui::Renderer(
+               [this]
+               {
+                   auto timer = UsageTimer {};
+                   auto element = render();
+                   logSlowRender(timer.getElapsedMs());
+                   return element;
+               })
            | ftxui::CatchEvent([this](const ftxui::Event& event)
                                { return onEvent(event); });
 
@@ -90,9 +97,13 @@ Viewer::Viewer(const Options& optionsToUse)
     if (!isSamePath(store.home.str(), store.worktree.str()))
     {
         createStoreDirectory(store.directory);
-        storeWatcher = std::make_unique<RepoWatcher>(
-            store.directory.str(),
-            [this](const std::vector<std::string>&) { scheduleRefresh(120); });
+        storeWatcher =
+            std::make_unique<RepoWatcher>(store.directory.str(),
+                                          [this](const std::vector<std::string>&)
+                                          {
+                                              refreshCause = "store";
+                                              scheduleRefresh(120);
+                                          });
     }
 
     for (const auto& note: options.mergeNotes)
@@ -100,10 +111,17 @@ Viewer::Viewer(const Options& optionsToUse)
 
     messageAt = nowMs();
 
+    logEvent("viewer.start",
+             {{"comments", static_cast<int>(annotations.size())},
+              {"rounds", static_cast<int>(rounds.size())},
+              {"linked_worktree", storeWatcher != nullptr}});
     refresh();
 }
 
-Viewer::~Viewer() = default;
+Viewer::~Viewer()
+{
+    logEvent("viewer.stop", {{"drafts", draftCount(annotations)}});
+}
 
 void Viewer::tick()
 {
@@ -135,8 +153,16 @@ void Viewer::onRepoChanged(const std::vector<std::string>& changed)
         if (git::affectsDiff(path))
             relevant = true;
 
-    if (relevant)
-        scheduleRefresh(120);
+    if (!changed.empty())
+        logEvent(
+            "watcher.change",
+            {{"paths", static_cast<int>(changed.size())}, {"relevant", relevant}});
+
+    if (!relevant)
+        return;
+
+    refreshCause = changed.empty() ? "poll" : "watcher";
+    scheduleRefresh(120);
 }
 
 void Viewer::scheduleRefresh(int delayMs)
@@ -171,6 +197,8 @@ eacp::Threads::Async<void> Viewer::refresh()
     do
     {
         refreshAgain = false;
+        auto cause = std::exchange(refreshCause, std::string_view {"request"});
+        auto timer = UsageTimer {};
 
         auto resolved =
             co_await eacp::Processes::runAsync(git::resolveBase(repo, base));
@@ -184,6 +212,8 @@ eacp::Threads::Async<void> Viewer::refresh()
             }
             else
             {
+                logEvent("refresh.error",
+                         {{"cause", cause}, {"reason", "bad-base"}});
                 say("Can't resolve base " + base.label() + "; back to HEAD");
                 base = {};
                 refreshAgain = true;
@@ -200,10 +230,13 @@ eacp::Threads::Async<void> Viewer::refresh()
 
         if (diffResult.exitCode != 0)
         {
+            logEvent("refresh.error",
+                     {{"cause", cause}, {"exit", diffResult.exitCode}});
             say("git diff failed: " + trim(diffResult.errorOutput));
             continue;
         }
 
+        auto gitMs = timer.getElapsedMs();
         auto diffs = parseDiff(diffResult.output);
 
         if (allFiles)
@@ -270,10 +303,50 @@ eacp::Threads::Async<void> Viewer::refresh()
         }
 
         std::erase_if(diffs, [](const FileDiff& file) { return isOurs(file.path); });
+        auto fileCount = static_cast<int>(diffs.size());
         apply(std::move(diffs), sha);
+        logRefresh(cause, fileCount, gitMs, timer.getElapsedMs());
     } while (refreshAgain);
 
     refreshing = false;
+}
+
+void Viewer::logSlowFileRead(std::int64_t bytes, std::int64_t readMs)
+{
+    constexpr auto slowFileReadMs = std::int64_t {20};
+
+    // Every refresh re-reads each commented file; only a slow read is news.
+    if (readMs >= slowFileReadMs)
+        logEvent("file.read_slow", {{"bytes", bytes}, {"ms", readMs}});
+}
+
+void Viewer::logSlowRender(std::int64_t renderMs) const
+{
+    constexpr auto frameBudgetMs = std::int64_t {16};
+
+    if (renderMs > frameBudgetMs)
+        logEvent("render.slow",
+                 {{"rows", static_cast<int>(rows.size())}, {"ms", renderMs}});
+}
+
+void Viewer::logRefresh(std::string_view cause,
+                        int fileCount,
+                        std::int64_t gitMs,
+                        std::int64_t totalMs)
+{
+    constexpr auto slowPollRefreshMs = std::int64_t {100};
+
+    // Polling refreshes every second; only a slow one is worth a line.
+    if (cause == "poll" && totalMs < slowPollRefreshMs)
+        return;
+
+    logEvent("refresh.done",
+             {{"cause", cause},
+              {"files", fileCount},
+              {"all_files", allFiles},
+              {"full_context", fullContext},
+              {"git_ms", gitMs},
+              {"ms", totalMs}});
 }
 
 void Viewer::apply(std::vector<FileDiff> diffs, const std::string& sha)
@@ -385,6 +458,8 @@ OptionalFileDiff Viewer::findOrReadFile(const std::string& path)
     auto size = std::filesystem::file_size(full, error);
     auto file = FileDiff {};
 
+    auto timer = UsageTimer {};
+
     if (!error && size > maxUntrackedBytes)
     {
         file.path = path;
@@ -398,6 +473,7 @@ OptionalFileDiff Viewer::findOrReadFile(const std::string& path)
         file = unchangedFile(path, eacp::Files::readFile(full));
     }
 
+    logSlowFileRead(static_cast<std::int64_t>(size), timer.getElapsedMs());
     return unchangedFiles.emplace(path, std::move(file)).first->second;
 }
 
@@ -538,6 +614,7 @@ void Viewer::select(std::string path)
 {
     if (path != selectedPath)
     {
+        auto timer = UsageTimer {};
         selectedPath = path;
         diffCursor = 0;
         diffTop = 0;
@@ -553,6 +630,11 @@ void Viewer::select(std::string path)
                 diffCursor = static_cast<int>(i);
                 break;
             }
+
+        logEvent("file.select",
+                 {{"in_diff", findFile(path).has_value()},
+                  {"rows", static_cast<int>(rows.size())},
+                  {"ms", timer.getElapsedMs()}});
     }
 
     for (const auto& parent: parentDirectories(path))
@@ -994,6 +1076,8 @@ void Viewer::jumpToAnnotation(int id)
 
 void Viewer::requestQuit()
 {
+    logEvent("app.quit_request", {{"drafts", draftCount(annotations)}});
+
     if (draftCount(annotations) > 0)
         modal = Modal::confirmQuit;
     else
@@ -1051,6 +1135,7 @@ void Viewer::openInEditor()
     processOptions.captureOutput = false;
 
     auto launched = true;
+    auto timer = UsageTimer {};
 
     // Blocking the main thread is the point: eacp's timer, and with it
     // FTXUI, stays off the terminal until the editor exits.
@@ -1063,6 +1148,11 @@ void Viewer::openInEditor()
             if (launched)
                 child.wait();
         })();
+
+    logEvent("editor.external",
+             {{"editor", std::filesystem::path {words.front()}.filename().string()},
+              {"launched", launched},
+              {"ms", timer.getElapsedMs()}});
 
     if (!launched)
         say("Couldn't start " + words.front());
@@ -1085,7 +1175,11 @@ void Viewer::openWithSystem()
         return;
     }
 
-    if (!eacp::Files::openWithSystem((std::filesystem::path {repo} / path).string()))
+    auto opened =
+        eacp::Files::openWithSystem((std::filesystem::path {repo} / path).string());
+    logEvent("file.open_with_system", {{"opened", opened}});
+
+    if (!opened)
         say("Couldn't open " + path);
 }
 } // namespace diffview

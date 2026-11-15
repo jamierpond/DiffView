@@ -1,6 +1,7 @@
 #pragma once
 
 #include "RepoWatcher.h"
+#include "UsageLog.h"
 
 #include <ChangeTracker.h>
 #include <DiffRows.h>
@@ -107,9 +108,20 @@ private:
     void scheduleRefresh(int delayMs);
     eacp::Threads::Async<void> refresh();
     void apply(std::vector<FileDiff> diffs, const std::string& sha);
+    static void logSlowFileRead(std::int64_t bytes, std::int64_t readMs);
+    void logSlowRender(std::int64_t renderMs) const;
+    void logRefresh(std::string_view cause,
+                    int fileCount,
+                    std::int64_t gitMs,
+                    std::int64_t totalMs);
     void redraw();
     void say(std::string message);
     void requestQuit();
+    std::string_view getPaneName() const;
+    void feedKeyAndRunCommand(const std::string& key);
+    vim::Outcome feedEditorAndLogModeChange(const std::string& key);
+    std::string_view getPromptName() const;
+    std::string_view getPickerName() const;
 
     OptionalFileDiff selectedFile() const;
     OptionalFileDiff findFile(const std::string& path) const;
@@ -323,6 +335,10 @@ private:
     std::vector<git::BaseChoice> baseChoices;
     telescope::LineEdit pickerLine;
     PickerKind pickerKind = PickerKind::files;
+    UsageTimer pickerTimer;
+    int pickerKeyCount = 0;
+    UsageTimer promptTimer;
+    UsageTimer editorTimer;
 
     std::string message;
     std::int64_t messageAt = 0;
@@ -330,6 +346,7 @@ private:
     bool refreshing = false;
     bool refreshAgain = false;
     bool refreshScheduled = false;
+    std::string_view refreshCause = "launch";
     std::int64_t lastRecentRedraw = 0;
     std::shared_ptr<int> lifetime = std::make_shared<int>(0);
 

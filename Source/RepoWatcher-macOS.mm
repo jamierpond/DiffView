@@ -1,4 +1,5 @@
 #include "RepoWatcher.h"
+#include "UsageLog.h"
 
 #include <CoreServices/CoreServices.h>
 #include <dispatch/dispatch.h>
@@ -88,7 +89,12 @@ RepoWatcher::RepoWatcher(const std::string& root, Handler onChange)
     CFRelease(rootString);
 
     if (native->stream == nullptr)
+    {
+        logEvent("watcher.start", {{"kind", "fsevents"}, {"started", false}});
         return;
+    }
+
+    logEvent("watcher.start", {{"kind", "fsevents"}, {"started", true}});
 
     FSEventStreamSetDispatchQueue(native->stream, dispatch_get_main_queue());
     FSEventStreamStart(native->stream);

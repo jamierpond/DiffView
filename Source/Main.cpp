@@ -1,5 +1,6 @@
 #include "Commands.h"
 #include "Monitor.h"
+#include "UsageLog.h"
 #include "ProcessPlatform.h"
 #include "Viewer.h"
 
@@ -132,6 +133,7 @@ const std::map<std::string, std::string>& commandHelp()
 
 int usageError(const std::string& message, const std::string& command)
 {
+    diffview::logEvent("cli.usage_error", {{"command", command}});
     std::fprintf(stderr, "dv: %s\n", message.c_str());
 
     if (!command.empty())
@@ -220,6 +222,25 @@ void printMergeNotes(const std::vector<std::string>& notes)
         std::fprintf(stderr, "dv: %s\n", note.c_str());
 }
 
+void logCommandShape(const std::string& command, const Arguments& arguments)
+{
+    auto flagNames = std::string {};
+
+    for (const auto& [name, isSet]: arguments.flags)
+        if (isSet)
+            flagNames += (flagNames.empty() ? "" : ",") + name.substr(2);
+
+    for (const auto& [name, value]: arguments.values)
+        flagNames += (flagNames.empty() ? "" : ",") + name;
+
+    auto positionalCount = static_cast<int>(arguments.positional.size());
+    diffview::logEvent("cli.command",
+                       {{"command", command},
+                        {"flags", flagNames},
+                        {"positional", positionalCount},
+                        {"help", arguments.help}});
+}
+
 std::string readStdin()
 {
     return {std::istreambuf_iterator<char> {std::cin},
@@ -232,6 +253,8 @@ int runCommand(const std::string& command, int argc, char* argv[])
 
     if (auto error = parseArguments(argc, argv, 2, arguments))
         return usageError(*error, command);
+
+    logCommandShape(command, arguments);
 
     if (command == "help" || arguments.help)
     {
@@ -272,6 +295,7 @@ int runCommand(const std::string& command, int argc, char* argv[])
 
     if (!root)
     {
+        diffview::logEvent("cli.error", {{"reason", "not-a-git-tree"}});
         std::fprintf(stderr, "dv: %s is not inside a git work tree\n", path.c_str());
         return 1;
     }
@@ -340,13 +364,20 @@ int runCommand(const std::string& command, int argc, char* argv[])
     return command == "reply" ? diffview::runReply(options)
                               : diffview::runResolve(options);
 }
-} // namespace
 
-int main(int argc, char* argv[])
+int runAndLogCommand(const std::string& command, int argc, char* argv[])
 {
-    if (argc > 1 && commandHelp().contains(argv[1]))
-        return runCommand(argv[1], argc, argv);
+    diffview::startUsageLog(command);
+    auto timer = diffview::UsageTimer {};
+    auto exitCode = runCommand(command, argc, argv);
+    diffview::logEvent(
+        "app.quit",
+        {{"mode", command}, {"exit", exitCode}, {"ms", timer.getElapsedMs()}});
+    return exitCode;
+}
 
+int runViewer(int argc, char* argv[])
+{
     auto options = diffview::Options {};
     auto path = std::filesystem::current_path().string();
 
@@ -377,6 +408,7 @@ int main(int argc, char* argv[])
 
     if (!root)
     {
+        diffview::logEvent("tui.error", {{"reason", "not-a-git-tree"}});
         std::fprintf(
             stderr, "diffview: %s is not inside a git work tree\n", path.c_str());
         return 1;
@@ -385,6 +417,7 @@ int main(int argc, char* argv[])
     if (!diffview::isStandardInputTerminal()
         || !diffview::isStandardOutputTerminal())
     {
+        diffview::logEvent("tui.error", {{"reason", "no-terminal"}});
         std::fputs("diffview: needs a terminal\n", stderr);
         return 1;
     }
@@ -397,5 +430,21 @@ int main(int argc, char* argv[])
     options.repo = *root;
     options.store = *store;
     options.mergeNotes = diffview::mergeWorktreeStores(*store);
+    diffview::logEvent(
+        "tui.open",
+        {{"base", options.base.label()},
+         {"merge_notes", static_cast<int>(options.mergeNotes.size())}});
     return eacp::Apps::run<diffview::Viewer>(options);
+}
+} // namespace
+
+int main(int argc, char* argv[])
+{
+    if (argc > 1 && commandHelp().contains(argv[1]))
+        return runAndLogCommand(argv[1], argc, argv);
+
+    diffview::startUsageLog("tui");
+    auto exitCode = runViewer(argc, argv);
+    diffview::logEvent("app.quit", {{"mode", "tui"}, {"exit", exitCode}});
+    return exitCode;
 }

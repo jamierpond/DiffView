@@ -104,6 +104,7 @@ bool Viewer::onEvent(const ftxui::Event& event)
     switch (modal)
     {
         case Modal::help:
+            logEvent("help.close");
             modal = Modal::none;
             return true;
         case Modal::picker:
@@ -125,10 +126,71 @@ bool Viewer::onEvent(const ftxui::Event& event)
         return true;
     }
 
-    if (auto command = keys.feed(key))
-        run(*command);
-
+    feedKeyAndRunCommand(key);
     return true;
+}
+
+void Viewer::feedKeyAndRunCommand(const std::string& key)
+{
+    auto keysBefore = keys.pending();
+    auto command = keys.feed(key);
+
+    if (!command)
+    {
+        if (keys.pending().empty())
+            logEvent("key.unmapped", {{"keys", keysBefore + key}});
+
+        return;
+    }
+
+    logEvent("key.action",
+             {{"keys", keysBefore + key},
+              {"action", getActionName(command->action)},
+              {"count", command->count},
+              {"pane", getPaneName()}});
+    run(*command);
+}
+
+std::string_view Viewer::getPaneName() const
+{
+    if (focus == Pane::tree)
+        return "tree";
+
+    return "diff";
+}
+
+std::string_view Viewer::getPromptName() const
+{
+    switch (prompt)
+    {
+        case Prompt::search:
+            return "search";
+        case Prompt::filter:
+            return "filter";
+        case Prompt::command:
+            return "command";
+        case Prompt::none:
+            break;
+    }
+
+    return "none";
+}
+
+std::string_view Viewer::getPickerName() const
+{
+    switch (pickerKind)
+    {
+        case PickerKind::files:
+            return "files";
+        case PickerKind::grep:
+            return "grep";
+        case PickerKind::comments:
+            return "comments";
+        case PickerKind::base:
+            break;
+    }
+
+    return "base";
 }
 
 void Viewer::run(const Command& command)
@@ -353,6 +415,8 @@ void Viewer::run(const Command& command)
 void Viewer::openPrompt(Prompt kind, bool forward)
 {
     prompt = kind;
+    promptTimer = UsageTimer {};
+    logEvent("prompt.open", {{"kind", getPromptName()}, {"forward", forward}});
     promptLine.set({});
     searchForward = forward;
     searchPane = focus;
@@ -420,6 +484,8 @@ bool Viewer::onPromptEvent(const std::string& key)
     if (key == "Esc" || key == "C-c"
         || (key == "Backspace" && promptLine.text().empty()))
     {
+        logEvent("prompt.cancel",
+                 {{"kind", getPromptName()}, {"ms", promptTimer.getElapsedMs()}});
         restoreOrigin();
         close();
         return true;
@@ -428,6 +494,11 @@ bool Viewer::onPromptEvent(const std::string& key)
     if (key == "Enter")
     {
         auto text = promptLine.text();
+        logEvent("prompt.submit",
+                 {{"kind", getPromptName()},
+                  {"chars", static_cast<int>(text.size())},
+                  {"found", liveHit.has_value()},
+                  {"ms", promptTimer.getElapsedMs()}});
 
         if (prompt == Prompt::command)
         {
@@ -663,6 +734,8 @@ void Viewer::runCommandLine(const std::string& line)
     if (name.empty())
         return;
 
+    logEvent("command.run", {{"name", name}, {"has_argument", !argument.empty()}});
+
     if (name == "submit")
         submitReview();
     else if (name == "q" || name == "quit")
@@ -710,7 +783,10 @@ void Viewer::runCommandLine(const std::string& line)
     else if (name == "help")
         modal = Modal::help;
     else
+    {
+        logEvent("command.unknown", {{"name", name}});
         say("Not a command: " + name);
+    }
 }
 
 void Viewer::toggleFullContext()
@@ -727,6 +803,9 @@ void Viewer::openPicker(PickerKind kind)
     picker = telescope::Picker {};
     picker.setFuzzy(kind != PickerKind::grep);
     modal = Modal::picker;
+    pickerTimer = UsageTimer {};
+    pickerKeyCount = 0;
+    logEvent("picker.open", {{"kind", getPickerName()}});
 
     if (kind == PickerKind::base)
     {
@@ -885,8 +964,16 @@ void Viewer::refreshPickerItems()
 
 bool Viewer::onPickerEvent(const std::string& key)
 {
+    ++pickerKeyCount;
+
     if (key == "Esc" || key == "C-c")
+    {
+        logEvent("picker.cancel",
+                 {{"kind", getPickerName()},
+                  {"keys", pickerKeyCount},
+                  {"ms", pickerTimer.getElapsedMs()}});
         modal = Modal::none;
+    }
     else if (key == "Enter")
         acceptPicker();
     else if (key == "Down" || key == "C-n" || key == "C-j")
@@ -912,6 +999,12 @@ void Viewer::acceptPicker()
 {
     modal = Modal::none;
     const auto* item = picker.current();
+    logEvent("picker.pick",
+             {{"kind", getPickerName()},
+              {"has_item", item != nullptr},
+              {"query_chars", static_cast<int>(pickerLine.text().size())},
+              {"keys", pickerKeyCount},
+              {"ms", pickerTimer.getElapsedMs()}});
 
     switch (pickerKind)
     {
@@ -977,6 +1070,9 @@ bool Viewer::onConfirmEvent(const std::string& key)
 {
     auto yes = key == "y" || key == "Y" || key == "Enter";
     auto no = key == "n" || key == "N";
+
+    logEvent("confirm.answer",
+             {{"submit", modal == Modal::confirmSubmit}, {"key", key}});
 
     if (modal == Modal::confirmSubmit)
     {

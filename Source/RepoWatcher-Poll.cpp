@@ -1,4 +1,5 @@
 #include "RepoWatcher.h"
+#include "UsageLog.h"
 
 #include <eacp/Core/Threads/Timer.h>
 
@@ -18,6 +19,7 @@ struct RepoWatcher::Native
 RepoWatcher::RepoWatcher(const std::string&, Handler onChange)
     : native(std::make_unique<Native>(std::move(onChange)))
 {
+    logEvent("watcher.start", {{"kind", "poll"}, {"started", true}});
 }
 
 RepoWatcher::~RepoWatcher() = default;

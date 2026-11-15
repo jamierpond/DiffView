@@ -82,6 +82,22 @@
       "usesGitLfs": false
     },
     {
+      "commit": "8c6013ae23be206632e2938c83b6cadc9f1af9a2",
+      "hash": "6ad01032fc1cc63a16bc5e27d9d67564e49a5e86048c3364d9f6e4a4d664872e",
+      "kind": "git",
+      "name": "Rudder",
+      "patches": [],
+      "requestedRef": "main",
+      "submoduleSelection": {
+        "isRecursive": true,
+        "isRestricted": false,
+        "paths": []
+      },
+      "submodules": [],
+      "url": "https://github.com/jamierpond/Rudder.git",
+      "usesGitLfs": false
+    },
+    {
       "commit": "2c1487ac07cd4fbd047ac7363cd60603b1912093",
       "hash": "47f8a2135ebe8cd49ef461ac4030f12a62daeb42e672f760648d9205e916e930",
       "kind": "git",
@@ -130,8 +146,8 @@
       "usesGitLfs": false
     },
     {
-      "commit": "6c11d262b91f64a7d00d76238a94f12a61a72060",
-      "hash": "e5358803df6397889d9f7df30a161a5e28c553adb4f545aad86e14c938273389",
+      "commit": "7b00b34d0c75cd04ad660c341b731bd7292c29df",
+      "hash": "7364b785890a45321991d6d0c8ca82a7350d5951a09651329a2aac5ccc19b957",
       "kind": "git",
       "name": "text-buffer",
       "patches": [],
@@ -146,6 +162,6 @@
       "usesGitLfs": false
     }
   ],
-  "root": "da5407467d19c550dc61579a67a9c5302bf0d2412dd9f33eacf4b3561cd4bedd",
+  "root": "09f97db714264a68dd6344265c7cc3a25c589b650996030b4217a86dce9f03a9",
   "version": 1
 }

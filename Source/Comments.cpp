@@ -68,6 +68,22 @@ std::string trimmedEnd(std::string text)
 
     return text;
 }
+std::string_view getEditorModeName(vim::Mode mode)
+{
+    switch (mode)
+    {
+        case vim::Mode::normal:
+            return "normal";
+        case vim::Mode::insert:
+            return "insert";
+        case vim::Mode::command:
+            return "command";
+        case vim::Mode::search:
+            break;
+    }
+
+    return "search";
+}
 } // namespace
 
 std::string Viewer::roundsSignature() const
@@ -142,7 +158,12 @@ bool Viewer::reloadStoreIfChanged()
     if (draftText == lastDraftText && roundsSignature() == lastRoundsSignature)
         return false;
 
+    auto timer = UsageTimer {};
     loadStore();
+    logEvent("store.reload",
+             {{"comments", static_cast<int>(annotations.size())},
+              {"rounds", static_cast<int>(rounds.size())},
+              {"ms", timer.getElapsedMs()}});
     say("Reloaded the review files (changed on disk)");
     return true;
 }
@@ -170,6 +191,7 @@ void Viewer::submitReview()
 
     if (draftCount(annotations) == 0)
     {
+        logEvent("review.submit_empty");
         say("Nothing to submit: no new or changed comments");
         return;
     }
@@ -187,6 +209,10 @@ void Viewer::submitReview()
 
     rounds.push_back(id);
     lastRoundsSignature = roundsSignature();
+    logEvent("review.submit",
+             {{"round", id},
+              {"comments", static_cast<int>(round.comments.size())},
+              {"listening", static_cast<int>(listening.size())}});
     saveStore();
     rebuildRows();
     say("Submitted " + std::to_string(round.comments.size()) + " comments → "
@@ -335,10 +361,12 @@ void Viewer::annotateAtCursor(bool wholeHunk)
     const auto& file = selected->get();
 
     auto range = std::optional<LineRange> {};
+    auto scope = std::string_view {"line"};
     const auto& row = rows[static_cast<std::size_t>(diffCursor)];
 
     if (visualAnchor)
     {
+        scope = "selection";
         auto from = std::min(*visualAnchor, diffCursor);
         auto to = std::max(*visualAnchor, diffCursor);
 
@@ -364,6 +392,7 @@ void Viewer::annotateAtCursor(bool wholeHunk)
     }
     else if (wholeHunk || row.kind == RowKind::hunkHeader)
     {
+        scope = "hunk";
         range = hunkRange(diffCursor);
     }
     else if (row.kind == RowKind::line)
@@ -389,6 +418,10 @@ void Viewer::annotateAtCursor(bool wholeHunk)
     }
 
     pendingAnnotation = makeAnnotation(file, *range, findNextAnnotationId(), {});
+    logEvent("comment.start",
+             {{"scope", scope},
+              {"lines", range->last - range->first + 1},
+              {"id", pendingAnnotation->id}});
     editingId = 0;
     openEditor("New comment · " + file.path + ":" + lineLabel(*pendingAnnotation),
                {});
@@ -408,6 +441,7 @@ void Viewer::commentOnFile()
 
     visualAnchor.reset();
     pendingAnnotation = makeFileAnnotation(file.path, findNextAnnotationId(), {});
+    logEvent("comment.start", {{"scope", "file"}, {"id", pendingAnnotation->id}});
     editingId = 0;
     diffCursor = 0;
     openEditor("New comment · " + file.path + " (whole file)", {});
@@ -417,6 +451,7 @@ void Viewer::commentGeneral()
 {
     visualAnchor.reset();
     pendingAnnotation = makeFileAnnotation({}, findNextAnnotationId(), {});
+    logEvent("comment.start", {{"scope", "general"}, {"id", pendingAnnotation->id}});
     editingId = 0;
     select({});
     diffCursor = 0;
@@ -425,6 +460,7 @@ void Viewer::commentGeneral()
 
 void Viewer::openEditor(std::string title, const std::string& text)
 {
+    editorTimer = UsageTimer {};
     editorTitle = std::move(title);
     editor.setText(text);
     pastedImages.clear();
@@ -453,9 +489,12 @@ bool Viewer::onEditorEvent(const ftxui::Event& event)
         return true;
 
     if (key == "Tab" && editor.mode() == vim::Mode::insert && completeMention())
+    {
+        logEvent("editor.complete_mention");
         return true;
+    }
 
-    switch (editor.feed(key))
+    switch (feedEditorAndLogModeChange(key))
     {
         case vim::Outcome::none:
             break;
@@ -476,6 +515,7 @@ bool Viewer::onEditorEvent(const ftxui::Event& event)
             closeEditor(true);
             break;
         case vim::Outcome::discard:
+            logEvent("editor.discard");
             closeEditor(false);
             say("Discarded");
             break;
@@ -485,6 +525,19 @@ bool Viewer::onEditorEvent(const ftxui::Event& event)
     }
 
     return true;
+}
+
+vim::Outcome Viewer::feedEditorAndLogModeChange(const std::string& key)
+{
+    auto modeBefore = editor.mode();
+    auto outcome = editor.feed(key);
+
+    if (editor.mode() != modeBefore)
+        logEvent("editor.mode",
+                 {{"from", getEditorModeName(modeBefore)},
+                  {"to", getEditorModeName(editor.mode())}});
+
+    return outcome;
 }
 
 bool Viewer::commitEditor()
@@ -514,6 +567,12 @@ bool Viewer::commitEditor()
         if (existing->round.empty())
             removeUnlinked(imagesIn(existing->text));
 
+        logEvent("comment.edit",
+                 {{"id", editingId},
+                  {"changed", existing->text != text},
+                  {"chars", static_cast<int>(text.size())},
+                  {"images", static_cast<int>(linked.size())}});
+
         if (existing->text != text)
         {
             existing->text = text;
@@ -542,20 +601,31 @@ bool Viewer::commitEditor()
                 dropPending();
 
             if (!text.empty())
+            {
+                logEvent("reply.send",
+                         {{"id", note->id},
+                          {"chars", static_cast<int>(text.size())},
+                          {"images", static_cast<int>(linked.size())}});
                 sendReply(*note, text);
+            }
             else if (!pending)
                 return false;
         }
         else if (pending && text.empty())
         {
+            logEvent("reply.draft_delete", {{"id", note->id}});
             dropPending();
         }
         else if (pending)
         {
+            logEvent("reply.draft_edit",
+                     {{"id", note->id}, {"chars", static_cast<int>(text.size())}});
             note->replies[*pending].text = text;
         }
         else if (!text.empty())
         {
+            logEvent("reply.draft_add",
+                     {{"id", note->id}, {"chars", static_cast<int>(text.size())}});
             note->replies.push_back(
                 {reviewerName, formatReplyTime(nowMs()), text, true});
             note->draft = true;
@@ -571,6 +641,10 @@ bool Viewer::commitEditor()
             return false;
 
         removeUnlinked(pastedImages);
+        logEvent("comment.add",
+                 {{"id", pendingAnnotation->id},
+                  {"chars", static_cast<int>(text.size())},
+                  {"images", static_cast<int>(linked.size())}});
         pendingAnnotation->text = text;
         annotations.push_back(*pendingAnnotation);
         editingId = pendingAnnotation->id;
@@ -600,6 +674,7 @@ void Viewer::closeEditor(bool)
 
     auto id = editingId != 0 ? editingId : replyCommentId.value_or(0);
     auto wasReplying = replyCommentId.has_value();
+    logEvent("editor.close", {{"id", id}, {"ms", editorTimer.getElapsedMs()}});
     editing = false;
     editingId = 0;
     replyCommentId.reset();
@@ -686,6 +761,10 @@ void Viewer::pasteIntoEditor()
         auto path = std::string {imageDirectory} + "/" + name;
         pastedImages.push_back(path);
         editor.insertText("![image](" + path + ")");
+        logEvent("editor.paste",
+                 {{"kind", "image"},
+                  {"id", id},
+                  {"bytes", static_cast<int>(png->size())}});
         say("Pasted image " + path);
         return;
     }
@@ -694,10 +773,13 @@ void Viewer::pasteIntoEditor()
 
     if (text.empty())
     {
+        logEvent("editor.paste", {{"kind", "empty"}});
         say("Clipboard is empty");
         return;
     }
 
+    logEvent("editor.paste",
+             {{"kind", "text"}, {"chars", static_cast<int>(text.size())}});
     editor.insertText(text);
 }
 
@@ -715,6 +797,7 @@ void Viewer::editAtCursor()
     if (findFold(threadFolds, id).view == ThreadView::collapsed)
         setThreadView(id, ThreadView::recent);
 
+    logEvent("comment.edit_start", {{"id", id}});
     editingId = id;
     replyCommentId.reset();
     pendingAnnotation.reset();
@@ -752,10 +835,12 @@ void Viewer::deleteAtCursor()
     {
         removeImages(*existing);
         std::erase_if(annotations, [&](const Annotation& a) { return a.id == id; });
+        logEvent("comment.delete", {{"id", id}});
         say("Comment deleted");
     }
     else
     {
+        logEvent("comment.withdraw", {{"id", id}});
         existing->withdrawn = true;
         existing->draft = true;
         say("Withdrawn: the next round tells the agent");
@@ -777,6 +862,8 @@ void Viewer::toggleResolvedAtCursor()
 
     existing->resolved = !existing->resolved;
     existing->draft = true;
+    logEvent(existing->resolved ? "comment.resolve" : "comment.reopen",
+             {{"id", existing->id}});
     say(existing->resolved ? "Resolved" : "Reopened");
     saveStore();
     rebuildRows();
@@ -797,6 +884,7 @@ void Viewer::replyAtCursor()
         setThreadView(id, ThreadView::recent);
 
     auto pending = findPendingReply(*note);
+    logEvent("reply.start", {{"id", id}, {"has_draft", pending.has_value()}});
     replyCommentId = id;
     editingId = 0;
     pendingAnnotation.reset();
@@ -882,6 +970,7 @@ bool Viewer::completeMention()
 void Viewer::clearResolved()
 {
     showResolved = !showResolved;
+    logEvent("comments.show_resolved", {{"shown", showResolved}});
     rebuildRows();
     say(showResolved ? "Showing resolved comments" : "Hiding resolved comments");
 }

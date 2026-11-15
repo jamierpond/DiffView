@@ -163,4 +163,64 @@ void KeyParser::reset()
     count = 0;
     prefix.clear();
 }
+
+std::string_view getActionName(Action action)
+{
+    static const auto names = std::map<Action, std::string_view> {
+        {Action::down, "down"},
+        {Action::up, "up"},
+        {Action::top, "top"},
+        {Action::bottom, "bottom"},
+        {Action::halfPageDown, "half-page-down"},
+        {Action::halfPageUp, "half-page-up"},
+        {Action::focusTree, "focus-tree"},
+        {Action::focusDiff, "focus-diff"},
+        {Action::togglePane, "toggle-pane"},
+        {Action::open, "open"},
+        {Action::nextHunk, "next-hunk"},
+        {Action::previousHunk, "previous-hunk"},
+        {Action::nextFile, "next-file"},
+        {Action::previousFile, "previous-file"},
+        {Action::nextUnseen, "next-unseen"},
+        {Action::previousUnseen, "previous-unseen"},
+        {Action::nextAnnotation, "next-annotation"},
+        {Action::previousAnnotation, "previous-annotation"},
+        {Action::annotate, "annotate"},
+        {Action::annotateHunk, "annotate-hunk"},
+        {Action::visual, "visual"},
+        {Action::deleteAnnotation, "delete-annotation"},
+        {Action::toggleResolved, "toggle-resolved"},
+        {Action::reply, "reply"},
+        {Action::clearResolved, "clear-resolved"},
+        {Action::changeBase, "change-base"},
+        {Action::refresh, "refresh"},
+        {Action::search, "search"},
+        {Action::searchBackward, "search-backward"},
+        {Action::searchNext, "search-next"},
+        {Action::searchPrevious, "search-previous"},
+        {Action::commentFile, "comment-file"},
+        {Action::generalNote, "general-note"},
+        {Action::toggleAllFiles, "toggle-all-files"},
+        {Action::toggleFullContext, "toggle-full-context"},
+        {Action::clearFilter, "clear-filter"},
+        {Action::toggleTreeSort, "toggle-tree-sort"},
+        {Action::submitRound, "submit-round"},
+        {Action::commandLine, "command-line"},
+        {Action::openInEditor, "open-in-editor"},
+        {Action::openWithSystem, "open-with-system"},
+        {Action::pickFiles, "pick-files"},
+        {Action::grepDiffs, "grep-diffs"},
+        {Action::pickComments, "pick-comments"},
+        {Action::toggleFold, "toggle-fold"},
+        {Action::closeFold, "close-fold"},
+        {Action::openFold, "open-fold"},
+        {Action::closeAllFolds, "close-all-folds"},
+        {Action::openAllFolds, "open-all-folds"},
+        {Action::help, "help"},
+        {Action::quit, "quit"},
+        {Action::cancel, "cancel"},
+    };
+
+    return names.at(action);
+}
 } // namespace diffview

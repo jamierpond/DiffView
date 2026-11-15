@@ -134,3 +134,9 @@ auto tReply = test("Keymap/R replies on a comment's thread") = []
 
     check(command && command->action == Action::reply);
 };
+
+auto tActionNames = test("Keymap/actions have kebab-case log names") = []
+{
+    check(getActionName(Action::nextHunk) == "next-hunk");
+    check(getActionName(Action::quit) == "quit");
+};

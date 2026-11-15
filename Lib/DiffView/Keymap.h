@@ -2,6 +2,7 @@
 
 #include <optional>
 #include <string>
+#include <string_view>
 
 namespace diffview
 {
@@ -66,6 +67,9 @@ struct Command
     Action action = Action::cancel;
     int count = 1;
 };
+
+// The action's name in the session log: "next-hunk" for Action::nextHunk.
+std::string_view getActionName(Action action);
 
 // Keys are named "j", "G", " " (the leader), "C-d", "Tab", "Enter", "Esc".
 class KeyParser
