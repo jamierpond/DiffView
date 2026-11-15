@@ -66,10 +66,7 @@ std::vector<BaseChoice> baseChoices(const std::vector<std::string>& branchNames,
 
 std::optional<std::string> run(eacp::Processes::ProcessOptions options);
 
-// A path taken out of the index but left in the working tree (git rm --cached,
-// or the old name of a staged rename) is both deleted in git diff and listed
-// as untracked. This diffs the base's copy against the working tree file;
-// identical copies come back with status unchanged.
+// For a path git lists as both deleted and untracked (git rm --cached).
 std::optional<FileDiff> diffBaseCopyAgainstWorkingFile(const std::string& repo,
                                                        const std::string& baseSha,
                                                        const std::string& path,
