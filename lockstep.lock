@@ -34,8 +34,8 @@
       "usesGitLfs": false
     },
     {
-      "commit": "e6fc9b9acd899fbafc9431637a98198d484f6fd5",
-      "hash": "3128bcecc5b61f1e9af0b788a09221c7fd90333ce3dafd38438a5431f603ed5a",
+      "commit": "47dc6d5d34d1fc08a70e3bab7683d415e6f3fd77",
+      "hash": "3444464da7091e313480a0a2ad63692e4e0e091ca10dd098d9b363ede62e0835",
       "kind": "git",
       "name": "Miro",
       "patches": [],
@@ -82,8 +82,8 @@
       "usesGitLfs": false
     },
     {
-      "commit": "257563bee87e69bae41ecf29934c37f3eaec7e49",
-      "hash": "18142ae63e1d5485fefa46703415d6b204ff85f45db7d391c79aee146b1d1537",
+      "commit": "2c1487ac07cd4fbd047ac7363cd60603b1912093",
+      "hash": "47f8a2135ebe8cd49ef461ac4030f12a62daeb42e672f760648d9205e916e930",
       "kind": "git",
       "name": "eacp",
       "patches": [],
@@ -128,8 +128,24 @@
       "submodules": [],
       "url": "https://github.com/KhronosGroup/glslang.git",
       "usesGitLfs": false
+    },
+    {
+      "commit": "6c11d262b91f64a7d00d76238a94f12a61a72060",
+      "hash": "e5358803df6397889d9f7df30a161a5e28c553adb4f545aad86e14c938273389",
+      "kind": "git",
+      "name": "text-buffer",
+      "patches": [],
+      "requestedRef": "main",
+      "submoduleSelection": {
+        "isRecursive": true,
+        "isRestricted": false,
+        "paths": []
+      },
+      "submodules": [],
+      "url": "https://github.com/jamierpond/text-buffer.git",
+      "usesGitLfs": false
     }
   ],
-  "root": "f0454b530ff323ebdd5f01d4c6fe34a48ab7b3fb3609369dc068f6ccf371d998",
+  "root": "da5407467d19c550dc61579a67a9c5302bf0d2412dd9f33eacf4b3561cd4bedd",
   "version": 1
 }

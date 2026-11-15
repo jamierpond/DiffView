@@ -21,16 +21,6 @@ target_compile_definitions(DiffViewTests PRIVATE
 set_strict_warnings_level(DiffViewTests)
 nano_discover_tests(DiffViewTests)
 
-add_executable(TextBufferTests TextBufferTests.cpp)
-target_link_libraries(TextBufferTests PRIVATE NanoTest NanoTestMain TextBuffer)
-set_strict_warnings_level(TextBufferTests)
-nano_discover_tests(TextBufferTests)
-
-add_executable(VimEditorTests VimEditorTests.cpp)
-target_link_libraries(VimEditorTests PRIVATE NanoTest NanoTestMain VimEditor)
-set_strict_warnings_level(VimEditorTests)
-nano_discover_tests(VimEditorTests)
-
 add_executable(TelescopeTests TelescopeTests.cpp)
 target_link_libraries(TelescopeTests PRIVATE NanoTest NanoTestMain Telescope)
 set_strict_warnings_level(TelescopeTests)

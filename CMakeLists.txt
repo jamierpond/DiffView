@@ -50,6 +50,15 @@ if (NOT TARGET NanoTest)
             SYSTEM YES)
 endif ()
 
+# TextBuffer and VimEditor, the editor behind comments and the commit box.
+# Work against a local checkout with:
+#   cmake -B build -DLOCKSTEP_text-buffer_SOURCE=$HOME/projects/text-buffer
+lockstep_add_package(
+        NAME text-buffer
+        GITHUB_REPOSITORY jamierpond/text-buffer
+        GIT_TAG main
+        SYSTEM YES)
+
 # Set after the packages, so only this project's own targets build with -Werror.
 set(CMAKE_COMPILE_WARNING_AS_ERROR ON)
 
