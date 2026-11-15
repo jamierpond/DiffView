@@ -1,6 +1,7 @@
 #include "UsageLog.h"
 #include "Viewer.h"
 
+#include <PondApp/DataDirectory.h>
 #include <SessionLog/SessionLog.h>
 
 #include <eacp/Core/Utils/FilePath.h>
@@ -10,6 +11,7 @@
 #include <fstream>
 #include <iomanip>
 #include <sstream>
+#include <vector>
 
 namespace diffview
 {
@@ -38,14 +40,29 @@ std::string formatClockTime(std::int64_t epochMs)
          << std::setw(3) << epochMs % millisecondsPerSecond;
     return text.str();
 }
+// Before pond/DiffView the logs sat in a folder named after the program that
+// ran: diffview, or dv through the link. Only the first found can move.
+std::vector<pondapp::DataDirectoryMove>
+    moveOldLogs(const std::filesystem::path& logsDirectory)
+{
+    const auto appDataDirectory =
+        std::filesystem::path {eacp::FilePath::appDataDirectory().str()};
+    auto moves = std::vector<pondapp::DataDirectoryMove> {};
+
+    for (const auto* programName: {"diffview", "dv"})
+        if (auto move = pondapp::moveOldDataDirectory(
+                appDataDirectory / programName / "logs", logsDirectory))
+            moves.push_back(*move);
+
+    return moves;
+}
 } // namespace
 
 void startUsageLog(std::string_view mode)
 {
-    auto logsDirectory =
-        (std::filesystem::path {eacp::FilePath::appSupportDirectory().str()}
-         / "logs")
-            .string();
+    const auto logsDirectoryPath = pondapp::getPondAppDataDirectory("DiffView") / "logs";
+    const auto moves = moveOldLogs(logsDirectoryPath);
+    const auto logsDirectory = logsDirectoryPath.string();
     auto error = std::error_code {};
     std::filesystem::create_directories(logsDirectory, error);
 
@@ -53,6 +70,10 @@ void startUsageLog(std::string_view mode)
                         std::ios::app);
     sessionlog::deleteOldSessionLogs(logsDirectory, sessionLogsToKeep);
     logEvent("app.launch", {{"mode", mode}});
+
+    for (const auto& move: moves)
+        logEvent("app.migrate",
+                 {{"from", move.from.string()}, {"to", move.to.string()}, {"error", move.error}});
 }
 
 void logEvent(std::string_view event,

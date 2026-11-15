@@ -116,6 +116,7 @@ target_link_libraries(DiffView PRIVATE
         DiffViewCore
         VimEditor
         Telescope
+        PondApp
         SessionLog
         ftxui::screen
         ftxui::dom
