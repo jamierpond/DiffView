@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
 	<key>CFBundleIdentifier</key>
-	<string>com.pond.diffview</string>
+	<string>audio.pond.diffview</string>
 	<key>CFBundleName</key>
 	<string>DiffView</string>
 	<key>LSBackgroundOnly</key>
