@@ -20,6 +20,7 @@ just run                        # on this repo
 just run ~/projects/other       # on another one
 just run --base main...         # diff against where HEAD forked from main
 dv main...                       # same, installed; a non-directory argument is the base
+dv --version                     # prints e.g. dv 0.1.0+f30059f: semver, then the commit it was built from
 ```
 
 The base defaults to `HEAD`: the working tree and the index against the last

@@ -25,3 +25,5 @@ add_executable(TelescopeTests TelescopeTests.cpp)
 target_link_libraries(TelescopeTests PRIVATE NanoTest NanoTestMain Telescope)
 set_strict_warnings_level(TelescopeTests)
 nano_discover_tests(TelescopeTests)
+
+pond_add_version_test(DiffView dv)

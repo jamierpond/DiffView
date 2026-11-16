@@ -87,6 +87,8 @@ add_executable(DiffView
 
 set_target_properties(DiffView PROPERTIES OUTPUT_NAME diffview)
 
+pond_add_version_library(DiffViewVersion)
+
 # Elsewhere the repo is polled and only text pastes.
 if (APPLE)
     target_sources(DiffView PRIVATE
@@ -116,6 +118,7 @@ target_link_libraries(DiffView PRIVATE
         DiffViewCore
         VimEditor
         Telescope
+        DiffViewVersion
         PondApp
         SessionLog
         ftxui::screen

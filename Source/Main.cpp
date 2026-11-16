@@ -4,6 +4,7 @@
 #include "ProcessPlatform.h"
 #include "Viewer.h"
 
+#include <PondVersion.h>
 #include <Review.h>
 #include <Store.h>
 
@@ -31,6 +32,7 @@ constexpr auto usage =
     "  dv main...      against where HEAD forked from main\n"
     "  dv HEAD~3       against that exact commit\n"
     "  dv ~/other      another repo\n"
+    "  dv --version    the version and the commit it was built from\n"
     "\n"
     "It is a terminal UI for a human. F1 inside it lists the keys.\n"
     "\n"
@@ -436,10 +438,23 @@ int runViewer(int argc, char* argv[])
          {"merge_notes", static_cast<int>(options.mergeNotes.size())}});
     return eacp::Apps::run<diffview::Viewer>(options);
 }
+bool isVersionRequest(int argc, char* argv[])
+{
+    return argc == 2 && std::string {argv[1]} == "--version";
+}
+
+int printVersion()
+{
+    std::printf("dv %s\n", pond::getVersionString().c_str());
+    return 0;
+}
 } // namespace
 
 int main(int argc, char* argv[])
 {
+    if (isVersionRequest(argc, argv))
+        return printVersion();
+
     if (argc > 1 && commandHelp().contains(argv[1]))
         return runAndLogCommand(argv[1], argc, argv);
 
