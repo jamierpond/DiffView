@@ -22,7 +22,7 @@ set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
 lockstep_add_package(
         NAME eacp
         GITHUB_REPOSITORY eyalamirmusic/eacp
-        GIT_TAG develop
+        GIT_TAG jp/develop
         SYSTEM YES
         OPTIONS
             "EACP_BUILD_GRAPHICS OFF"
