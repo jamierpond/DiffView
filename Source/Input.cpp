@@ -82,7 +82,7 @@ std::vector<std::string>
     }
 
     if (file.binary)
-        out.push_back("Binary file");
+        out.emplace_back("Binary file");
 
     return out;
 }
@@ -937,7 +937,7 @@ void Viewer::refreshPickerItems()
                     out.insert(out.end(), group->begin(), group->end());
 
                 out.insert(out.end(), note->after.begin(), note->after.end());
-                out.push_back("");
+                out.emplace_back();
 
                 for (auto& line: splitLines(note->text))
                     out.push_back(line);

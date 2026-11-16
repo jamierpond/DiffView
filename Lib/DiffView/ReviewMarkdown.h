@@ -62,7 +62,7 @@ struct ReviewFile
 // value tree, so the reflected structs load and save through Miro. Fields
 // the format doesn't carry load as their defaults.
 std::string printMarkdown(const Miro::JSON& review);
-Miro::JSON parseMarkdown(std::string_view text);
+Miro::JSON parseMarkdown(std::string_view input);
 
 std::string toMarkdown(const ReviewFile& review);
 ReviewFile fromMarkdown(std::string_view text);

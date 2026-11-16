@@ -46,6 +46,17 @@ Node makeTree(const std::vector<std::string>& files)
     return root;
 }
 
+std::string joinTreePath(const std::string& prefix, const std::string& name)
+{
+    if (prefix.empty())
+        return name;
+
+    auto path = prefix;
+    path += '/';
+    path += name;
+    return path;
+}
+
 void flatten(const Node& node,
              const std::string& prefix,
              int depth,
@@ -54,7 +65,7 @@ void flatten(const Node& node,
 {
     for (const auto& [name, child]: node.directories)
     {
-        auto path = prefix.empty() ? name : prefix + "/" + name;
+        auto path = joinTreePath(prefix, name);
         auto expanded = !collapsed.contains(path);
         rows.push_back({name, path, depth, true, expanded});
 
@@ -66,8 +77,7 @@ void flatten(const Node& node,
     std::sort(files.begin(), files.end());
 
     for (const auto& name: files)
-        rows.push_back(
-            {name, prefix.empty() ? name : prefix + "/" + name, depth, false, true});
+        rows.push_back({name, joinTreePath(prefix, name), depth, false, true});
 }
 } // namespace
 

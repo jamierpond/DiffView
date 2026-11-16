@@ -140,7 +140,7 @@ Color cursorBackground(bool focused)
 
 Element cursorLine(Element line, bool focused)
 {
-    return line | bgcolor(cursorBackground(focused));
+    return std::move(line) | bgcolor(cursorBackground(focused));
 }
 
 std::string padLeft(const std::string& text, int width)

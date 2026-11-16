@@ -59,7 +59,7 @@ auto tCursorKeepsRow =
     auto before = buildTree(files, {});
     auto cursor = rowOf(before, "Lib");
     auto more = files;
-    more.push_back("Lib/0.cpp");
+    more.emplace_back("Lib/0.cpp");
     auto after = buildTree(more, {});
 
     check(cursorAfterRebuild(before, cursor, after, "Lib/a.cpp")

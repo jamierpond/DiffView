@@ -459,7 +459,7 @@ private:
         }
 
         if (rules.hasTripleQuotes
-            && (startsAt(text, position, "\"\"\"")
+            && (startsAt(text, position, R"(""")")
                 || startsAt(text, position, "'''")))
         {
             auto start = position;

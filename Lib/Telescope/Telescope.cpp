@@ -313,7 +313,7 @@ void Picker::refilter()
 
     for (std::size_t i = 0; i < all.size(); ++i)
         if (auto match = fuzzyMatch(text, all[i].label))
-            scored.push_back({match->score, static_cast<int>(i)});
+            scored.emplace_back(match->score, static_cast<int>(i));
 
     std::stable_sort(scored.begin(),
                      scored.end(),

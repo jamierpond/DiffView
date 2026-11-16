@@ -97,8 +97,8 @@ auto tDashLinesInsideHunk = test("Diff/a removed '-- x' line is not a header") =
 
 auto tQuotedPath = test("Diff/unquotes C-quoted paths") = []
 {
-    check(unquotePath("\"b/ta\\tb\"") == "b/ta\tb");
-    check(unquotePath("\"caf\\303\\251\"") == "caf\xC3\xA9");
+    check(unquotePath(R"("b/ta\tb")") == "b/ta\tb");
+    check(unquotePath(R"("caf\303\251")") == "caf\xC3\xA9");
     check(unquotePath("plain") == "plain");
 
     auto files =

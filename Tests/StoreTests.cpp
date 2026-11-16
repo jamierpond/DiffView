@@ -14,9 +14,9 @@ namespace
 {
 namespace fs = std::filesystem;
 
-std::string runGit(const std::string& repo, std::vector<std::string> args)
+std::string runGit(const std::string& repo, const std::vector<std::string>& args)
 {
-    return git::run(git::command(repo, std::move(args))).value_or("");
+    return git::run(git::command(repo, args)).value_or("");
 }
 
 // main/ with a commit, and main-perf/ as a linked worktree on its own branch.

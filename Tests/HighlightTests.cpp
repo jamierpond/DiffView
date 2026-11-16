@@ -104,7 +104,7 @@ auto tOpenerEndsLine =
     check(findKindOf("/**", comment, "/**") == TokenKind::comment);
 
     auto pythonCarry = LexerState {};
-    auto quotes = tokenizeLine("x = \"\"\"", Language::python, pythonCarry);
+    auto quotes = tokenizeLine(R"(x = """)", Language::python, pythonCarry);
 
     check(!pythonCarry.openStringEnd.empty());
     check(quotes.back().kind == TokenKind::string);

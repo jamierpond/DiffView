@@ -253,7 +253,7 @@ std::optional<Reply> parseReplyHeading(std::string_view line)
 
     auto rest = line.substr(replyMark.size());
 
-    if (!rest.empty() && !rest.starts_with(separator) && trim(rest) != "")
+    if (!rest.empty() && !rest.starts_with(separator) && !trim(rest).empty())
         return std::nullopt;
 
     auto parts = splitParts(line.substr(5));
@@ -304,7 +304,9 @@ std::string fenceFor(const std::vector<const std::vector<std::string>*>& groups)
             }
         }
 
-    return std::string(static_cast<std::size_t>(std::max(3, longest + 1)), '`');
+    auto fence =
+        std::string(static_cast<std::size_t>(std::max(3, longest + 1)), '`');
+    return fence;
 }
 
 void writeContext(std::string& out, const Json::Value& comment)

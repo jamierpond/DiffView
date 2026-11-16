@@ -104,7 +104,7 @@ private:
 
     // Viewer.cpp
     void tick();
-    void onRepoChanged(const std::vector<std::string>& paths);
+    void onRepoChanged(const std::vector<std::string>& changed);
     void scheduleRefresh(int delayMs);
     eacp::Threads::Async<void> refresh();
     void apply(std::vector<FileDiff> diffs, const std::string& sha);
@@ -115,7 +115,7 @@ private:
                     std::int64_t gitMs,
                     std::int64_t totalMs);
     void redraw();
-    void say(std::string message);
+    void say(std::string text);
     void requestQuit();
     std::string_view getPaneName() const;
     void feedKeyAndRunCommand(const std::string& key);
@@ -194,7 +194,7 @@ private:
     void replyAtCursor();
     bool completeMention();
     void clearResolved();
-    void removeImages(const Annotation& annotation);
+    void removeImages(const Annotation& note) const;
 
     // Input.cpp
     bool onEvent(const ftxui::Event& event);

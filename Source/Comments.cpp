@@ -805,7 +805,7 @@ void Viewer::editAtCursor()
                existing->text);
 }
 
-void Viewer::removeImages(const Annotation& note)
+void Viewer::removeImages(const Annotation& note) const
 {
     auto texts = std::vector<std::string> {note.text};
 

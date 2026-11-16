@@ -28,7 +28,7 @@ struct BaseSpec
 // GIT_OPTIONAL_LOCKS=0: a refresh must never take index.lock out from under
 // an agent running git.
 eacp::Processes::ProcessOptions command(const std::string& repo,
-                                        std::vector<std::string> args);
+                                        const std::vector<std::string>& args);
 
 eacp::Processes::ProcessOptions resolveBase(const std::string& repo,
                                             const BaseSpec& spec);

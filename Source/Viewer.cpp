@@ -610,6 +610,7 @@ void Viewer::rebuildRows(const CursorKey& key, int offset)
     diffTop = std::max(0, diffCursor - offset);
 }
 
+// NOLINTNEXTLINE(performance-unnecessary-value-param): callers pass treeRows paths, which rebuildTree() below replaces
 void Viewer::select(std::string path)
 {
     if (path != selectedPath)
@@ -745,8 +746,10 @@ int Viewer::annotationAtCursor() const
     if (row.annotation != 0)
         return row.annotation;
 
-    if (row.kind == RowKind::line && diffCursor + 1 < static_cast<int>(rows.size()))
-        return rows[static_cast<std::size_t>(diffCursor + 1)].annotation;
+    auto nextRow = static_cast<std::size_t>(diffCursor) + 1;
+
+    if (row.kind == RowKind::line && nextRow < rows.size())
+        return rows[nextRow].annotation;
 
     return 0;
 }

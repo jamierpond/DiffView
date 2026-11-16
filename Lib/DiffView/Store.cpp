@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <filesystem>
 #include <map>
+#include <ranges>
 #include <set>
 
 namespace diffview
@@ -92,16 +93,16 @@ void writeNewestFullRoundAsLatest(const eacp::FilePath& directory)
 {
     auto ids = listRoundIdsInOrder(directory);
 
-    for (auto id = ids.rbegin(); id != ids.rend(); ++id)
+    for (const auto& id: std::views::reverse(ids))
     {
-        auto path = getRoundPath(directory, *id);
+        auto path = getRoundPath(directory, id);
 
         if (readReviewOrEmpty(path).reply)
             continue;
 
         auto latestPath = directory / latestReviewFileName;
 
-        if (readReviewOrEmpty(latestPath).title != *id)
+        if (readReviewOrEmpty(latestPath).title != id)
             eacp::Files::writeFileAtomically(latestPath,
                                              eacp::Files::readFile(path));
 

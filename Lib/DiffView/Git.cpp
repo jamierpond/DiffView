@@ -29,15 +29,15 @@ std::string BaseSpec::label() const
 }
 
 eacp::Processes::ProcessOptions command(const std::string& repo,
-                                        std::vector<std::string> args)
+                                        const std::vector<std::string>& args)
 {
     auto options = eacp::Processes::ProcessOptions {};
     options.executable = "git";
     options.arguments = {
         "-C", repo, "-c", "core.quotePath=false", "-c", "color.ui=false"};
 
-    for (auto& arg: args)
-        options.arguments.push_back(std::move(arg));
+    for (const auto& arg: args)
+        options.arguments.push_back(arg);
 
     options.environment = {
         {"GIT_OPTIONAL_LOCKS", "0"}, {"GIT_PAGER", "cat"}, {"LC_ALL", "C"}};
