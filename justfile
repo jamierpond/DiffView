@@ -21,6 +21,12 @@ test: build
     cmake --build {{build_dir}}
     ctest --test-dir {{build_dir}} --output-on-failure
 
+[doc("Build everything, then run clang-tidy (eacp's checks) over DiffView's sources; fails on any finding")]
+[unix]
+tidy: build
+    cmake --build {{build_dir}}
+    scripts/tidy.sh {{build_dir}}
+
 [doc('Build, then run it (on this repo unless given a path / --base)')]
 [unix]
 run *args: build
