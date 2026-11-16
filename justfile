@@ -74,4 +74,4 @@ format:
 
 [doc('Delete the build directory')]
 clean:
-    rm -rf {{build_dir}}
+    cmake -E rm -rf {{build_dir}}
