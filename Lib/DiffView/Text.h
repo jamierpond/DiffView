@@ -24,6 +24,9 @@ int codepointCount(std::string_view text);
 // Never empty: "" wraps to {""}.
 std::vector<std::string> wrap(std::string_view line, int width);
 
+// The last `count` code points, all of the text when it has fewer.
+std::string_view keepLastCodepoints(std::string_view text, int count);
+
 struct ByteRange
 {
     std::size_t start = 0;

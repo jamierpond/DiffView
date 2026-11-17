@@ -1,3 +1,4 @@
+#include "RenderParts.h"
 #include "Viewer.h"
 
 #include <Highlight.h>
@@ -132,6 +133,7 @@ const auto selectionBackground = Color::RGB(38, 58, 96);
 
 const auto addedCursorRowBackground = Color::RGB(28, 70, 42);
 const auto removedCursorRowBackground = Color::RGB(86, 32, 38);
+} // namespace
 
 Color cursorBackground(bool focused)
 {
@@ -150,6 +152,9 @@ std::string padLeft(const std::string& text, int width)
                ? text
                : std::string(static_cast<std::size_t>(width - length), ' ') + text;
 }
+
+namespace
+{
 
 std::string lineNumber(int number)
 {
@@ -183,14 +188,6 @@ Element withMatch(const std::string& text, std::size_t start, std::size_t length
                      | color(Color::Black),
                  ftxui::text(text.substr(start + length))});
 }
-
-struct TextRange
-{
-    std::size_t start = 0;
-    std::size_t end = 0;
-
-    bool contains(std::size_t index) const { return index >= start && index < end; }
-};
 
 Color tokenColor(TokenKind kind)
 {
@@ -245,6 +242,8 @@ LineTheme findLineTheme(LineKind kind)
 
     return {};
 }
+
+} // namespace
 
 // The search match's yellow wins over the changed span's background.
 Element highlightText(const std::string& text,
@@ -306,6 +305,8 @@ Element highlightText(const std::string& text,
     return hbox(std::move(pieces));
 }
 
+namespace
+{
 std::string modeName(vim::Mode mode)
 {
     switch (mode)
@@ -363,18 +364,8 @@ Element Viewer::renderTree(int width, int height)
     auto now = nowMs();
     auto lines = Elements {};
 
-    auto title = [&]
-    {
-        if (pathFilter)
-            return " Files  /" + pathFilter->pattern + "/  "
-                   + std::to_string(visiblePaths().size()) + " of "
-                   + std::to_string(paths().size()) + " ";
-
-        return std::string {allFiles ? " All files · " : " Changes · "}
-               + std::to_string(allFiles ? paths().size() : files.size())
-               + (flatBySize ? " · by size" : "");
-    }();
-    lines.push_back(text(title) | bold | (focus == Pane::tree ? inverted : dim));
+    lines.push_back(text(describeFileListTitle()) | bold
+                    | (focus == Pane::tree ? inverted : dim));
 
     if (!loaded)
         lines.push_back(text(" loading…") | dim);
@@ -416,11 +407,7 @@ Element Viewer::renderTree(int width, int height)
         {
             if (row.path.empty())
             {
-                auto notes = std::count_if(
-                    annotations.begin(),
-                    annotations.end(),
-                    [](const Annotation& a)
-                    { return a.path.empty() && !a.withdrawn && !a.resolved; });
+                auto notes = countOpenGeneralNotes();
                 parts.push_back(text("◆ General (" + std::to_string(notes) + ")")
                                 | color(Color::Yellow));
                 auto line = hbox(std::move(parts));
@@ -453,11 +440,7 @@ Element Viewer::renderTree(int width, int height)
             if (tracker.isUnseen(row.path))
                 parts.push_back(text(" ●") | color(Color::Cyan));
 
-            auto comments =
-                std::count_if(annotations.begin(),
-                              annotations.end(),
-                              [&](const Annotation& a)
-                              { return a.path == row.path && !a.resolved; });
+            auto comments = countOpenComments(row.path);
 
             if (comments > 0)
                 parts.push_back(text(" ✎" + std::to_string(comments))
@@ -949,6 +932,7 @@ Element Viewer::renderThreadRow(const DiffRow& row,
                                 int index,
                                 Element shown)
 {
+    const auto& indent = threadIndent;
     auto resolvedLook = note.resolved && !pinnedThreads.contains(note.id);
     auto accent = [&]
     {
@@ -959,7 +943,7 @@ Element Viewer::renderThreadRow(const DiffRow& row,
 
         return Color::Yellow;
     }();
-    auto frame = text("          │ ") | color(accent);
+    auto frame = text(indent + "│ ") | color(accent);
 
     if (index == diffCursor)
         markSeen(note);
@@ -972,14 +956,14 @@ Element Viewer::renderThreadRow(const DiffRow& row,
     switch (row.kind)
     {
         case RowKind::annotationTop:
-            return text("          " + describeThread(note) + " ") | color(accent);
+            return text(indent + describeThread(note) + " ") | color(accent);
 
         case RowKind::collapsedThread:
         {
             auto owner = findOwner(note);
             auto voice =
                 authorColor(owner.empty() ? std::string {reviewerName} : owner);
-            return text("          ▸ " + row.text) | color(voice) | dim;
+            return text(indent + "▸ " + row.text) | color(voice) | dim;
         }
 
         case RowKind::earlierReplies:
@@ -1014,7 +998,7 @@ Element Viewer::renderThreadRow(const DiffRow& row,
                 && rows[static_cast<std::size_t>(diffCursor)].annotation == note.id;
             auto hint = cursorHere ? describeKeys(note) : std::string {};
 
-            return hbox({text("          └─") | color(accent), text(hint) | dim});
+            return hbox({text(indent + "└─") | color(accent), text(hint) | dim});
         }
     }
 }

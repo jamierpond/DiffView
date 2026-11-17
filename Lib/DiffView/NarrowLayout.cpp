@@ -66,6 +66,17 @@ int getTotalHeight(const std::vector<LineSpan>& spans)
     return spans.back().end();
 }
 
+std::optional<LineSpan> findVisiblePart(LineSpan span, LineSpan view)
+{
+    auto first = std::max(span.first, view.first);
+    auto end = std::min(span.end(), view.end());
+
+    if (end <= first)
+        return std::nullopt;
+
+    return LineSpan {first, end - first};
+}
+
 int clampScroll(LineSpan view, int totalHeight)
 {
     return std::clamp(view.first, 0, std::max(0, totalHeight - view.height));

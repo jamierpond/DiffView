@@ -33,6 +33,8 @@ constexpr auto usage =
     "  dv HEAD~3       against that exact commit\n"
     "  dv ~/other      another repo\n"
     "  dv --version    the version and the commit it was built from\n"
+    "  dv --mobile     the phone layout, one page at a time, at any width; dv\n"
+    "                  switches to it by itself below 60 columns\n"
     "\n"
     "It is a terminal UI for a human. F1 inside it lists the keys.\n"
     "\n"
@@ -397,6 +399,8 @@ int runViewer(int argc, char* argv[])
             options.base = diffview::git::BaseSpec::parse(argv[++i]);
         else if (arg == "--repo" && i + 1 < argc)
             path = argv[++i];
+        else if (arg == "--mobile")
+            options.layout = diffview::LayoutRequest::alwaysNarrow;
         // Like `git diff main`: a positional that isn't a directory is the base.
         else if (!arg.starts_with("-") && std::filesystem::is_directory(arg))
             path = arg;

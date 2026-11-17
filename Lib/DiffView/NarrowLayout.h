@@ -55,6 +55,9 @@ struct LineSpan
 std::vector<LineSpan> stackSpans(const std::vector<int>& heights);
 int getTotalHeight(const std::vector<LineSpan>& spans);
 
+// The part of the span inside the view, if any.
+std::optional<LineSpan> findVisiblePart(LineSpan span, LineSpan view);
+
 // The view's first line, kept between the top and the last full screen.
 int clampScroll(LineSpan view, int totalHeight);
 

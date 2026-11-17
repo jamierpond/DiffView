@@ -141,3 +141,18 @@ auto tButtons = test("NarrowLayout/buttons share the width with a gap") = []
 
     check(layOutButtons(0, bar).empty());
 };
+
+auto tVisiblePart = test("NarrowLayout/only the part of a row in view is drawn") = []
+{
+    constexpr auto view = LineSpan {10, 20};
+
+    check(!findVisiblePart({2, 3}, view));
+    check(!findVisiblePart({30, 2}, view));
+    check(findVisiblePart({12, 3}, view)->first == 12);
+
+    auto cutAtTop = findVisiblePart({8, 4}, view);
+    check(cutAtTop->first == 10 && cutAtTop->height == 2);
+
+    auto cutAtBottom = findVisiblePart({28, 5}, view);
+    check(cutAtBottom->first == 28 && cutAtBottom->height == 2);
+};

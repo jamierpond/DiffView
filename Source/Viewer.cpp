@@ -76,12 +76,12 @@ Viewer::Viewer(const Options& optionsToUse)
                [this]
                {
                    auto timer = UsageTimer {};
-                   auto element = render();
+                   auto element = renderInCurrentLayout();
                    logSlowRender(timer.getElapsedMs());
                    return element;
                })
            | ftxui::CatchEvent([this](const ftxui::Event& event)
-                               { return onEvent(event); });
+                               { return onEventInCurrentLayout(event); });
 
     screen.TrackMouse(false);
 
@@ -120,6 +120,7 @@ Viewer::Viewer(const Options& optionsToUse)
 
 Viewer::~Viewer()
 {
+    setMouseReporting(false);
     logEvent("viewer.stop", {{"drafts", draftCount(annotations)}});
 }
 
@@ -849,6 +850,37 @@ std::vector<DiffRow> Viewer::rowsFor(const FileDiff& file) const
     return built;
 }
 
+std::string Viewer::describeFileListTitle() const
+{
+    if (pathFilter)
+        return " Files  /" + pathFilter->pattern + "/  "
+               + std::to_string(visiblePaths().size()) + " of "
+               + std::to_string(paths().size()) + " ";
+
+    return std::string {allFiles ? " All files · " : " Changes · "}
+           + std::to_string(allFiles ? paths().size() : files.size())
+           + (flatBySize ? " · by size" : "");
+}
+
+int Viewer::countOpenComments(const std::string& path) const
+{
+    auto count = std::count_if(annotations.begin(),
+                               annotations.end(),
+                               [&](const Annotation& a)
+                               { return a.path == path && !a.resolved; });
+    return static_cast<int>(count);
+}
+
+int Viewer::countOpenGeneralNotes() const
+{
+    auto count =
+        std::count_if(annotations.begin(),
+                      annotations.end(),
+                      [](const Annotation& a)
+                      { return a.path.empty() && !a.withdrawn && !a.resolved; });
+    return static_cast<int>(count);
+}
+
 std::vector<Annotation> Viewer::shownAnnotations() const
 {
     auto shown = std::vector<Annotation> {};
@@ -1142,6 +1174,7 @@ void Viewer::openInEditor()
 
     // Blocking the main thread is the point: eacp's timer, and with it
     // FTXUI, stays off the terminal until the editor exits.
+    setMouseReporting(false);
     screen.WithRestoredIO(
         [&]
         {

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "NarrowParts.h"
 #include "RepoWatcher.h"
 #include "UsageLog.h"
 
@@ -9,6 +10,7 @@
 #include <Git.h>
 #include <Highlight.h>
 #include <Keymap.h>
+#include <NarrowLayout.h>
 #include <PathFilter.h>
 #include <Review.h>
 #include <Store.h>
@@ -41,6 +43,7 @@ struct Options
     StoreLayout store;
     std::vector<std::string> mergeNotes;
     git::BaseSpec base;
+    LayoutRequest layout = LayoutRequest::byWidth;
 };
 
 // eacp owns the main thread and a timer pumps FTXUI's loop; git results, the
@@ -183,6 +186,8 @@ private:
     void commentGeneral();
     void openEditor(std::string title, const std::string& text);
     bool onEditorEvent(const ftxui::Event& event);
+    void applyEditorOutcome(vim::Outcome outcome);
+    void saveEditor();
     bool commitEditor();
     void closeEditor(bool keepPastedImages);
     bool isCursorInThread(int id) const;
@@ -216,9 +221,57 @@ private:
     void acceptPicker();
     bool onConfirmEvent(const std::string& key);
 
+    // NarrowInput.cpp
+    bool onEventInCurrentLayout(const ftxui::Event& event);
+    void onNarrowMouseEvent(ftxui::Event event);
+    void runTapAction(const TapTarget& target);
+    void openTreeEntry(int index);
+    void selectDiffRow(int index);
+    void goBackOnePage();
+    void scrollNarrowPage(int lines);
+    void setMouseReporting(bool shouldReport);
+
+    // NarrowRender.cpp
+    ftxui::Element renderInCurrentLayout();
+    NarrowPage findCurrentNarrowPage() const;
+    ftxui::Element renderNarrow(ScreenArea page);
+    ftxui::Element renderNarrowPage(ScreenArea page);
+    ftxui::Element renderNarrowFooter(const std::string& hint,
+                                      const std::vector<NarrowButton>& buttons,
+                                      ScreenArea page);
+    std::string describeSubmitButton() const;
+    ftxui::Element renderNarrowFiles(ScreenArea page);
+    ftxui::Element renderNarrowFileList(ScreenArea body);
+    std::vector<ftxui::Element>
+        renderNarrowFileEntry(const TreeRow& row, int index, int entryHeight);
+    std::vector<ftxui::Element>
+        renderNarrowDirectoryLines(const TreeRow& row, const NarrowEntryLead& lead);
+    std::vector<ftxui::Element>
+        renderNarrowGeneralLines(const NarrowEntryLead& lead);
+    std::vector<ftxui::Element> renderNarrowFileLines(const TreeRow& row,
+                                                      const NarrowEntryLead& lead);
+    ftxui::Element renderNarrowDiff(ScreenArea page);
+    NarrowHeader describeNarrowDiffHeader() const;
+    ftxui::Element renderNarrowDiffBody(ScreenArea body);
+    int countNarrowRowHeight(const DiffRow& row, int width) const;
+    std::vector<ftxui::Element>
+        renderNarrowDiffRow(const DiffRow& row, int index, int width);
+    ftxui::Element renderNarrowHunkHeader(const DiffRow& row) const;
+    std::vector<ftxui::Element>
+        renderNarrowLine(const DiffRow& row, int index, int width);
+    ftxui::Element renderNarrowComment(ScreenArea page);
+    std::vector<ftxui::Element> renderNarrowQuote(int width);
+    bool isQuotedInComment(const DiffRow& row) const;
+    ftxui::Element renderNarrowConfirm(ScreenArea page);
+    ftxui::Element renderNarrowInfoLine(const std::string& hint);
+    std::string describeOpenAtSelection();
+
     // Render.cpp
     ftxui::Element render();
     ftxui::Element renderTree(int width, int height);
+    std::string describeFileListTitle() const;
+    int countOpenComments(const std::string& path) const;
+    int countOpenGeneralNotes() const;
     ftxui::Element renderDiff(int width, int height);
     enum class RowEmphasis
     {
@@ -353,6 +406,16 @@ private:
     ftxui::App screen = ftxui::App::Fullscreen();
     ftxui::Component root;
     std::unique_ptr<ftxui::Loop> loop;
+
+    // The narrow layout's: what the last frame drew where, and how far each
+    // page is scrolled, in screen lines.
+    bool isNarrow = false;
+    bool isMouseReporting = false;
+    bool shouldRevealCursor = true;
+    int narrowFilesScroll = 0;
+    int narrowDiffScroll = 0;
+    std::vector<TapTarget> tapTargets;
+    std::string threadIndent;
 
     std::unique_ptr<RepoWatcher> watcher;
     std::unique_ptr<RepoWatcher> storeWatcher;

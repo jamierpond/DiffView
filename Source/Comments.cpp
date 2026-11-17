@@ -494,18 +494,18 @@ bool Viewer::onEditorEvent(const ftxui::Event& event)
         return true;
     }
 
-    switch (feedEditorAndLogModeChange(key))
+    applyEditorOutcome(feedEditorAndLogModeChange(key));
+    return true;
+}
+
+void Viewer::applyEditorOutcome(vim::Outcome outcome)
+{
+    switch (outcome)
     {
         case vim::Outcome::none:
             break;
         case vim::Outcome::save:
-            if (replyCommentId)
-            {
-                commitEditor();
-                closeEditor(true);
-            }
-            else if (commitEditor())
-                say("Saved");
+            saveEditor();
             break;
         case vim::Outcome::saveAndClose:
             commitEditor();
@@ -523,8 +523,18 @@ bool Viewer::onEditorEvent(const ftxui::Event& event)
             pasteIntoEditor();
             break;
     }
+}
 
-    return true;
+// A reply is sent the moment it is saved, so saving one also closes it.
+void Viewer::saveEditor()
+{
+    if (replyCommentId)
+    {
+        commitEditor();
+        closeEditor(true);
+    }
+    else if (commitEditor())
+        say("Saved");
 }
 
 vim::Outcome Viewer::feedEditorAndLogModeChange(const std::string& key)

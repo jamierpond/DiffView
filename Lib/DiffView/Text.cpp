@@ -154,6 +154,12 @@ std::vector<std::string> wrap(std::string_view line, int width)
     return pieces;
 }
 
+std::string_view keepLastCodepoints(std::string_view text, int count)
+{
+    auto skipped = std::max(0, codepointCount(text) - count);
+    return text.substr(advance(text, 0, skipped));
+}
+
 std::vector<ByteRange> findWrapRanges(std::string_view line, int width)
 {
     width = std::max(1, width);

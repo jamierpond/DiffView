@@ -74,3 +74,10 @@ auto tWrapRangesUtf8 = test("Text/findWrapRanges counts code points") = []
     check(ranges.size() == 2);
     check(ranges[0].length == 4 && ranges[1].start == 4);
 };
+
+auto tKeepLast = test("Text/keepLastCodepoints keeps the end of the text") = []
+{
+    check(keepLastCodepoints("Source/Render.cpp", 10) == "Render.cpp");
+    check(keepLastCodepoints("ab", 5) == "ab");
+    check(keepLastCodepoints("a\xC3\xA9", 1) == "\xC3\xA9");
+};

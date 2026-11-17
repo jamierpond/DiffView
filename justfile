@@ -80,3 +80,8 @@ clean:
 update-deps:
     cmake -S . -B {{build_dir}} -G Ninja -DLOCKSTEP_MODE=update
     cmake -S . -B {{build_dir}} -G Ninja -DLOCKSTEP_MODE=locked
+
+[doc('Build, then save what dv draws at phone, threshold and desktop widths, run on <repo> in a throwaway tmux session')]
+[unix]
+capture-layouts repo out="build/layouts": build
+    scripts/capture-layouts.sh "{{build_dir}}/diffview" "{{repo}}" "{{out}}"
