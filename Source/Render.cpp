@@ -732,11 +732,7 @@ Element Viewer::renderEditor(int width, int boxHeight)
     else if (!editor.message().empty())
         footer = text(editor.message()) | color(Color::Red);
     else
-        footer =
-            text(editor.mode() == vim::Mode::insert
-                     ? "-- INSERT --  Esc normal · Ctrl-S save+close · Ctrl-V paste"
-                     : ":w save · :wq / :x save+close · :q! discard · i insert")
-            | dim;
+        footer = text(describeEditorKeys()) | dim;
 
     return window(text(" " + editorTitle + " ") | bold,
                   vbox({vbox(std::move(body)) | yframe | flex, footer}))

@@ -806,13 +806,32 @@ Element Viewer::renderNarrowConfirm(ScreenArea page)
                    {"Submit", TapAction::confirmYes}};
     }
 
-    auto body =
-        vbox({text(""), paragraph(question), text(""), paragraph(note) | dim});
+    auto body = vbox({text(""),
+                      hbox({text(" "), paragraph(question)}),
+                      text(""),
+                      hbox({text(" "), paragraph(note) | dim})});
 
     return renderPage(renderHeader({"Cancel", title, {}}, page.width, tapTargets),
                       body,
                       findBodyHeight(page.height),
                       renderNarrowFooter({}, buttons, page));
+}
+
+// The narrow layout's comment box is a phone's width: its keys must fit in it.
+std::string Viewer::describeEditorKeys() const
+{
+    auto isInsert = editor.mode() == vim::Mode::insert;
+
+    if (isNarrow && isInsert)
+        return "-- INSERT --  Esc normal · ^S save+close";
+
+    if (isNarrow)
+        return ":w save · :x save+close · :q! discard";
+
+    if (isInsert)
+        return "-- INSERT --  Esc normal · Ctrl-S save+close · Ctrl-V paste";
+
+    return ":w save · :wq / :x save+close · :q! discard · i insert";
 }
 
 Element Viewer::renderNarrowInfoLine(const std::string& hint)

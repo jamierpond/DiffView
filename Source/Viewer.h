@@ -296,6 +296,7 @@ private:
     std::optional<LineRange> editorTarget() const;
     ftxui::Element renderEditor(int width, int boxHeight);
     int editorHeight(int width);
+    std::string describeEditorKeys() const;
 
     Options options;
     std::string repo;
