@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <string>
 #include <string_view>
@@ -22,6 +23,16 @@ int codepointCount(std::string_view text);
 
 // Never empty: "" wraps to {""}.
 std::vector<std::string> wrap(std::string_view line, int width);
+
+struct ByteRange
+{
+    std::size_t start = 0;
+    std::size_t length = 0;
+};
+
+// Like wrap, but the pieces keep every byte, the breaking space included, so
+// byte offsets into the line (tokens, changed spans) still apply to them.
+std::vector<ByteRange> findWrapRanges(std::string_view line, int width);
 
 // Stable across runs and platforms, unlike std::hash.
 std::uint64_t fnv1a(std::string_view text,

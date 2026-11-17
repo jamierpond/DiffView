@@ -48,3 +48,29 @@ auto tWrapUtf8 = test("Text/wrap counts code points, not bytes") = []
     check(pieces.size() == 2);
     check(pieces[0] == "\xC3\xA9\xC3\xA9");
 };
+
+auto tWrapRanges = test("Text/findWrapRanges keeps every byte of the line") = []
+{
+    constexpr auto width = 10;
+    auto line = std::string_view {"the quick brown fox"};
+    auto ranges = findWrapRanges(line, width);
+
+    check(ranges.size() == 2);
+    check(line.substr(ranges[0].start, ranges[0].length) == "the quick ");
+    check(line.substr(ranges[1].start, ranges[1].length) == "brown fox");
+
+    auto hard = findWrapRanges("abcdefghij", 4);
+    check(hard.size() == 3);
+    check(hard[2].start == 8 && hard[2].length == 2);
+
+    check(findWrapRanges("", 4).size() == 1);
+};
+
+auto tWrapRangesUtf8 = test("Text/findWrapRanges counts code points") = []
+{
+    auto line = std::string_view {"\xC3\xA9\xC3\xA9\xC3\xA9"};
+    auto ranges = findWrapRanges(line, 2);
+
+    check(ranges.size() == 2);
+    check(ranges[0].length == 4 && ranges[1].start == 4);
+};

@@ -153,3 +153,18 @@ auto tPlainLanguage = test("Highlight/a plain file is one plain token") = []
     check(tokens.size() == 1);
     check(tokens[0].kind == TokenKind::plain && tokens[0].length == 15);
 };
+
+auto tSliceTokens =
+    test("Highlight/sliceTokens clips tokens to a piece of the line") = []
+{
+    auto tokens = std::vector<Token> {{0, 4, TokenKind::keyword},
+                                      {5, 6, TokenKind::function},
+                                      {12, 3, TokenKind::number}};
+    auto sliced = sliceTokens(tokens, {7, 6});
+
+    check(sliced.size() == 2);
+    check(sliced[0].start == 0 && sliced[0].length == 4);
+    check(sliced[0].kind == TokenKind::function);
+    check(sliced[1].start == 5 && sliced[1].length == 1);
+    check(sliceTokens(tokens, {20, 5}).empty());
+};

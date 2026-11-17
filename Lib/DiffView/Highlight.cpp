@@ -758,4 +758,25 @@ FileTokens highlightFile(const FileDiff& file)
 
     return tokens;
 }
+
+std::vector<Token> sliceTokens(const std::vector<Token>& tokens, ByteRange piece)
+{
+    auto end = piece.start + piece.length;
+    auto sliced = std::vector<Token> {};
+
+    for (const auto& token: tokens)
+    {
+        auto tokenEnd = token.start + token.length;
+
+        if (tokenEnd <= piece.start || token.start >= end)
+            continue;
+
+        auto clippedStart = std::max(token.start, piece.start);
+        auto clippedEnd = std::min(tokenEnd, end);
+        sliced.push_back(
+            {clippedStart - piece.start, clippedEnd - clippedStart, token.kind});
+    }
+
+    return sliced;
+}
 } // namespace diffview

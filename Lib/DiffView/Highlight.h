@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Diff.h"
+#include "Text.h"
 
 #include <cstddef>
 #include <string>
@@ -69,4 +70,8 @@ using FileTokens = std::vector<std::vector<std::vector<Token>>>;
 // Old and new sides are lexed apart so a comment opened on one side does not
 // leak into the other; context lines take the new side's tokens.
 FileTokens highlightFile(const FileDiff& file);
+
+// The tokens over one piece of the line, clipped to it and counted from its
+// start.
+std::vector<Token> sliceTokens(const std::vector<Token>& tokens, ByteRange piece);
 } // namespace diffview

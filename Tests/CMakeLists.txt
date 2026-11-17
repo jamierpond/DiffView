@@ -9,6 +9,8 @@ add_executable(DiffViewTests
         HighlightTests.cpp
         IntraLineTests.cpp
         KeymapTests.cpp
+        NarrowLayoutTests.cpp
+        NarrowPaletteTests.cpp
         PathFilterTests.cpp
         ReviewMarkdownTests.cpp
         ReviewTests.cpp

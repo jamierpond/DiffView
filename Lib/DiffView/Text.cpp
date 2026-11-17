@@ -1,5 +1,6 @@
 #include "Text.h"
 
+#include <algorithm>
 #include <cctype>
 
 namespace diffview
@@ -151,6 +152,28 @@ std::vector<std::string> wrap(std::string_view line, int width)
 
     pieces.emplace_back(line);
     return pieces;
+}
+
+std::vector<ByteRange> findWrapRanges(std::string_view line, int width)
+{
+    width = std::max(1, width);
+    auto ranges = std::vector<ByteRange> {};
+    auto start = std::size_t {0};
+
+    while (codepointCount(line.substr(start)) > width)
+    {
+        auto cut = advance(line, start, width);
+        auto space = line.substr(start, cut - start).rfind(' ');
+
+        if (space != std::string_view::npos && space > 0)
+            cut = start + space + 1;
+
+        ranges.push_back({start, cut - start});
+        start = cut;
+    }
+
+    ranges.push_back({start, line.size() - start});
+    return ranges;
 }
 
 std::uint64_t fnv1a(std::string_view text, std::uint64_t seed)
