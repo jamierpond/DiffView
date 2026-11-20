@@ -28,6 +28,12 @@ commit, untracked files included. `b` changes it. `name...` means the
 merge-base of HEAD and `name`, as in `git diff main...`; anything else
 (`main`, a sha, `HEAD~3`) is that exact commit.
 
+A diff can also come in on standard input: `git diff main | dv`, a filtered
+diff from another tool, or `dv < x.patch`. It must be in `git diff` format
+(colours are fine). dv shows it as it came: changing the base, whole-file
+context, all-files mode and refresh are off. Comments and rounds work as
+usual when dv runs inside a git work tree; elsewhere the diff is read-only.
+
 ## Keys
 
 | Key | Action | Key | Action |

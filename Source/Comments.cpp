@@ -170,7 +170,10 @@ bool Viewer::reloadStoreIfChanged()
 
 void Viewer::saveStore()
 {
-    auto text = toMarkdown(draftFile(annotations, base.label(), baseSha));
+    if (options.isReadOnly)
+        return;
+
+    auto text = toMarkdown(draftFile(annotations, describeBase(), baseSha));
 
     if (text == lastDraftText)
         return;
@@ -198,7 +201,7 @@ void Viewer::submitReview()
 
     const auto& storeDirectory = store.directory;
     auto id = nextRoundId(rounds, nowMs());
-    auto round = submitDraft(annotations, id, base.label(), baseSha);
+    auto round = submitDraft(annotations, id, describeBase(), baseSha);
     round.worktree = store.worktree.str();
     auto review = toMarkdown(round);
 
@@ -232,7 +235,7 @@ void Viewer::sendReply(Annotation& note, const std::string& text)
 
     auto id = nextRoundId(rounds, nowMs());
     auto time = formatReplyTime(nowMs());
-    auto round = makeReplyRound(*thread, text, time, id, base.label(), baseSha);
+    auto round = makeReplyRound(*thread, text, time, id, describeBase(), baseSha);
     round.worktree = store.worktree.str();
 
     eacp::Files::createDirectories(storeDirectory / reviewDirectory);
@@ -350,6 +353,9 @@ void Viewer::toggleFoldAtCursor()
 
 void Viewer::annotateAtCursor(bool wholeHunk)
 {
+    if (refuseCommentWhenReadOnly())
+        return;
+
     auto selected = selectedFile();
 
     if (!selected || rows.empty())
@@ -429,6 +435,9 @@ void Viewer::annotateAtCursor(bool wholeHunk)
 
 void Viewer::commentOnFile()
 {
+    if (refuseCommentWhenReadOnly())
+        return;
+
     auto selected = selectedFile();
 
     if (!selected || selected->get().path.empty())
@@ -449,6 +458,9 @@ void Viewer::commentOnFile()
 
 void Viewer::commentGeneral()
 {
+    if (refuseCommentWhenReadOnly())
+        return;
+
     visualAnchor.reset();
     pendingAnnotation = makeFileAnnotation({}, findNextAnnotationId(), {});
     logEvent("comment.start", {{"scope", "general"}, {"id", pendingAnnotation->id}});

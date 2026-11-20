@@ -1,4 +1,5 @@
 #include <Diff.h>
+#include <Text.h>
 
 #include <NanoTest/NanoTest.h>
 
@@ -148,4 +149,38 @@ auto tUnchangedFileDiff =
     check(file.hunks[0].lines[1].oldLine == 2
           && file.hunks[0].lines[1].newLine == 2);
     check(file.added == 0 && file.removed == 0);
+};
+
+auto tParsesColouredDiff =
+    test("Diff/a coloured diff parses the same once its colours are removed") = []
+{
+    constexpr auto coloured = "\x1b[1mdiff --git a/a.txt b/a.txt\x1b[m\n"
+                              "\x1b[1m--- a/a.txt\x1b[m\n"
+                              "\x1b[1m+++ b/a.txt\x1b[m\n"
+                              "\x1b[36m@@ -1,2 +1,2 @@\x1b[m\n"
+                              " kept\n"
+                              "\x1b[31m-old\x1b[m\n"
+                              "\x1b[32m+new\x1b[m\n";
+
+    auto files = parseDiff(removeTerminalColourCodes(coloured));
+
+    check(files.size() == 1);
+    check(files[0].path == "a.txt");
+    check(files[0].added == 1 && files[0].removed == 1);
+    check(files[0].hunks[0].lines[2].text == "new");
+};
+
+auto tParsesPureRename =
+    test("Diff/a rename with no changes is listed under its new path") = []
+{
+    constexpr auto renamed = "diff --git a/old name.txt b/src/new.txt\n"
+                             "similarity index 100%\n"
+                             "rename from old name.txt\n"
+                             "rename to src/new.txt\n";
+
+    auto files = parseDiff(renamed);
+
+    check(files.size() == 1);
+    check(files[0].path == "src/new.txt");
+    check(files[0].hunks.empty());
 };

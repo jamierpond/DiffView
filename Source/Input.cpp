@@ -311,9 +311,7 @@ void Viewer::run(const Command& command)
             commentOnFile();
             break;
         case Action::toggleAllFiles:
-            allFiles = !allFiles;
-            say(allFiles ? "All files" : "Changed files only");
-            refresh();
+            toggleAllFiles();
             break;
         case Action::toggleFullContext:
             if (focus == Pane::tree)
@@ -365,8 +363,7 @@ void Viewer::run(const Command& command)
             openPicker(PickerKind::base);
             break;
         case Action::refresh:
-            refresh();
-            say("Refreshed");
+            refreshOnRequest();
             break;
         case Action::search:
             openPrompt(Prompt::search, true);
@@ -793,11 +790,7 @@ void Viewer::runCommandLine(const std::string& line)
         if (argument.empty())
             openPicker(PickerKind::base);
         else
-        {
-            base = git::BaseSpec::parse(argument);
-            say("Base: " + base.label());
-            refresh();
-        }
+            changeBase(argument);
     }
     else if (name == "note")
         commentGeneral();
@@ -835,8 +828,40 @@ void Viewer::runCommandLine(const std::string& line)
     }
 }
 
+void Viewer::toggleAllFiles()
+{
+    if (refuseForPipedDiff("Showing every file"))
+        return;
+
+    allFiles = !allFiles;
+    say(allFiles ? "All files" : "Changed files only");
+    refresh();
+}
+
+void Viewer::refreshOnRequest()
+{
+    if (refuseForPipedDiff("Refreshing"))
+        return;
+
+    refresh();
+    say("Refreshed");
+}
+
+void Viewer::changeBase(const std::string& text)
+{
+    if (refuseForPipedDiff("Changing the base"))
+        return;
+
+    base = git::BaseSpec::parse(text);
+    say("Base: " + base.label());
+    refresh();
+}
+
 void Viewer::toggleFullContext()
 {
+    if (refuseForPipedDiff("Showing the whole file"))
+        return;
+
     fullContext = !fullContext;
     say(fullContext ? "Full file" : "Diff context");
     refresh();
@@ -844,6 +869,9 @@ void Viewer::toggleFullContext()
 
 void Viewer::openPicker(PickerKind kind)
 {
+    if (kind == PickerKind::base && refuseForPipedDiff("Changing the base"))
+        return;
+
     pickerKind = kind;
     pickerLine.set({});
     picker = telescope::Picker {};
@@ -1088,7 +1116,7 @@ void Viewer::acceptPicker()
 
                 if (!note->path.empty() && !findOrReadFile(note->path))
                 {
-                    say(note->path + " isn't in the diff against " + base.label());
+                    say(note->path + " isn't in the diff against " + describeBase());
                     break;
                 }
 
@@ -1104,9 +1132,7 @@ void Viewer::acceptPicker()
             if (value.empty())
                 return;
 
-            base = git::BaseSpec::parse(value);
-            say("Base: " + base.label());
-            refresh();
+            changeBase(value);
             break;
         }
     }

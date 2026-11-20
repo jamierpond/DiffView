@@ -85,3 +85,8 @@ update-deps:
 [unix]
 capture-layouts repo out="build/layouts": build
     scripts/capture-layouts.sh "{{build_dir}}/diffview" "{{repo}}" "{{out}}"
+
+[doc('Build, then pipe a diff of <repo> into dv in a throwaway tmux session and save what it drew after each key')]
+[unix]
+check-piped-diff repo="." out="build/piped-diff": build
+    scripts/check-piped-diff.sh "{{build_dir}}/diffview" "{{repo}}" "{{out}}"

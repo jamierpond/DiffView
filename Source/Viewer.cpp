@@ -89,12 +89,18 @@ Viewer::Viewer(const Options& optionsToUse)
     screen.ForceHandleCtrlC(false);
     loop = std::make_unique<ftxui::Loop>(&screen, root);
 
-    loadStore();
-    watcher = std::make_unique<RepoWatcher>(
-        repo,
-        [this](const std::vector<std::string>& changed) { onRepoChanged(changed); });
+    if (options.isReadOnly)
+        message = "Read-only: not inside a git work tree, so comments can't be kept";
+    else
+    {
+        loadStore();
+        watcher = std::make_unique<RepoWatcher>(
+            repo,
+            [this](const std::vector<std::string>& changed)
+            { onRepoChanged(changed); });
+    }
 
-    if (!isSamePath(store.home.str(), store.worktree.str()))
+    if (!options.isReadOnly && !isSamePath(store.home.str(), store.worktree.str()))
     {
         createStoreDirectory(store.directory);
         storeWatcher =
@@ -114,7 +120,9 @@ Viewer::Viewer(const Options& optionsToUse)
     logEvent("viewer.start",
              {{"comments", static_cast<int>(annotations.size())},
               {"rounds", static_cast<int>(rounds.size())},
-              {"linked_worktree", storeWatcher != nullptr}});
+              {"linked_worktree", storeWatcher != nullptr},
+              {"piped", isShowingPipedDiff()},
+              {"read_only", options.isReadOnly}});
     refresh();
 }
 
@@ -185,7 +193,16 @@ void Viewer::scheduleRefresh(int delayMs)
                              });
 }
 
-eacp::Threads::Async<void> Viewer::refresh()
+void Viewer::refresh()
+{
+    // Re-applied so agents' replies in the review store still show up.
+    if (isShowingPipedDiff())
+        apply(*options.pipedFiles, {});
+    else
+        refreshFromGit();
+}
+
+eacp::Threads::Async<void> Viewer::refreshFromGit()
 {
     if (refreshing)
     {
@@ -375,8 +392,7 @@ void Viewer::apply(std::vector<FileDiff> diffs, const std::string& sha)
     files = std::move(diffs);
     tracker.update(files, nowMs());
 
-    reloadStoreIfChanged();
-    listening = findListeningAgents(store.directory.str());
+    reloadReviewStoreUnlessReadOnly();
     unchangedFiles.clear();
     auto moved = reanchorAll(annotations,
                              files,
@@ -448,6 +464,9 @@ OptionalFileDiff Viewer::findOrReadFile(const std::string& path)
 {
     if (auto found = findFile(path))
         return found;
+
+    if (isShowingPipedDiff())
+        return std::nullopt;
 
     // Not in the diff: the file whole, read the first time it is wanted.
     auto full = std::filesystem::path {repo} / path;

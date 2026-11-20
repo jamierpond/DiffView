@@ -8,6 +8,7 @@ namespace diffview
 namespace
 {
 constexpr auto gitHeader = std::string_view {"diff --git "};
+constexpr auto renameTarget = std::string_view {"rename to "};
 
 void parseRange(std::string_view text, int& start, int& count)
 {
@@ -320,6 +321,8 @@ std::vector<FileDiff> parseDiff(std::string_view text)
         else if (line.starts_with("Binary files ")
                  || line.starts_with("GIT binary patch"))
             file.binary = true;
+        else if (line.starts_with(renameTarget))
+            file.path = unquotePath(line.substr(renameTarget.size()));
         else if (line.starts_with("+++ "))
         {
             if (auto path = pathFromMarker(line); !path.empty())

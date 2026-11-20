@@ -424,7 +424,7 @@ Element Viewer::renderNarrowFiles(ScreenArea page)
     treeHeight = bodyHeight;
 
     auto detail =
-        "base " + base.label() + " · " + std::to_string(files.size()) + " changed";
+        "base " + describeBase() + " · " + std::to_string(files.size()) + " changed";
     auto header =
         renderHeader({{}, describeFileListTitle(), detail}, page.width, tapTargets);
     auto footer =
@@ -458,7 +458,7 @@ Element Viewer::renderNarrowFileList(ScreenArea body)
     if (!loaded)
         lines.push_back(text(" loading…") | dim);
     else if (treeRows.empty())
-        lines.push_back(text(" no changes vs " + base.label()) | dim);
+        lines.push_back(text(" no changes vs " + describeBase()) | dim);
 
     for (auto i = 0; i < count; ++i)
     {

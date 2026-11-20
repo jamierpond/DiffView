@@ -71,7 +71,7 @@ struct FileDiff
 
 using OptionalFileDiff = std::optional<std::reference_wrapper<const FileDiff>>;
 
-// Expects --no-renames and a/ b/ prefixes (see git::diff).
+// Expects a/ b/ prefixes (see git::diff). A rename is listed under its new path.
 std::vector<FileDiff> parseDiff(std::string_view text);
 
 // A NUL in the first 8000 bytes means binary, as git decides it.

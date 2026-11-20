@@ -28,7 +28,51 @@ std::size_t advance(std::string_view text, std::size_t from, int count)
 
     return pos;
 }
+
+bool isControlSequenceStart(std::string_view text, std::size_t index)
+{
+    constexpr auto escape = '\x1b';
+    constexpr auto controlSequenceOpener = '[';
+
+    if (text[index] != escape || index + 1 >= text.size())
+        return false;
+
+    return text[index + 1] == controlSequenceOpener;
+}
+
+bool isControlSequenceFinalByte(char byte)
+{
+    constexpr auto firstFinalByte = '\x40';
+    constexpr auto lastFinalByte = '\x7e';
+    return byte >= firstFinalByte && byte <= lastFinalByte;
+}
 } // namespace
+
+std::string removeTerminalColourCodes(std::string_view text)
+{
+    constexpr auto controlSequenceIntroducerLength = std::size_t {2};
+
+    auto plain = std::string {};
+    plain.reserve(text.size());
+
+    for (std::size_t i = 0; i < text.size(); ++i)
+    {
+        if (!isControlSequenceStart(text, i))
+        {
+            plain.push_back(text[i]);
+            continue;
+        }
+
+        auto end = i + controlSequenceIntroducerLength;
+
+        while (end < text.size() && !isControlSequenceFinalByte(text[end]))
+            ++end;
+
+        i = end;
+    }
+
+    return plain;
+}
 
 std::vector<std::string> splitLines(std::string_view text)
 {

@@ -67,6 +67,26 @@ bool isStandardOutputTerminal()
     return isConsole(STD_OUTPUT_HANDLE);
 }
 
+bool reconnectStandardInputToTerminal()
+{
+    constexpr auto readAndWrite = DWORD {GENERIC_READ | GENERIC_WRITE};
+    constexpr auto shareReadAndWrite = DWORD {FILE_SHARE_READ | FILE_SHARE_WRITE};
+    constexpr auto noAttributes = DWORD {0};
+
+    auto console = CreateFileW(L"CONIN$",
+                               readAndWrite,
+                               shareReadAndWrite,
+                               nullptr,
+                               OPEN_EXISTING,
+                               noAttributes,
+                               nullptr);
+
+    if (console == INVALID_HANDLE_VALUE)
+        return false;
+
+    return SetStdHandle(STD_INPUT_HANDLE, console) != 0;
+}
+
 void callOnTermination(void (&handler)(int exitCode))
 {
     terminationHandler = &handler;

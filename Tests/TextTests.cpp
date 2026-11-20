@@ -81,3 +81,14 @@ auto tKeepLast = test("Text/keepLastCodepoints keeps the end of the text") = []
     check(keepLastCodepoints("ab", 5) == "ab");
     check(keepLastCodepoints("a\xC3\xA9", 1) == "\xC3\xA9");
 };
+
+auto tRemoveTerminalColourCodes =
+    test("Text/removeTerminalColourCodes keeps the text and drops the colours") = []
+{
+    check(removeTerminalColourCodes("\x1b[1mdiff --git a/x b/x\x1b[m")
+          == "diff --git a/x b/x");
+    check(removeTerminalColourCodes("\x1b[32m+added\x1b[0m\n") == "+added\n");
+    check(removeTerminalColourCodes("\x1b[38;5;208m-x") == "-x");
+    check(removeTerminalColourCodes("plain\x1b") == "plain\x1b");
+    check(removeTerminalColourCodes("unfinished \x1b[31") == "unfinished ");
+};

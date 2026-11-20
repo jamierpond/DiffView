@@ -18,6 +18,10 @@ bool isProcessRunning(ProcessId id);
 bool isStandardInputTerminal();
 bool isStandardOutputTerminal();
 
+// After a piped diff is read, keys come from the controlling terminal instead
+// (/dev/tty, or CONIN$ on Windows). False when there is none.
+bool reconnectStandardInputToTerminal();
+
 // Posix: SIGINT, SIGTERM, SIGHUP and SIGPIPE, and handler runs inside the
 // signal handler, so it may only make async-signal-safe calls. Windows: Ctrl+C,
 // Ctrl+Break and closing the console window, on a thread of their own.

@@ -2,6 +2,7 @@
 
 #include <cerrno>
 #include <csignal>
+#include <fcntl.h>
 #include <unistd.h>
 
 namespace diffview
@@ -33,6 +34,18 @@ bool isStandardInputTerminal()
 bool isStandardOutputTerminal()
 {
     return isatty(STDOUT_FILENO) != 0;
+}
+
+bool reconnectStandardInputToTerminal()
+{
+    auto terminal = open("/dev/tty", O_RDWR);
+
+    if (terminal < 0)
+        return false;
+
+    auto isReconnected = dup2(terminal, STDIN_FILENO) == STDIN_FILENO;
+    close(terminal);
+    return isReconnected;
 }
 
 void callOnTermination(void (&handler)(int exitCode))

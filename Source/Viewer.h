@@ -44,6 +44,13 @@ struct Options
     std::vector<std::string> mergeNotes;
     git::BaseSpec base;
     LayoutRequest layout = LayoutRequest::byWidth;
+
+    // Read from a pipe (`git diff main | dv`) and shown as is: git never
+    // recomputes it.
+    std::optional<std::vector<FileDiff>> pipedFiles;
+
+    // Outside a git work tree there is no review store to keep comments in.
+    bool isReadOnly = false;
 };
 
 // eacp owns the main thread and a timer pumps FTXUI's loop; git results, the
@@ -109,7 +116,8 @@ private:
     void tick();
     void onRepoChanged(const std::vector<std::string>& changed);
     void scheduleRefresh(int delayMs);
-    eacp::Threads::Async<void> refresh();
+    void refresh();
+    eacp::Threads::Async<void> refreshFromGit();
     void apply(std::vector<FileDiff> diffs, const std::string& sha);
     static void logSlowFileRead(std::int64_t bytes, std::int64_t readMs);
     void logSlowRender(std::int64_t renderMs) const;
@@ -165,6 +173,13 @@ private:
     void openInEditor();
     void openWithSystem();
 
+    // PipedDiff.cpp
+    bool isShowingPipedDiff() const;
+    bool refuseForPipedDiff(std::string_view feature);
+    bool refuseCommentWhenReadOnly();
+    std::string describeBase() const;
+    void reloadReviewStoreUnlessReadOnly();
+
     // Comments.cpp
     void loadStore();
     bool reloadStoreIfChanged();
@@ -215,6 +230,9 @@ private:
                                       bool& wrapped) const;
     void searchAgain(bool sameDirection);
     void runCommandLine(const std::string& line);
+    void toggleAllFiles();
+    void refreshOnRequest();
+    void changeBase(const std::string& text);
     void completeCommandLine();
     void openPicker(PickerKind kind);
     eacp::Threads::Async<void> loadBaseChoices();

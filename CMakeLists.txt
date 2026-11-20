@@ -83,6 +83,7 @@ add_executable(DiffView
         Source/Monitor.cpp
         Source/NarrowInput.cpp
         Source/NarrowRender.cpp
+        Source/PipedDiff.cpp
         Source/Render.cpp
         Source/UsageLog.cpp
         Source/Viewer.cpp)

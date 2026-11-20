@@ -7,6 +7,7 @@
 #include <PondVersion.h>
 #include <Review.h>
 #include <Store.h>
+#include <Text.h>
 
 #include <eacp/Core/App/App.h>
 
@@ -32,6 +33,10 @@ constexpr auto usage =
     "  dv main...      against where HEAD forked from main\n"
     "  dv HEAD~3       against that exact commit\n"
     "  dv ~/other      another repo\n"
+    "  git diff main | dv\n"
+    "                  a diff from a pipe or file (`dv < x.patch`), shown as\n"
+    "                  is: no base, no refresh. Comments are kept only\n"
+    "                  inside a git work tree\n"
     "  dv --version    the version and the commit it was built from\n"
     "  dv --mobile     the phone layout, one page at a time, at any width; dv\n"
     "                  switches to it by itself below 60 columns\n"
@@ -380,6 +385,35 @@ int runAndLogCommand(const std::string& command, int argc, char* argv[])
     return exitCode;
 }
 
+bool readPipedDiffIntoOptions(diffview::Options& options)
+{
+    auto text = diffview::removeTerminalColourCodes(readStdin());
+    auto files = diffview::parseDiff(text);
+
+    if (files.empty())
+    {
+        diffview::logEvent("tui.error", {{"reason", "no-piped-diff"}});
+        std::fputs("diffview: no diff on standard input; pipe in `git diff` "
+                   "output, e.g. `git diff main | dv`\n",
+                   stderr);
+        return false;
+    }
+
+    if (!diffview::reconnectStandardInputToTerminal())
+    {
+        diffview::logEvent("tui.error", {{"reason", "no-terminal-for-keys"}});
+        std::fputs("diffview: read the diff from standard input, but there is no "
+                   "terminal to read keys from\n",
+                   stderr);
+        return false;
+    }
+
+    options.pipedFiles = std::move(files);
+    return true;
+}
+
+int openViewer(diffview::Options& options, const std::string& path);
+
 int runViewer(int argc, char* argv[])
 {
     auto options = diffview::Options {};
@@ -410,21 +444,35 @@ int runViewer(int argc, char* argv[])
             return usageError("unknown option " + arg, {});
     }
 
+    return openViewer(options, path);
+}
+
+int openViewer(diffview::Options& options, const std::string& path)
+{
+    if (!diffview::isStandardOutputTerminal())
+    {
+        diffview::logEvent("tui.error", {{"reason", "no-terminal"}});
+        std::fputs("diffview: needs a terminal\n", stderr);
+        return 1;
+    }
+
+    if (!diffview::isStandardInputTerminal() && !readPipedDiffIntoOptions(options))
+        return 1;
+
     auto root = diffview::git::findRoot(path);
+
+    if (!root && options.pipedFiles)
+    {
+        options.repo = path;
+        options.isReadOnly = true;
+        return eacp::Apps::run<diffview::Viewer>(options);
+    }
 
     if (!root)
     {
         diffview::logEvent("tui.error", {{"reason", "not-a-git-tree"}});
         std::fprintf(
             stderr, "diffview: %s is not inside a git work tree\n", path.c_str());
-        return 1;
-    }
-
-    if (!diffview::isStandardInputTerminal()
-        || !diffview::isStandardOutputTerminal())
-    {
-        diffview::logEvent("tui.error", {{"reason", "no-terminal"}});
-        std::fputs("diffview: needs a terminal\n", stderr);
         return 1;
     }
 
@@ -439,6 +487,7 @@ int runViewer(int argc, char* argv[])
     diffview::logEvent(
         "tui.open",
         {{"base", options.base.label()},
+         {"piped", options.pipedFiles.has_value()},
          {"merge_notes", static_cast<int>(options.mergeNotes.size())}});
     return eacp::Apps::run<diffview::Viewer>(options);
 }

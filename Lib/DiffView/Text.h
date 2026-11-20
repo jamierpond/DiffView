@@ -16,6 +16,9 @@ std::vector<std::string> splitNul(std::string_view text);
 
 std::string trim(std::string_view text);
 
+// Drops `ESC [ ... letter` sequences, the way git and grep colour their output.
+std::string removeTerminalColourCodes(std::string_view text);
+
 // Control bytes become '?' so file content can never drive the terminal.
 std::string displayable(std::string_view line, int tabWidth = 4);
 

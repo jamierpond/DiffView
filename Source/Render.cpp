@@ -370,7 +370,7 @@ Element Viewer::renderTree(int width, int height)
     if (!loaded)
         lines.push_back(text(" loading…") | dim);
     else if (treeRows.empty())
-        lines.push_back(text(" no changes vs " + base.label()) | dim);
+        lines.push_back(text(" no changes vs " + describeBase()) | dim);
 
     auto end = std::min(static_cast<int>(treeRows.size()), treeTop + height);
 
@@ -1012,7 +1012,7 @@ Element Viewer::renderStatus()
     auto parts = Elements {
         text(mode) | bold | inverted,
         text(" base ") | dim,
-        text(base.label()) | bold,
+        text(describeBase()) | bold,
         text(shortSha.empty() ? "" : " (" + shortSha + ")") | dim,
         text("  │ ") | dim,
         text(std::to_string(files.size()) + " files"),
