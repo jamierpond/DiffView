@@ -37,9 +37,21 @@ run *args: build
 run *args: build
     "{{build_dir}}\diffview.exe" {{args}}
 
-[doc('Release build into ~/.local/bin/diffview, plus the dv link')]
+[doc('For now the default: the line-coverage build into ~/.local/bin/diffview, plus the dv link, keeping the old and new programs for coverage-report')]
 [unix]
-install: build
+install: coverage-build
+    {{line_coverage}} keep
+    just build_dir={{coverage_build_dir}} copy-into-local-bin
+    {{line_coverage}} keep
+
+[doc('Release build without line coverage into ~/.local/bin/diffview, plus the dv link')]
+[unix]
+install-without-coverage: build
+    just copy-into-local-bin
+
+[private]
+[unix]
+copy-into-local-bin:
     mkdir -p "$HOME/.local/bin"
     # Copy beside, then rename over: overwriting a running binary in place
     # gets it killed by macOS's code-signing check.
@@ -85,6 +97,27 @@ update-deps:
 [unix]
 capture-layouts repo out="build/layouts": build
     scripts/capture-layouts.sh "{{build_dir}}/diffview" "{{repo}}" "{{out}}"
+
+# ---- Line coverage: which lines of DiffView's own code a normal day runs ----
+
+coverage_build_dir := "build-coverage"
+coverage_cmake_arguments := "-DPOND_LINE_COVERAGE=ON -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++"
+line_coverage := coverage_build_dir + "/PondLineCoverage/line-coverage.py --app DiffView --program diffview --installed-in ~/.local/bin --own-code-folder Source --own-code-folder Lib --not-own-code-folder Tests"
+
+[doc('Build the app with line-coverage counters, in build-coverage')]
+[unix]
+coverage-build:
+    just build_dir={{coverage_build_dir}} build {{coverage_cmake_arguments}}
+
+[doc('Print the code that never ran in any installed coverage build, largest first, plus an HTML per-line view')]
+[unix]
+coverage-report *arguments: coverage-build
+    {{line_coverage}} report {{arguments}}
+
+[doc('Delete the line-coverage counts and kept programs')]
+[unix]
+coverage-reset *arguments: coverage-build
+    {{line_coverage}} reset {{arguments}}
 
 [doc('Build, then pipe a diff of <repo> into dv in a throwaway tmux session and save what it drew after each key')]
 [unix]

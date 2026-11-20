@@ -59,18 +59,19 @@ lockstep_add_package(
         GIT_TAG main
         SYSTEM YES)
 
-# Only Rudder's SessionLog (the per-launch usage log) is used; RUDDER_CLIENT_ONLY
-# leaves the Rudder app unbuilt. Work against a local checkout with:
-#   cmake -B build -DLOCKSTEP_Rudder_SOURCE=$HOME/projects/Rudder
+# PondApp (the pond data folder), SessionLog (the per-launch usage log),
+# pond_add_version_library and line coverage. Added after eacp, so PondDev uses
+# this eacp instead of fetching its own. Work against a local checkout with:
+#   cmake -B build -DLOCKSTEP_PondDev_SOURCE=$HOME/projects/PondDev
 lockstep_add_package(
-        NAME Rudder
-        GITHUB_REPOSITORY jamierpond/Rudder
+        NAME PondDev
+        GITHUB_REPOSITORY jamierpond/PondDev
         GIT_TAG main
-        OPTIONS "RUDDER_CLIENT_ONLY ON"
         SYSTEM YES)
 
 # Set after the packages, so only this project's own targets build with -Werror.
 set(CMAKE_COMPILE_WARNING_AS_ERROR ON)
+pond_add_line_coverage_counters()
 
 add_subdirectory(Lib)
 
@@ -128,6 +129,7 @@ target_link_libraries(DiffView PRIVATE
         ftxui::dom
         ftxui::component)
 set_strict_warnings_level(DiffView)
+pond_write_line_coverage(DiffView APP_NAME DiffView)
 
 if (PROJECT_IS_TOP_LEVEL)
     enable_testing()
