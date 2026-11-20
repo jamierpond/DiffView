@@ -129,3 +129,7 @@ coverage-reset host="" *arguments: coverage-build
 [unix]
 check-piped-diff repo="." out="build/piped-diff": build
     scripts/check-piped-diff.sh "{{build_dir}}/diffview" "{{repo}}" "{{out}}"
+
+[doc('List the crash reports nobody has marked fixed here and on other machines (list [HOST ...]), or mark one fixed (mark-fixed HOST ID)')]
+crash-reports *arguments:
+    python3 {{build_dir}}/PondCrashReports/crash-reports.py --app DiffView {{arguments}}

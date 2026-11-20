@@ -60,7 +60,7 @@ lockstep_add_package(
         SYSTEM YES)
 
 # PondApp (the pond data folder), SessionLog (the per-launch usage log),
-# pond_add_version_library and line coverage. Added after eacp, so PondDev uses
+# PondCrashReports, pond_add_version_library and line coverage. Added after eacp, so PondDev uses
 # this eacp instead of fetching its own. Work against a local checkout with:
 #   cmake -B build -DLOCKSTEP_PondDev_SOURCE=$HOME/projects/PondDev
 lockstep_add_package(
@@ -130,6 +130,7 @@ target_link_libraries(DiffView PRIVATE
         ftxui::component)
 set_strict_warnings_level(DiffView)
 pond_write_line_coverage(DiffView APP_NAME DiffView)
+pond_enable_crash_reports(DiffView)
 
 if (PROJECT_IS_TOP_LEVEL)
     enable_testing()

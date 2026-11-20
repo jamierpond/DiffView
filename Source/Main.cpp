@@ -4,6 +4,7 @@
 #include "ProcessPlatform.h"
 #include "Viewer.h"
 
+#include <PondCrashReports/CrashReports.h>
 #include <PondVersion.h>
 #include <Review.h>
 #include <Store.h>
@@ -501,10 +502,48 @@ int printVersion()
     std::printf("dv %s\n", pond::getVersionString().c_str());
     return 0;
 }
+
+// Starting crash reports takes about 7 ms, more than printing help or the
+// version does, so those skip it.
+bool isOnlyPrintingHelpOrVersion(int argc, char* argv[])
+{
+    auto arguments = std::vector<std::string> {argv + 1, argv + argc};
+
+    if (isVersionRequest(argc, argv))
+        return true;
+
+    if (!arguments.empty() && arguments.front() == "help")
+        return true;
+
+    for (const auto& argument: arguments)
+    {
+        if (argument == "--")
+            return false;
+
+        if (argument == "-h" || argument == "--help")
+            return true;
+    }
+
+    return false;
+}
 } // namespace
 
 int main(int argc, char* argv[])
 {
+    if (auto handlerExitCode =
+            pondcrashreports::runCrashHandlerIfRequested(argc, argv))
+    {
+        return *handlerExitCode;
+    }
+
+    if (!isOnlyPrintingHelpOrVersion(argc, argv))
+    {
+        pondcrashreports::startCrashReports(
+            {.appName = "DiffView", .release = pond::getVersionString()},
+            argc,
+            argv);
+    }
+
     if (isVersionRequest(argc, argv))
         return printVersion();
 
