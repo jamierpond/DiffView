@@ -47,7 +47,7 @@ merge-base of HEAD and `name`, as in `git diff main...`; anything else
 | `b` `:base` | Change base | `R` | Reply on the comment's thread |
 | `r` | Refresh | `a` | All files / changed files only |
 | `f` `:full` | Whole file inline / diff context | `f` `F` `:filter` | Tree: filter files by regex (`!re` inverts) / clear |
-| | | `s` | Tree / flat list by size of change |
+| `y` `V` … `y` | Copy the line / range, also over ssh | `s` | Tree / flat list by size of change |
 
 `a` shows every file in the repo, not just the changed ones: an unchanged
 file opens whole, and you comment on it as on a diff (its review block says

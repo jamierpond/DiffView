@@ -29,6 +29,7 @@ enum class Action
     annotate,
     annotateHunk,
     visual,
+    yank,
     deleteAnnotation,
     toggleResolved,
     reply,

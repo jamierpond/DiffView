@@ -3,10 +3,13 @@
 #include <Search.h>
 #include <Text.h>
 #include <TextBuffer.h>
+#include <Yank.h>
 
+#include <eacp/Core/App/Clipboard.h>
 #include <eacp/Core/Process/Process.h>
 
 #include <algorithm>
+#include <iostream>
 
 namespace diffview
 {
@@ -85,6 +88,13 @@ std::vector<std::string>
         out.emplace_back("Binary file");
 
     return out;
+}
+// Called from an event handler, between FTXUI's frames, so the escape can't
+// land inside one.
+void copyToClipboards(const YankedLines& yanked)
+{
+    eacp::Clipboard::copyText(yanked.text);
+    std::cout << makeOsc52CopySequence(yanked.text) << std::flush;
 }
 } // namespace
 
@@ -330,6 +340,9 @@ void Viewer::run(const Command& command)
                 visualAnchor = diffCursor;
             }
             break;
+        case Action::yank:
+            yankSelectionOrLine();
+            break;
         case Action::deleteAnnotation:
             deleteAtCursor();
             break;
@@ -410,6 +423,39 @@ void Viewer::run(const Command& command)
             visualAnchor.reset();
             break;
     }
+}
+
+bool Viewer::hasYankableRows() const
+{
+    if (rows.empty())
+        return false;
+
+    return focus == Pane::diff || visualAnchor.has_value();
+}
+
+void Viewer::yankSelectionOrLine()
+{
+    auto selected = selectedFile();
+    auto yanked = YankedLines {};
+
+    if (selected && hasYankableRows())
+    {
+        auto anchor = visualAnchor.value_or(diffCursor);
+        yanked = collectYankedLines(selected->get(), rows, anchor, diffCursor);
+    }
+
+    if (yanked.lineCount == 0)
+    {
+        say("Nothing to yank");
+        return;
+    }
+
+    visualAnchor.reset();
+    copyToClipboards(yanked);
+    logEvent("yank", {{"lines", yanked.lineCount}});
+
+    auto noun = yanked.lineCount == 1 ? " line" : " lines";
+    say("Yanked " + std::to_string(yanked.lineCount) + noun);
 }
 
 void Viewer::openPrompt(Prompt kind, bool forward)

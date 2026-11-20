@@ -140,3 +140,12 @@ auto tActionNames = test("Keymap/actions have kebab-case log names") = []
     check(getActionName(Action::nextHunk) == "next-hunk");
     check(getActionName(Action::quit) == "quit");
 };
+
+auto tYank = test("Keymap/y yanks at once, starting no sequence") = []
+{
+    auto keys = KeyParser {};
+    auto command = keys.feed("y");
+
+    check(command && command->action == Action::yank);
+    check(keys.pending().empty());
+};

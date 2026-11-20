@@ -204,6 +204,8 @@ private:
     // Input.cpp
     bool onEvent(const ftxui::Event& event);
     void run(const Command& command);
+    bool hasYankableRows() const;
+    void yankSelectionOrLine();
     void openPrompt(Prompt kind, bool forward);
     bool onPromptEvent(const std::string& key);
     void updateIncrementalSearch();

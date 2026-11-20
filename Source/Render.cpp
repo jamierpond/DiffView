@@ -1274,6 +1274,7 @@ Element Viewer::renderHelp()
                    separator(),
                    row("Enter  c", "comment on line; c edits one already there"),
                    row("V … c", "comment on a range"),
+                   row("y  V … y", "copy the line / range (works over ssh)"),
                    row("gh  C", "comment on hunk / whole file"),
                    row("gc  :note", "general note (about no file)"),
                    row("dd  x", "delete (withdraw if sent) / resolve"),

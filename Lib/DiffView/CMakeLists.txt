@@ -14,7 +14,8 @@ add_library(DiffViewCore STATIC
         ReviewMarkdown.cpp
         Search.cpp
         Store.cpp
-        Text.cpp)
+        Text.cpp
+        Yank.cpp)
 
 if (WIN32)
     target_sources(DiffViewCore PRIVATE Platform-Windows.cpp)
