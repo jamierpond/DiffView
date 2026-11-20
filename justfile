@@ -102,7 +102,8 @@ capture-layouts repo out="build/layouts": build
 
 coverage_build_dir := "build-coverage"
 coverage_cmake_arguments := "-DPOND_LINE_COVERAGE=ON -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++"
-line_coverage := coverage_build_dir + "/PondLineCoverage/line-coverage.py --app DiffView --program diffview --installed-in ~/.local/bin --own-code-folder Source --own-code-folder Lib --not-own-code-folder Tests"
+# Quoted so line-coverage.py expands ~ on each machine it runs on, not the shell here.
+line_coverage := coverage_build_dir + "/PondLineCoverage/line-coverage.py --app DiffView --program diffview --installed-in '~/.local/bin' --own-code-folder Source --own-code-folder Lib --not-own-code-folder Tests"
 
 [doc('Build the app with line-coverage counters, in build-coverage')]
 [unix]
@@ -114,10 +115,15 @@ coverage-build:
 coverage-report *arguments: coverage-build
     {{line_coverage}} report {{arguments}}
 
-[doc('Delete the line-coverage counts and kept programs')]
+[doc("Copy a host's line-coverage counts and its programs here, for coverage-report")]
 [unix]
-coverage-reset *arguments: coverage-build
-    {{line_coverage}} reset {{arguments}}
+coverage-collect-from-host host *arguments: coverage-build
+    {{line_coverage}} collect {{host}} {{arguments}}
+
+[doc('Delete the line-coverage counts and kept programs here, or on user@host')]
+[unix]
+coverage-reset host="" *arguments: coverage-build
+    {{line_coverage}} reset {{host}} {{arguments}}
 
 [doc('Build, then pipe a diff of <repo> into dv in a throwaway tmux session and save what it drew after each key')]
 [unix]

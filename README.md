@@ -229,6 +229,10 @@ just test      # unit tests
 just install   # ~/.local/bin/diffview, plus dv
 ```
 
+For now `just install` installs a line-coverage build; `just coverage-report` lists
+the code that never ran, and `just coverage-collect-from-host user@host` adds another
+machine's counts to it.
+
 DiffView is built on [eacp](https://github.com/eyalamirmusic/eacp)'s Core
 (the app lifecycle, its event loop and timers, child processes) and
 [FTXUI](https://github.com/ArthurSonzogni/FTXUI) for the terminal UI. eacp
